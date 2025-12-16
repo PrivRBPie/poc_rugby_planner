@@ -17,26 +17,22 @@ const positions = [
 ];
 
 const initialPlayers = [
-  { id: 1, name: 'Eick Soe', miniYear: '1st year' },
-  { id: 2, name: 'Janes Bark', miniYear: '2nd year' },
-  { id: 3, name: 'Esca Zand', miniYear: '2nd year' },
-  { id: 4, name: 'Huib Schr', miniYear: '1st year' },
-  { id: 5, name: 'Dries Wage', miniYear: '1st year' },
-  { id: 6, name: 'Liam Hass', miniYear: '2nd year' },
-  { id: 7, name: 'Francois Ross', miniYear: '1st year' },
-  { id: 8, name: 'Lewis Deel', miniYear: '1st year' },
-  { id: 9, name: 'Tobia Conc', miniYear: '1st year' },
-  { id: 10, name: 'Alexander Jans', miniYear: '1st year' },
-  { id: 11, name: 'Okke Zwaa', miniYear: '1st year' },
-  { id: 12, name: 'Rosa On', miniYear: '2nd year' },
-  { id: 13, name: 'Yannick Huis', miniYear: '2nd year' },
-  { id: 14, name: 'Ot Dubbe', miniYear: '1st year' },
-  { id: 15, name: 'Tjalle Kals', miniYear: '1st year' },
-  { id: 16, name: 'Chris Klin', miniYear: '2nd year' },
-  { id: 17, name: 'Ivan vdWa', miniYear: '1st year' },
-  { id: 18, name: 'Edward Serf', miniYear: '1st year' },
-  { id: 19, name: 'Teo Gorri', miniYear: '2nd year' },
-  { id: 20, name: 'Hedwig Bong', miniYear: '1st year' },
+  { id: 1, name: 'Jack Murphy', miniYear: '2nd year' },
+  { id: 2, name: 'Finn O\'Brien', miniYear: '2nd year' },
+  { id: 3, name: 'Conor Walsh', miniYear: '1st year' },
+  { id: 4, name: 'Seán Kelly', miniYear: '2nd year' },
+  { id: 5, name: 'Cian Byrne', miniYear: '1st year' },
+  { id: 6, name: 'Oisín Ryan', miniYear: '2nd year' },
+  { id: 7, name: 'Darragh Quinn', miniYear: '1st year' },
+  { id: 8, name: 'Eoin McCarthy', miniYear: '2nd year' },
+  { id: 9, name: 'Tadhg Brennan', miniYear: '1st year' },
+  { id: 10, name: 'Rory Doyle', miniYear: '2nd year' },
+  { id: 11, name: 'Cillian Nolan', miniYear: '1st year' },
+  { id: 12, name: 'Liam Fitzgerald', miniYear: '2nd year' },
+  { id: 13, name: 'Patrick Healy', miniYear: '1st year' },
+  { id: 14, name: 'Niall Burke', miniYear: '2nd year' },
+  { id: 15, name: 'Dylan O\'Sullivan', miniYear: '1st year' },
+  { id: 16, name: 'Aidan Power', miniYear: '2nd year' },
 ];
 
 const availabilityOptions = [
@@ -45,8 +41,6 @@ const availabilityOptions = [
   { value: 'injured', label: 'Injured', icon: '✕', color: '#dc2626', bg: '#fee2e2' },
   { value: 'absent', label: 'Absent', icon: '−', color: '#6b7280', bg: '#f3f4f6' },
 ];
-
-
 
 const Icons = {
   Users: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
@@ -108,348 +102,41 @@ export default function RugbyLineupPlanner() {
   const [players] = useState(initialPlayers);
   
   const [playdays, setPlaydays] = useState([
-    { id: 1, date: '2025-12-06', name: 'Delft', matches: [
-      { id: 1, opponent: 'RRC B', time: '09:30' },
-      { id: 2, opponent: 'Delft A', time: '10:00' },
-      { id: 3, opponent: 'RRC A', time: '11:00' },
+    { id: 1, date: '2024-12-15', name: 'Winter Cup - Day 1', matches: [
+      { id: 1, opponent: 'Blackrock RFC', time: '10:00' },
+      { id: 2, opponent: 'Lansdowne FC', time: '11:00' },
+      { id: 3, opponent: 'Old Wesley', time: '12:00' },
     ]},
-	 { id: 4, date: '2025-12-13', name: 'Stade France', matches: [
-      { id: 1, opponent: 'Steenboks', time: '09:30' },
-      { id: 2, opponent: 'All Blacks', time: '10:00' },
-      { id: 3, opponent: 'Red Rose', time: '11:00' },
-    ]},
+    { id: 2, date: '2024-12-22', name: 'Winter Cup - Finals', matches: [
+      { id: 1, opponent: 'St. Mary\'s', time: '10:30' },
+      { id: 2, opponent: 'Clontarf FC', time: '11:30' },
+    ]}
   ]);
   
   const [selectedPlaydayId, setSelectedPlaydayId] = useState(1);
   const selectedPlayday = playdays.find(p => p.id === selectedPlaydayId) || playdays[0];
   
- // const [lineups, setLineups] = useState({});
-  
-  const initialLineups = ({
-   // =====================
-  // Match 1 — W1H1
-  // key: playdayId-matchId-half
-  // =====================
-  '1-1-1': {
-    assignments: {
-      1: 18,  // Edward
-      2: 4,   // Huib
-      3: 9,   // Tobia
-      4: 12,  // Rosa
-      5: 10,  // Alexander
-      9: 1,   // Eick
-      10: 2,  // Janes
-      11: 7,  // Francois
-      12: 3,  // Esca
-      13: 6,  // Liam
-      14: 15, // Tjalle
-      15: 5,  // Dries
-    },
-    bench: [16, 11, 14, 8], // Chris, Okke, Ot, Lewis
-  },
-
-  // Match 1 — W1H2
-  '1-1-2': {
-    assignments: {
-      1: 18,  // Edward
-      2: 14,  // Ot
-      3: 16,  // Chris
-      4: 12,  // Rosa
-      5: 10,  // Alexander
-      9: 1,   // Eick
-      10: 2,  // Janes
-      11: 8,  // Lewis
-      12: 3,  // Esca
-      13: 6,  // Liam
-      14: 11, // Okke
-      15: 5,  // Dries
-    },
-    bench: [9, 15, 4, 7], // Tobia, Tjalle, Huib, Francois
-  },
-
-  // =====================
-  // Match 2 — W2H1
-  // =====================
-  '1-2-1': {
-    assignments: {
-      1: 18,  // Edward
-      2: 9,   // Tobia
-      3: 16,  // Chris
-      4: 7,   // Francois
-      5: 4,   // Huib
-      9: 2,   // Janes
-      10: 3,  // Esca
-      11: 6,  // Liam
-      12: 1,  // Eick
-      13: 15, // Tjalle
-      14: 11, // Okke
-      15: 5,  // Dries
-    },
-    bench: [10, 12, 8, 14], // Alexander, Rosa, Lewis, Ot
-  },
-
-  // Match 2 — W2H2
-  '1-2-2': {
-    assignments: {
-      1: 9,   // Tobia
-      2: 14,  // Ot
-      3: 16,  // Chris
-      4: 4,   // Huib
-      5: 10,  // Alexander
-      9: 2,   // Janes
-      10: 3,  // Esca
-      11: 12, // Rosa
-      12: 1,  // Eick
-      13: 8,  // Lewis
-      14: 11, // Okke
-      15: 7,  // Francois
-    },
-    bench: [18, 6, 15, 5], // Edward, Liam, Tjalle, Dries
-  },
-
-  // =====================
-  // Match 3 — W3H1
-  // =====================
-  '1-3-1': {
-    assignments: {
-      1: 18,  // Edward
-      2: 16,  // Chris
-      3: 14,  // Ot
-      4: 7,   // Francois
-      5: 10,  // Alexander
-      9: 8,   // Lewis
-      10: 9,  // Tobia
-      11: 6,  // Liam
-      12: 1,  // Eick
-      13: 12, // Rosa
-      14: 15, // Tjalle
-      15: 5,  // Dries
-    },
-    bench: [2, 3, 4, 11], // Janes, Esca, Huib, Okke
-  },
-
-  // Match 3 — W3H2
-  '1-3-2': {
-    assignments: {
-      1: 18,  // Edward
-      2: 4,   // Huib
-      3: 14,  // Ot
-      4: 3,   // Esca
-      5: 10,  // Alexander
-      9: 15,  // Tjalle
-      10: 2,  // Janes
-      11: 11, // Okke
-      12: 16, // Chris
-      13: 12, // Rosa
-      14: 6,  // Liam
-      15: 8,  // Lewis
-    },
-    bench: [9, 1, 7, 5], // Tobia, Eick, Francois, Dries
-  },
-});
-
-const [lineups, setLineups] = useState(initialLineups);
-  
-  
-  
-  
-  
+  const [lineups, setLineups] = useState({});
   const [availability, setAvailability] = useState({});
   const [training, setTraining] = useState({
-	   // 1 – Eick Soe
-  '1-1': true, '1-2': true, '1-3': true, '1-4': true, '1-5': true, '1-15': true,
-
-  // 2 – Janes Bark
-  '2-1': true, '2-2': true, '2-3': true, '2-4': true, '2-5': true,
-  '2-9': true, '2-10': true, '2-12': true, '2-13': true, '2-15': true,
-
-  // 3 – Esca Zand
-  '3-1': true, '3-3': true, '3-4': true, '3-5': true,
-  '3-12': true, '3-13': true, '3-15': true,
-
-  // 4 – Huib Schr
-  '4-1': true, '4-2': true, '4-3': true, '4-4': true, '4-5': true, '4-15': true,
-
-  // 5 – Dries Wage
-  '5-10': true, '5-11': true, '5-13': true, '5-14': true, '5-15': true,
-
-  // 6 – Liam Hass
-  '6-10': true, '6-11': true, '6-12': true, '6-13': true,
-
-  // 7 – Francois Ross
-  '7-1': true, '7-2': true, '7-3': true, '7-4': true, '7-5': true,
-
-  // 8 – Lewis Deel
-  '8-10': true, '8-11': true, '8-12': true, '8-13': true,
-
-  // 9 – Tobia Conc
-  '9-9': true, '9-10': true, '9-13': true,
-
-  // 10 – Alexander Jans
-  '10-1': true, '10-2': true, '10-3': true, '10-4': true, '10-5': true, '10-12': true,
-
-  // 11 – Okke Zwaa
-  '11-10': true, '11-14': true,
-
-  // 12 – Rosa On
-  '12-1': true, '12-2': true, '12-3': true, '12-4': true, '12-5': true,
-  '12-9': true, '12-11': true, '12-12': true, '12-13': true, '12-14': true, '12-15': true,
-
-  // 13 – Yannick Huis
-  '13-4': true, '13-5': true, '13-9': true, '13-10': true, '13-12': true, '13-13': true,
-
-  // 14 – Ot Dubbe
-  '14-1': true, '14-2': true, '14-3': true, '14-4': true, '14-5': true, '14-15': true,
-
-  // 15 – Tjalle Kals
-  '15-10': true, '15-11': true, '15-12': true, '15-13': true,
-
-  // 16 – Chris Klin
-  '16-1': true, '16-2': true, '16-3': true, '16-4': true, '16-5': true,
-  '16-10': true, '16-12': true, '16-13': true, '16-15': true,
-
-  // 17 – Ivan vdWa
-  '17-10': true, '17-13': true,
-
-  // 18 – Edward Serf
-  '18-1': true, '18-2': true, '18-3': true, '18-4': true, '18-5': true,
-
-  // 19 – Teo Gorri
-  '19-1': true, '19-2': true, '19-3': true, '19-4': true, '19-5': true,
-
-  // 20 – Hedwig Bong
-  '20-1': true, '20-3': true, '20-10': true, '20-12': true, '20-13': true,
+    '1-2': true, '1-1': true, '2-10': true, '2-9': true, '3-9': true, '3-10': true,
+    '4-4': true, '4-5': true, '5-11': true, '5-12': true, '6-15': true, '6-14': true,
+    '7-13': true, '7-12': true, '8-11': true, '8-14': true, '9-9': true, '9-10': true,
+    '10-10': true, '10-9': true, '11-11': true, '11-12': true, '12-12': true, '12-13': true,
+    '13-3': true, '13-1': true, '14-4': true, '14-5': true, '15-5': true, '15-4': true,
+    '16-15': true, '16-14': true,
   });
-  
-  
   const [ratings, setRatings] = useState({
-   // 1 – Eick Soe
-  '1-1': 4, '1-2': 4, '1-3': 4, '1-4': 2, '1-5': 2, '1-15': 4,
-
-  // 2 – Janes Bark
-  '2-1': 4, '2-2': 3, '2-3': 4, '2-4': 4, '2-5': 4,
-  '2-9': 5, '2-10': 4, '2-12': 4, '2-13': 4, '2-15': 3,
-
-  // 3 – Esca Zand
-  '3-1': 2, '3-3': 2, '3-4': 4, '3-5': 4,
-  '3-12': 5, '3-13': 5, '3-15': 5,
-
-  // 4 – Huib Schr
-  '4-1': 4, '4-2': 4, '4-3': 4, '4-4': 3, '4-5': 3, '4-15': 3,
-
-  // 5 – Dries Wage
-  '5-11': 1, '5-13': 1, '5-15': 5,
-
-  // 6 – Liam Hass
-  '6-11': 1, '6-12': 1, '6-13': 1, '6-14': 1,
-
-  // 7 – Francois Ross
-  '7-1': 5, '7-2': 5, '7-3': 5, '7-4': 5, '7-5': 5,
-
-  // 8 – Lewis Deel
-  '8-11': 5, '8-12': 5, '8-13': 5, '8-14': 5,
-
-  // 9 – Tobia Conc
-  '9-10': 5, '9-11': 5, '9-15': 5,
-
-  // 10 – Alexander Jans
-  '10-1': 4, '10-2': 2, '10-3': 4, '10-4': 5, '10-5': 5, '10-11': 3,
-
-  // 11 – Okke Zwaa
-  '11-11': 2, '11-15': 1,
-
-  // 12 – Rosa On
-  '12-1': 3, '12-2': 2, '12-3': 3, '12-4': 5, '12-5': 5,
-  '12-9': 3, '12-11': 3, '12-12': 4, '12-13': 4, '12-14': 3, '12-15': 2,
-
-  // 13 – Yannick Huis
-  '13-4': 3, '13-5': 3, '13-9': 5, '13-10': 5,
-  '13-12': 4, '13-13': 4,
-
-  // 14 – Ot Dubbe
-  '14-1': 4, '14-2': 5, '14-3': 4, '14-4': 3, '14-5': 3, '14-15': 4,
-
-  // 15 – Tjalle Kals
-  '15-11': 4, '15-12': 3, '15-13': 3, '15-14': 4,
-
-  // 16 – Chris Klin
-  '16-1': 3, '16-2': 4, '16-3': 3, '16-4': 3, '16-5': 3,
-  '16-10': 3, '16-12': 2, '16-13': 2, '16-15': 2,
-
-  // 17 – Ivan vdWa
-  '17-11': 1, '17-14': 1,
-
-  // 18 – Edward Serf
-  '18-1': 5, '18-2': 5, '18-3': 5, '18-4': 4, '18-5': 4,
-
-  // 19 – Teo Gorri
-  '19-1': 5, '19-2': 5, '19-3': 5, '19-4': 4, '19-5': 4,
-
-  // 20 – Hedwig Bong
-  '20-1': 3, '20-3': 3, '20-10': 3, '20-12': 2, '20-13': 2,
+    '1-2': 5, '1-1': 3, '2-10': 5, '2-9': 4, '3-9': 4, '3-10': 3, '4-4': 4, '4-5': 4,
+    '5-11': 4, '5-12': 3, '6-15': 5, '6-14': 3, '7-13': 4, '7-12': 2, '8-11': 4, '8-14': 2,
+    '9-9': 5, '9-10': 3, '10-10': 4, '10-9': 2, '11-11': 4, '11-12': 2, '12-12': 4, '12-13': 2,
+    '13-3': 3, '13-1': 2, '14-4': 4, '14-5': 3, '15-5': 3, '15-4': 2, '16-15': 3, '16-14': 2,
   });
   
   // Two favorite positions per player
   const [favoritePositions, setFavoritePositions] = useState({
- 1: [2, 15],
-
-  // 2 – Janes Bark
-  2: [11, 12],
-
-  // 3 – Esca Zand
-  3: [13, 14],
-
-  // 4 – Huib Schr
-  4: [1, 15],
-
-  // 5 – Dries Wage
-  5: [11, 13],
-
-  // 6 – Liam Hass
-  6: [11, 13],
-
-  // 7 – Francois Ross
-  7: [1, 3],
-
-  // 8 – Lewis Deel
-  8: [11, 13],
-
-  // 9 – Tobia Conc
-  9: [11, 15],
-
-  // 10 – Alexander Jans
-  10: [4, 5],
-
-  // 11 – Okke Zwaa
-  11: [11, 14],
-
-  // 12 – Rosa On
-  12: [11, 14],
-
-  // 13 – Yannick Huis
-  13: [10, 11],
-
-  // 14 – Ot Dubbe
-  14: [1, 15],
-
-  // 15 – Tjalle Kals
-  15: [11, 14],
-
-  // 16 – Chris Klin
-  16: [2, 4],
-
-  // 17 – Ivan vdWa
-  17: [11, 14],
-
-  // 18 – Edward Serf
-  18: [2, 3],
-
-  // 19 – Teo Gorri
-  19: [1, 2],
-
-  // 20 – Hedwig Bong
-  20: [11, 14],
-
+    1: [2, 1], 2: [10, 9], 3: [9], 4: [4, 5], 5: [11, 12], 6: [15, 14],
+    7: [13, 12], 8: [11], 9: [9, 10], 10: [10, 9], 11: [11, 14], 12: [12, 13],
   });
   
   const [selectedPosition, setSelectedPosition] = useState(null);
@@ -459,7 +146,7 @@ const [lineups, setLineups] = useState(initialLineups);
   const [newPlayer, setNewPlayer] = useState({ name: '', miniYear: '1st year' });
   const [newPlayday, setNewPlayday] = useState({ date: '', name: '' });
   const [newMatch, setNewMatch] = useState({ opponent: '', time: '' });
-  const [settings] = useState({ coachName: 'Coach Rassie Erasmus', teamName: 'Bulls Mini\'s', ageGroup: 'U10' });
+  const [settings] = useState({ coachName: 'Coach Murphy', teamName: 'Bulls Minis', ageGroup: 'U10' });
   const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [expandedHalf, setExpandedHalf] = useState(null);
 
