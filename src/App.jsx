@@ -462,12 +462,38 @@ const [lineups, setLineups] = useState(initialLineups);
   const [settings] = useState({ coachName: 'Coach Rassie Erasmus', teamName: 'Bulls Mini\'s', ageGroup: 'U10' });
   const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [expandedHalf, setExpandedHalf] = useState(null);
+  const [swapMode, setSwapMode] = useState(false);
+  const [swapFirstPlayer, setSwapFirstPlayer] = useState(null);
+
+  // Allocation Rules Configuration
+  const [allocationMode, setAllocationMode] = useState('game'); // 'game' or 'training'
+  const [allocationRules, setAllocationRules] = useState({
+    game: [
+      { id: 1, name: 'No Duplicate Assignments', type: 'HARD', enabled: true, locked: true, weight: 1.0, description: 'A player can only play ONE position per half' },
+      { id: 2, name: 'Equal Play Time', type: 'SOFT', enabled: true, locked: false, weight: 0.80, description: 'Each player should play the same amount of time within limits' },
+      { id: 3, name: 'Available Players Limit', type: 'CONFIG', enabled: true, locked: false, weight: 1.0, description: 'Coach sets how many players are available for game experience', limit: 16 },
+      { id: 4, name: 'Optimize Half Score', type: 'SOFT', enabled: true, locked: false, weight: 0.60, description: 'Prefer higher-rated players in each position' },
+      { id: 5, name: 'Position Variety', type: 'SOFT', enabled: false, locked: false, weight: 0.40, description: 'Encourage players to try different positions over time' },
+      { id: 6, name: 'Player Preference (Fun)', type: 'SOFT', enabled: true, locked: false, weight: 0.70, description: 'Optimize for what players prefer/enjoy' },
+    ],
+    training: [
+      { id: 1, name: 'No Duplicate Assignments', type: 'HARD', enabled: true, locked: true, weight: 1.0, description: 'A player can only play ONE position per half' },
+      { id: 2, name: 'Equal Play Time', type: 'SOFT', enabled: true, locked: false, weight: 0.90, description: 'Each player should play the same amount of time within limits' },
+      { id: 3, name: 'Available Players Limit', type: 'CONFIG', enabled: true, locked: false, weight: 1.0, description: 'Coach sets how many players are available for game experience', limit: 16 },
+      { id: 4, name: 'Optimize Half Score', type: 'SOFT', enabled: false, locked: false, weight: 0.30, description: 'Prefer higher-rated players in each position' },
+      { id: 5, name: 'Position Variety', type: 'SOFT', enabled: true, locked: false, weight: 0.80, description: 'Encourage players to try different positions over time' },
+      { id: 6, name: 'Player Preference (Fun)', type: 'SOFT', enabled: true, locked: false, weight: 0.50, description: 'Optimize for what players prefer/enjoy' },
+    ],
+  });
+
+  const [allocationExplanations, setAllocationExplanations] = useState({});
 
   const tabs = [
     { id: 'schedule', label: 'Schedule', icon: <Icons.Calendar /> },
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
     { id: 'lineup', label: 'Lineup', icon: <Icons.Grid /> },
     { id: 'overview', label: 'Overview', icon: <Icons.Eye /> },
+    { id: 'rules', label: 'Rules', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg> },
   ];
 
   const BENCH_SIZE = 5;
@@ -629,34 +655,102 @@ const [lineups, setLineups] = useState(initialLineups);
     }
   };
 
+  const calculatePlayerPositionScore = (player, position, assigned, rules) => {
+    let score = 0;
+    const explanations = [];
+
+    // HARD constraint: No duplicate assignments
+    if (assigned.has(player.id)) return { score: -Infinity, explanations: ['Already assigned in this half'] };
+
+    // HARD constraint: Must be trained for position
+    const trainingKey = `${player.id}-${position.id}`;
+    if (!training[trainingKey]) return { score: -Infinity, explanations: ['Not trained for this position'] };
+
+    // Apply SOFT rules in priority order
+    for (const rule of rules.filter(r => r.enabled && r.type === 'SOFT')) {
+      switch(rule.id) {
+        case 2: // Equal Play Time
+          const maxField = Math.max(...Object.values(fieldHistory), 0);
+          const playerField = fieldHistory[player.id] || 0;
+          const fairnessScore = (maxField - playerField) * rule.weight;
+          score += fairnessScore;
+          explanations.push(`Fair play: ${playerField} halves played (${fairnessScore.toFixed(2)} pts)`);
+          break;
+
+        case 4: // Optimize Half Score
+          const rating = ratings[trainingKey] || 0;
+          const strengthScore = (rating / 5) * rule.weight;
+          score += strengthScore;
+          explanations.push(`Skill rating: ${rating}/5 stars (${strengthScore.toFixed(2)} pts)`);
+          break;
+
+        case 5: // Position Variety
+          const timesPlayed = playerPositionCounts[player.id]?.[position.id] || 0;
+          const varietyScore = (1 / (timesPlayed + 1)) * rule.weight;
+          score += varietyScore;
+          explanations.push(`Position variety: played ${timesPlayed}× (${varietyScore.toFixed(2)} pts)`);
+          break;
+
+        case 6: // Player Preference (Fun)
+          const isFavorite = favoritePositions[player.id]?.includes(position.id);
+          const preferenceScore = (isFavorite ? 1.0 : 0) * rule.weight;
+          score += preferenceScore;
+          if (isFavorite) {
+            explanations.push(`Favorite position! (${preferenceScore.toFixed(2)} pts)`);
+          }
+          break;
+      }
+    }
+
+    return { score, explanations };
+  };
+
   const proposeLineup = (playdayId, matchId, half) => {
     const assigned = new Set();
     const newAssignments = {};
     const newBench = [];
-    
-    const sortedByFairness = [...availablePlayers].sort((a, b) => (fieldHistory[a.id] || 0) - (fieldHistory[b.id] || 0));
-    
+    const explanationsMap = {};
+
+    const activeRules = allocationRules[allocationMode];
+
+    // Phase 1: Assign field positions
     positions.forEach(pos => {
-      const candidates = sortedByFairness
-        .filter(p => !assigned.has(p.id) && training[`${p.id}-${pos.id}`])
-        .sort((a, b) => {
-          const aScore = (ratings[`${a.id}-${pos.id}`] || 0) + (isFavoritePosition(a.id, pos.id) ? 10 : 0);
-          const bScore = (ratings[`${b.id}-${pos.id}`] || 0) + (isFavoritePosition(b.id, pos.id) ? 10 : 0);
-          return bScore - aScore;
-        });
-      if (candidates.length > 0) {
-        newAssignments[pos.id] = candidates[0].id;
-        assigned.add(candidates[0].id);
+      const candidateScores = availablePlayers
+        .filter(p => !assigned.has(p.id))
+        .map(p => {
+          const { score, explanations } = calculatePlayerPositionScore(p, pos, assigned, activeRules);
+          return { player: p, score, explanations };
+        })
+        .filter(c => c.score > -Infinity)
+        .sort((a, b) => b.score - a.score);
+
+      if (candidateScores.length > 0) {
+        const best = candidateScores[0];
+        newAssignments[pos.id] = best.player.id;
+        assigned.add(best.player.id);
+        explanationsMap[`${pos.id}-${best.player.id}`] = {
+          position: pos,
+          player: best.player,
+          score: best.score,
+          explanations: best.explanations,
+        };
       }
     });
-    
-    sortedByFairness.filter(p => !assigned.has(p.id)).slice(0, BENCH_SIZE).forEach(p => {
+
+    // Phase 2: Assign bench (prioritize players with most bench time for fairness)
+    const benchCandidates = availablePlayers
+      .filter(p => !assigned.has(p.id))
+      .sort((a, b) => (benchHistory[a.id] || 0) - (benchHistory[b.id] || 0))
+      .slice(0, BENCH_SIZE);
+
+    benchCandidates.forEach(p => {
       newBench.push(p.id);
       assigned.add(p.id);
     });
-    
+
     const key = `${playdayId}-${matchId}-${half}`;
     setLineups(prev => ({ ...prev, [key]: { assignments: newAssignments, bench: newBench } }));
+    setAllocationExplanations(prev => ({ ...prev, [key]: explanationsMap }));
   };
 
   const handleAssignPlayer = (playerId) => {
@@ -716,6 +810,57 @@ const [lineups, setLineups] = useState(initialLineups);
   };
 
   const handleAvailabilityChange = (playerId, status) => setAvailability(a => ({ ...a, [playerId]: status }));
+
+  const toggleRule = (ruleId) => {
+    setAllocationRules(prev => ({
+      ...prev,
+      [allocationMode]: prev[allocationMode].map(r =>
+        r.id === ruleId && !r.locked ? { ...r, enabled: !r.enabled } : r
+      ),
+    }));
+  };
+
+  const updateRuleWeight = (ruleId, weight) => {
+    setAllocationRules(prev => ({
+      ...prev,
+      [allocationMode]: prev[allocationMode].map(r =>
+        r.id === ruleId ? { ...r, weight: weight / 100 } : r
+      ),
+    }));
+  };
+
+  const reorderRules = (fromIndex, toIndex) => {
+    setAllocationRules(prev => {
+      const rules = [...prev[allocationMode]];
+      // Don't allow moving locked rules
+      if (rules[fromIndex].locked || rules[toIndex].locked) return prev;
+      const [removed] = rules.splice(fromIndex, 1);
+      rules.splice(toIndex, 0, removed);
+      return { ...prev, [allocationMode]: rules };
+    });
+  };
+
+  const handleSwapPositions = (playdayId, matchId, half, player1Id, player2Id) => {
+    const key = `${playdayId}-${matchId}-${half}`;
+    updateLineup(playdayId, matchId, half, (prev) => {
+      const newAssignments = { ...prev.assignments };
+
+      // Find positions of both players
+      let pos1 = null, pos2 = null;
+      Object.entries(newAssignments).forEach(([posId, playerId]) => {
+        if (playerId === player1Id) pos1 = posId;
+        if (playerId === player2Id) pos2 = posId;
+      });
+
+      // Swap them
+      if (pos1 && pos2) {
+        newAssignments[pos1] = player2Id;
+        newAssignments[pos2] = player1Id;
+      }
+
+      return { ...prev, assignments: newAssignments };
+    });
+  };
 
   const addPlayday = () => {
     if (!newPlayday.date || !newPlayday.name) return;
@@ -972,9 +1117,34 @@ const [lineups, setLineups] = useState(initialLineups);
         const isSelected = selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half && selectedPosition?.posId === pos.id && !selectedPosition?.isBench;
         const rating = assignedPlayer ? (ratings[`${assignedPlayer.id}-${pos.id}`] || 0) : 0;
         const isPreferred = assignedPlayer ? isFavoritePosition(assignedPlayer.id, pos.id) : false;
+        const isSwapFirst = swapMode && swapFirstPlayer?.posId === pos.id;
+        const isSwappable = swapMode && assignedPlayer && !isSwapFirst;
+
+        const handleClick = () => {
+          if (swapMode && assignedPlayer) {
+            if (!swapFirstPlayer) {
+              // Select first player to swap
+              setSwapFirstPlayer({ playdayId: selectedPlayday.id, matchId, half, posId: pos.id, playerId: assignedPlayer.id });
+            } else if (swapFirstPlayer.posId !== pos.id) {
+              // Perform swap
+              handleSwapPositions(selectedPlayday.id, matchId, half, swapFirstPlayer.playerId, assignedPlayer.id);
+              setSwapFirstPlayer(null);
+              setSwapMode(false);
+            }
+          } else {
+            setSelectedPosition(isSelected ? null : { playdayId: selectedPlayday.id, matchId, half, posId: pos.id, isBench: false });
+          }
+        };
+
         return (
-          <button onClick={() => setSelectedPosition(isSelected ? null : { playdayId: selectedPlayday.id, matchId, half, posId: pos.id, isBench: false })}
-            className={`relative flex flex-col items-center justify-center rounded-xl transition-all ${isSelected ? 'ring-2 ring-yellow-400 scale-105 bg-white/30' : assignedPlayer ? 'bg-white/20 hover:bg-white/30' : 'bg-white/10 border border-dashed border-white/30 hover:bg-white/20'}`}
+          <button onClick={handleClick}
+            className={`relative flex flex-col items-center justify-center rounded-xl transition-all ${
+              isSwapFirst ? 'ring-2 ring-purple-400 scale-105 bg-purple-200/40' :
+              isSwappable ? 'ring-2 ring-purple-300 bg-white/30 hover:bg-purple-200/30' :
+              isSelected ? 'ring-2 ring-yellow-400 scale-105 bg-white/30' :
+              assignedPlayer ? 'bg-white/20 hover:bg-white/30' :
+              'bg-white/10 border border-dashed border-white/30 hover:bg-white/20'
+            }`}
             style={{ width: '44px', height: '44px' }}>
             <span className="text-[10px] font-bold text-yellow-300">#{pos.code}</span>
             {assignedPlayer ? (
@@ -983,6 +1153,7 @@ const [lineups, setLineups] = useState(initialLineups);
                 <div className="flex items-center gap-0.5">{isPreferred && <span className="text-yellow-300 text-[7px]">★</span>}<span className="text-[6px] text-white/70">{'★'.repeat(Math.min(rating, 3))}</span></div>
               </>
             ) : <span className="text-[8px] text-white/50">tap</span>}
+            {isSwapFirst && <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 text-white rounded-full text-[8px] flex items-center justify-center font-bold">1</div>}
           </button>
         );
       };
@@ -1023,16 +1194,56 @@ const [lineups, setLineups] = useState(initialLineups);
 
       return (
         <div className="mt-3">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
             <button onClick={() => copyPreviousLineup(selectedPlayday.id, matchId, half)} disabled={halfIndex === 0}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${halfIndex === 0 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
               <Icons.Copy /> Copy Previous
             </button>
             <button onClick={() => proposeLineup(selectedPlayday.id, matchId, half)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 transition-colors">
-              <Icons.Wand /> Auto Propose
+              <Icons.Wand /> Auto Propose ({allocationMode === 'game' ? '🏆' : '📚'})
+            </button>
+            <button
+              onClick={() => {
+                setSwapMode(!swapMode);
+                setSwapFirstPlayer(null);
+                setSelectedPosition(null);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                swapMode
+                  ? 'bg-purple-50 text-purple-700 border-purple-200 ring-2 ring-purple-200'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              🔄 {swapMode ? 'Cancel Swap' : 'Swap Positions'}
             </button>
           </div>
+
+          {/* Swap Mode Instructions */}
+          {swapMode && (
+            <div className="mb-3 bg-purple-50 border border-purple-200 rounded-xl p-3">
+              <div className="text-xs font-semibold text-purple-800 mb-1">
+                🔄 Swap Mode Active
+              </div>
+              <div className="text-xs text-purple-700">
+                {swapFirstPlayer
+                  ? 'Now click on another player to swap positions'
+                  : 'Click on a player to select them for swapping'}
+              </div>
+            </div>
+          )}
+
+          {/* Allocation Explanations */}
+          {!swapMode && allocationExplanations[key] && Object.keys(allocationExplanations[key]).length > 0 && (
+            <div className="mb-3 bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <div className="text-xs font-semibold text-blue-800 mb-2">
+                💡 Auto Allocation Insights (Mode: {allocationMode === 'game' ? '🏆 Game' : '📚 Training'})
+              </div>
+              <div className="text-xs text-blue-700 mb-2">
+                Click on a field position below to see why that player was selected.
+              </div>
+            </div>
+          )}
           <div className="flex gap-3">
             <div className="flex-1 bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-4 shadow-lg">
               <div className="text-center text-[8px] text-white/50 mb-3 tracking-wider">▲ ATTACK</div>
@@ -1050,6 +1261,22 @@ const [lineups, setLineups] = useState(initialLineups);
                 <>
                   <div className="text-xs font-bold mb-1 px-1" style={{ color: DIOK.blue }}>{selectedPosition.isBench ? `Bench ${selectedPosition.benchIndex + 1}` : `#${positions.find(p => p.id === selectedPosition.posId)?.code} ${positions.find(p => p.id === selectedPosition.posId)?.name}`}</div>
                   {(selectedPosition.isBench ? lineup.bench?.[selectedPosition.benchIndex] : lineup.assignments[selectedPosition.posId]) && <button onClick={handleClearPosition} className="mb-2 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 border border-red-200">Clear</button>}
+
+                  {/* Show allocation explanation if available */}
+                  {!selectedPosition.isBench && allocationExplanations[key]?.[`${selectedPosition.posId}-${lineup.assignments[selectedPosition.posId]}`] && (
+                    <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="text-[9px] font-semibold text-blue-800 mb-1">Why selected:</div>
+                      <div className="space-y-0.5">
+                        {allocationExplanations[key][`${selectedPosition.posId}-${lineup.assignments[selectedPosition.posId]}`].explanations.map((exp, idx) => (
+                          <div key={idx} className="text-[8px] text-blue-700">• {exp}</div>
+                        ))}
+                      </div>
+                      <div className="text-[8px] text-blue-600 font-semibold mt-1">
+                        Total: {allocationExplanations[key][`${selectedPosition.posId}-${lineup.assignments[selectedPosition.posId]}`].score.toFixed(2)} pts
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex-1 overflow-auto">
                     {best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1">✓ Best Matches</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
                     {alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1">◐ Alternatives</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
@@ -1177,6 +1404,209 @@ const [lineups, setLineups] = useState(initialLineups);
     );
   };
 
+  // ==================== RULES VIEW ====================
+  const RulesView = () => {
+    const activeRules = allocationRules[allocationMode];
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Allocation Rules</h2>
+          <p className="text-sm text-gray-500">Configure validation and optimization</p>
+        </div>
+
+        {/* Mode Toggle */}
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3">
+          <div className="text-xs font-semibold text-amber-800 mb-2">Mode Selection</div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setAllocationMode('game')}
+              className={`flex-1 py-2 px-3 rounded-xl font-semibold text-sm transition-all ${
+                allocationMode === 'game'
+                  ? 'text-white shadow-md'
+                  : 'bg-white text-gray-600 border border-gray-200'
+              }`}
+              style={{ backgroundColor: allocationMode === 'game' ? DIOK.blue : undefined }}
+            >
+              🏆 Game Mode
+            </button>
+            <button
+              onClick={() => setAllocationMode('training')}
+              className={`flex-1 py-2 px-3 rounded-xl font-semibold text-sm transition-all ${
+                allocationMode === 'training'
+                  ? 'text-white shadow-md'
+                  : 'bg-white text-gray-600 border border-gray-200'
+              }`}
+              style={{ backgroundColor: allocationMode === 'training' ? DIOK.blue : undefined }}
+            >
+              📚 Training Mode
+            </button>
+          </div>
+          <div className="text-xs text-amber-700 mt-2">
+            {allocationMode === 'game'
+              ? '🏆 Optimized for winning - emphasizes skill ratings and player preferences'
+              : '📚 Optimized for development - emphasizes fairness and position variety'}
+          </div>
+        </div>
+
+        {/* Priority Note */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+          <div className="text-xs font-semibold text-blue-800 mb-1">Priority System</div>
+          <div className="text-xs text-blue-700">
+            Rules apply top-to-bottom. Reorder with arrows (except locked rules). Higher weights = stronger influence.
+          </div>
+        </div>
+
+        {/* Rules List */}
+        <div className="space-y-2">
+          {activeRules.map((rule, index) => (
+            <div
+              key={rule.id}
+              className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
+                rule.locked ? 'border-gray-300' : 'border-gray-200'
+              }`}
+            >
+              <div className="p-4">
+                {/* Rule Header */}
+                <div className="flex items-start gap-3 mb-2">
+                  {/* Priority Number */}
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                      rule.locked ? 'bg-gray-200 text-gray-600' : ''
+                    }`}
+                    style={{ backgroundColor: rule.locked ? undefined : DIOK.blueLight, color: rule.locked ? undefined : 'white' }}
+                  >
+                    {index + 1}
+                  </div>
+
+                  {/* Rule Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="font-semibold text-gray-900">{rule.name}</span>
+                      {rule.locked && (
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border border-gray-300">
+                          🔒 Locked
+                        </span>
+                      )}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        rule.type === 'HARD' ? 'bg-red-100 text-red-700 border border-red-200' :
+                        rule.type === 'CONFIG' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                        'bg-amber-100 text-amber-700 border border-amber-200'
+                      }`}>
+                        {rule.type}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500">{rule.description}</div>
+                  </div>
+
+                  {/* Toggle Switch */}
+                  <button
+                    onClick={() => toggleRule(rule.id)}
+                    disabled={rule.locked}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      rule.enabled ? 'bg-emerald-500' : 'bg-gray-300'
+                    } ${rule.locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                      rule.enabled ? 'translate-x-6' : 'translate-x-0'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Weight Slider (for SOFT rules) */}
+                {rule.type === 'SOFT' && rule.enabled && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-gray-600">Weight:</span>
+                      <span className="text-sm font-bold text-gray-900">{Math.round(rule.weight * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={Math.round(rule.weight * 100)}
+                      onChange={(e) => updateRuleWeight(rule.id, parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${rule.weight * 100}%, #e5e7eb ${rule.weight * 100}%, #e5e7eb 100%)`
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Config Options (for CONFIG rules) */}
+                {rule.type === 'CONFIG' && rule.enabled && rule.id === 3 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-gray-600">Available Players:</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max={players.length}
+                          value={rule.limit || 16}
+                          onChange={(e) => {
+                            const newLimit = parseInt(e.target.value);
+                            setAllocationRules(prev => ({
+                              ...prev,
+                              [allocationMode]: prev[allocationMode].map(r =>
+                                r.id === rule.id ? { ...r, limit: newLimit } : r
+                              ),
+                            }));
+                          }}
+                          className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
+                        />
+                        <span className="text-xs text-gray-500">/ {players.length}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Reorder Buttons */}
+                {!rule.locked && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
+                    <button
+                      onClick={() => reorderRules(index, index - 1)}
+                      disabled={index === 0 || activeRules[index - 1].locked}
+                      className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-colors ${
+                        index === 0 || activeRules[index - 1].locked
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      ↑ Move Up
+                    </button>
+                    <button
+                      onClick={() => reorderRules(index, index + 1)}
+                      disabled={index === activeRules.length - 1}
+                      className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-colors ${
+                        index === activeRules.length - 1
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      ↓ Move Down
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Help Section */}
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+          <div className="text-sm font-semibold text-gray-900 mb-2">How Rules Work</div>
+          <div className="space-y-2 text-xs text-gray-600">
+            <div><strong>HARD:</strong> Constraints that must be satisfied (cannot be disabled)</div>
+            <div><strong>SOFT:</strong> Optimization goals weighted by priority and strength</div>
+            <div><strong>CONFIG:</strong> Settings that filter or configure allocation behavior</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: DIOK.gray }}>
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
@@ -1190,6 +1620,7 @@ const [lineups, setLineups] = useState(initialLineups);
         {activeTab === 'squad' && <SquadView />}
         {activeTab === 'lineup' && <LineupView />}
         {activeTab === 'overview' && <OverviewView />}
+        {activeTab === 'rules' && <RulesView />}
       </main>
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 shadow-lg">
         <div className="max-w-3xl mx-auto flex gap-1">
