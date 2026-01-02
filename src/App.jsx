@@ -922,6 +922,48 @@ const [lineups, setLineups] = useState(initialLineups);
     setPlaydays(playdays.map(p => p.id !== selectedPlaydayId ? p : { ...p, matches: p.matches.filter(m => m.id !== matchId) }));
   };
 
+  const getNextDayOfWeek = (dayOfWeek) => {
+    // dayOfWeek: 0 = Sunday, 3 = Wednesday, 6 = Saturday
+    const today = new Date();
+    const resultDate = new Date(today);
+    resultDate.setDate(today.getDate() + ((dayOfWeek + 7 - today.getDay()) % 7 || 7));
+    return resultDate.toISOString().split('T')[0];
+  };
+
+  const addNextGameDay = () => {
+    const nextSaturday = getNextDayOfWeek(6);
+    const id = Math.max(0, ...playdays.map(p => p.id)) + 1;
+    const gameMatches = [
+      { id: 1, opponent: 'TBD', number: 1 },
+      { id: 2, opponent: 'TBD', number: 2 },
+      { id: 3, opponent: 'TBD', number: 3 },
+    ];
+    setPlaydays([...playdays, {
+      id,
+      date: nextSaturday,
+      name: `Game Day ${playdays.filter(p => p.type === 'game').length + 1}`,
+      type: 'game',
+      matches: gameMatches
+    }]);
+    setSelectedPlaydayId(id);
+  };
+
+  const addNextTrainingDay = () => {
+    const nextWednesday = getNextDayOfWeek(3);
+    const id = Math.max(0, ...playdays.map(p => p.id)) + 1;
+    const trainingMatch = [
+      { id: 1, opponent: 'Training Session', number: 1 },
+    ];
+    setPlaydays([...playdays, {
+      id,
+      date: nextWednesday,
+      name: `Training ${playdays.filter(p => p.type === 'training').length + 1}`,
+      type: 'training',
+      matches: trainingMatch
+    }]);
+    setSelectedPlaydayId(id);
+  };
+
   const getPositionHistoryText = (playerId) => {
     const counts = playerPositionCounts[playerId];
     if (!counts || Object.keys(counts).length === 0) return 'No match history';
@@ -945,7 +987,10 @@ const [lineups, setLineups] = useState(initialLineups);
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h2 className="text-xl font-bold text-gray-900">Schedule</h2><p className="text-sm text-gray-500">{playdays.length} playday{playdays.length !== 1 ? 's' : ''}</p></div>
-        <button onClick={() => setShowAddPlayday(true)} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Add Playday</button>
+        <div className="flex gap-2">
+          <button onClick={addNextGameDay} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Game Day</button>
+          <button onClick={addNextTrainingDay} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm bg-amber-600 hover:bg-amber-700"><Icons.Plus /> Training</button>
+        </div>
       </div>
       <div className="space-y-3">
         {playdays.map(playday => {
@@ -1569,14 +1614,16 @@ const [lineups, setLineups] = useState(initialLineups);
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left py-2 px-3 font-semibold text-gray-700">Rule</th>
+                <th className="text-center py-2 px-3 font-semibold text-gray-700">Config</th>
                 <th className="text-center py-2 px-2 font-semibold text-gray-700">Type</th>
                 <th className="text-center py-2 px-2 font-semibold text-gray-700">Enabled</th>
-                <th className="text-center py-2 px-3 font-semibold text-gray-700">Weight / Config</th>
+                <th className="text-center py-2 px-3 font-semibold text-gray-700">Weight</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {activeRules.map((rule) => (
                 <tr key={rule.id} className={`${rule.enabled ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50/30 transition-colors`}>
+                  {/* Rule */}
                   <td className="py-3 px-3">
                     <div className="flex items-start gap-2">
                       {rule.locked && <span className="text-[10px] mt-0.5">🔒</span>}
@@ -1586,6 +1633,36 @@ const [lineups, setLineups] = useState(initialLineups);
                       </div>
                     </div>
                   </td>
+                  {/* Config */}
+                  <td className="py-3 px-3">
+                    {rule.type === 'SOFT' && rule.enabled && rule.id === 3 ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="range"
+                          min="0"
+                          max="20"
+                          value={rule.limit || 6}
+                          onChange={(e) => {
+                            const newLimit = parseInt(e.target.value);
+                            setAllocationRules(prev => ({
+                              ...prev,
+                              [allocationMode]: prev[allocationMode].map(r =>
+                                r.id === rule.id ? { ...r, limit: newLimit } : r
+                              ),
+                            }));
+                          }}
+                          className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${((rule.limit || 6) / 20) * 100}%, #e5e7eb ${((rule.limit || 6) / 20) * 100}%, #e5e7eb 100%)`
+                          }}
+                        />
+                        <span className="text-sm font-bold text-gray-900 w-8 text-right">{rule.limit || 6}</span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 text-center block">—</span>
+                    )}
+                  </td>
+                  {/* Type */}
                   <td className="py-3 px-2 text-center">
                     <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
                       rule.type === 'HARD' ? 'bg-red-100 text-red-700' :
@@ -1595,6 +1672,7 @@ const [lineups, setLineups] = useState(initialLineups);
                       {rule.type}
                     </span>
                   </td>
+                  {/* Enabled */}
                   <td className="py-3 px-2 text-center">
                     <button
                       onClick={() => toggleRule(rule.id)}
@@ -1608,51 +1686,9 @@ const [lineups, setLineups] = useState(initialLineups);
                       }`} />
                     </button>
                   </td>
+                  {/* Weight */}
                   <td className="py-3 px-3">
-                    {rule.type === 'SOFT' && rule.enabled && rule.id === 3 && (
-                      <div className="flex items-center gap-3">
-                        {/* Limit slider on left */}
-                        <div className="flex items-center gap-2 flex-1">
-                          <span className="text-xs text-gray-500 w-12">Limit:</span>
-                          <input
-                            type="range"
-                            min="0"
-                            max="20"
-                            value={rule.limit || 6}
-                            onChange={(e) => {
-                              const newLimit = parseInt(e.target.value);
-                              setAllocationRules(prev => ({
-                                ...prev,
-                                [allocationMode]: prev[allocationMode].map(r =>
-                                  r.id === rule.id ? { ...r, limit: newLimit } : r
-                                ),
-                              }));
-                            }}
-                            className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            style={{
-                              background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${((rule.limit || 6) / 20) * 100}%, #e5e7eb ${((rule.limit || 6) / 20) * 100}%, #e5e7eb 100%)`
-                            }}
-                          />
-                          <span className="text-sm font-bold text-gray-900 w-8 text-right">{rule.limit || 6}</span>
-                        </div>
-                        {/* Weight slider on right */}
-                        <div className="flex items-center gap-2 flex-1">
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={Math.round(rule.weight * 100)}
-                            onChange={(e) => updateRuleWeight(rule.id, parseInt(e.target.value))}
-                            className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            style={{
-                              background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${rule.weight * 100}%, #e5e7eb ${rule.weight * 100}%, #e5e7eb 100%)`
-                            }}
-                          />
-                          <span className="text-sm font-bold text-gray-900 w-10 text-right">{Math.round(rule.weight * 100)}%</span>
-                        </div>
-                      </div>
-                    )}
-                    {rule.type === 'SOFT' && rule.enabled && rule.id !== 3 && (
+                    {rule.type === 'SOFT' && rule.enabled ? (
                       <div className="flex items-center gap-2">
                         <input
                           type="range"
@@ -1667,9 +1703,9 @@ const [lineups, setLineups] = useState(initialLineups);
                         />
                         <span className="text-sm font-bold text-gray-900 w-10 text-right">{Math.round(rule.weight * 100)}%</span>
                       </div>
+                    ) : (
+                      <span className="text-gray-400 text-center block">—</span>
                     )}
-                    {!rule.enabled && <span className="text-gray-400 text-center block">—</span>}
-                    {rule.type === 'HARD' && <span className="text-gray-400 text-center block">—</span>}
                   </td>
                 </tr>
               ))}
