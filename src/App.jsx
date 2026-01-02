@@ -469,6 +469,8 @@ const [lineups, setLineups] = useState(initialLineups);
   const [settings] = useState({ coachName: 'Coach Rassie Erasmus', teamName: 'Bulls Mini\'s', ageGroup: 'U10' });
   const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [expandedHalf, setExpandedHalf] = useState(null);
+  const [editingPlayday, setEditingPlayday] = useState(null);
+  const [editingMatch, setEditingMatch] = useState(null);
 
   // Allocation Rules Configuration
   const [allocationMode, setAllocationMode] = useState('game'); // 'game' or 'training'
@@ -922,6 +924,17 @@ const [lineups, setLineups] = useState(initialLineups);
     setPlaydays(playdays.map(p => p.id !== selectedPlaydayId ? p : { ...p, matches: p.matches.filter(m => m.id !== matchId) }));
   };
 
+  const updatePlaydayName = (playdayId, newName) => {
+    setPlaydays(playdays.map(p => p.id === playdayId ? { ...p, name: newName } : p));
+  };
+
+  const updateMatchOpponent = (playdayId, matchId, newOpponent) => {
+    setPlaydays(playdays.map(p => p.id === playdayId ? {
+      ...p,
+      matches: p.matches.map(m => m.id === matchId ? { ...m, opponent: newOpponent } : m)
+    } : p));
+  };
+
   const getNextDayOfWeek = (dayOfWeek, fromDate = new Date()) => {
     // dayOfWeek: 0 = Sunday, 3 = Wednesday, 6 = Saturday
     const resultDate = new Date(fromDate);
@@ -954,7 +967,7 @@ const [lineups, setLineups] = useState(initialLineups);
     const newPlaydays = [...playdays, {
       id,
       date: nextSaturday,
-      name: `Game Day ${playdays.filter(p => p.type === 'game').length + 1}`,
+      name: `Game Day ${nextSaturday}`,
       type: 'game',
       matches: gameMatches
     }];
@@ -973,7 +986,7 @@ const [lineups, setLineups] = useState(initialLineups);
     const newPlaydays = [...playdays, {
       id,
       date: nextWednesday,
-      name: `Training ${playdays.filter(p => p.type === 'training').length + 1}`,
+      name: `Training ${nextWednesday}`,
       type: 'training',
       matches: trainingMatch
     }];
@@ -1002,17 +1015,20 @@ const [lineups, setLineups] = useState(initialLineups);
   );
 
   // ==================== SCHEDULE VIEW ====================
-  const ScheduleView = () => (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div><h2 className="text-xl font-bold text-gray-900">Schedule</h2><p className="text-sm text-gray-500">{playdays.length} playday{playdays.length !== 1 ? 's' : ''}</p></div>
-        <div className="flex gap-2">
-          <button onClick={addNextGameDay} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Game Day</button>
-          <button onClick={addNextTrainingDay} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm bg-amber-600 hover:bg-amber-700"><Icons.Plus /> Training</button>
+  const ScheduleView = () => {
+    const sortedPlaydays = [...playdays].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div><h2 className="text-xl font-bold text-gray-900">Schedule</h2><p className="text-sm text-gray-500">{playdays.length} playday{playdays.length !== 1 ? 's' : ''}</p></div>
+          <div className="flex gap-2">
+            <button onClick={addNextGameDay} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Game Day</button>
+            <button onClick={addNextTrainingDay} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm bg-amber-600 hover:bg-amber-700"><Icons.Plus /> Training</button>
+          </div>
         </div>
-      </div>
-      <div className="space-y-3">
-        {playdays.map(playday => {
+        <div className="space-y-3">
+          {sortedPlaydays.map(playday => {
           const isSelected = playday.id === selectedPlaydayId;
           const totalHalves = playday.matches.length * 2;
           const filledHalves = playday.matches.reduce((acc, m) => {
@@ -1025,12 +1041,32 @@ const [lineups, setLineups] = useState(initialLineups);
             <div key={playday.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${isSelected ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200'}`}>
               <div className={`p-4 cursor-pointer ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`} onClick={() => setSelectedPlaydayId(playday.id)}>
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl flex flex-col items-center justify-center text-white font-bold shrink-0" style={{ backgroundColor: DIOK.blue }}>
+                  <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center text-white font-bold shrink-0 ${playday.type === 'game' ? '' : 'bg-amber-600'}`} style={{ backgroundColor: playday.type === 'game' ? DIOK.blue : undefined }}>
                     <span className="text-lg">{new Date(playday.date).getDate()}</span>
                     <span className="text-[9px] opacity-80">{new Date(playday.date).toLocaleDateString('en', { month: 'short' })}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-gray-900">{playday.name}</div>
+                    {editingPlayday === playday.id ? (
+                      <input
+                        type="text"
+                        defaultValue={playday.name}
+                        autoFocus
+                        onBlur={(e) => {
+                          updatePlaydayName(playday.id, e.target.value);
+                          setEditingPlayday(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            updatePlaydayName(playday.id, e.target.value);
+                            setEditingPlayday(null);
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="font-semibold text-gray-900 bg-white border border-blue-300 rounded px-2 py-1 w-full"
+                      />
+                    ) : (
+                      <div className="font-semibold text-gray-900 hover:text-blue-600 cursor-text" onClick={(e) => { e.stopPropagation(); setEditingPlayday(playday.id); }}>{playday.name}</div>
+                    )}
                     <div className="text-sm text-gray-500">{playday.date} · {playday.matches.length} match{playday.matches.length !== 1 ? 'es' : ''}</div>
                     <div className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1 ${filledHalves === totalHalves && totalHalves > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{filledHalves}/{totalHalves} halves ready</div>
                   </div>
@@ -1052,7 +1088,29 @@ const [lineups, setLineups] = useState(initialLineups);
                       {playday.matches.map((match, idx) => (
                         <div key={match.id} className="flex items-center gap-3 bg-white rounded-xl p-3 border border-gray-200">
                           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: DIOK.blueLight }}>M{idx + 1}</div>
-                          <div className="flex-1"><div className="font-medium text-gray-900">{playday.type === 'game' ? `vs. ${match.opponent}` : match.opponent}</div><div className="text-xs text-gray-500">{playday.type === 'game' ? `Game ${match.number}` : `Training ${match.number}`}</div></div>
+                          <div className="flex-1">
+                            {editingMatch === `${playday.id}-${match.id}` ? (
+                              <input
+                                type="text"
+                                defaultValue={match.opponent}
+                                autoFocus
+                                onBlur={(e) => {
+                                  updateMatchOpponent(playday.id, match.id, e.target.value);
+                                  setEditingMatch(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    updateMatchOpponent(playday.id, match.id, e.target.value);
+                                    setEditingMatch(null);
+                                  }
+                                }}
+                                className="font-medium text-gray-900 bg-white border border-blue-300 rounded px-2 py-1 w-full"
+                              />
+                            ) : (
+                              <div className="font-medium text-gray-900 hover:text-blue-600 cursor-text" onClick={() => setEditingMatch(`${playday.id}-${match.id}`)}>{playday.type === 'game' ? `vs. ${match.opponent}` : match.opponent}</div>
+                            )}
+                            <div className="text-xs text-gray-500">{playday.type === 'game' ? `Game ${match.number}` : `Training ${match.number}`}</div>
+                          </div>
                           <button onClick={() => deleteMatch(match.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icons.Trash /></button>
                         </div>
                       ))}
@@ -1066,7 +1124,8 @@ const [lineups, setLineups] = useState(initialLineups);
         })}
       </div>
     </div>
-  );
+    );
+  };
 
   // ==================== SQUAD VIEW ====================
   const SquadView = () => (
