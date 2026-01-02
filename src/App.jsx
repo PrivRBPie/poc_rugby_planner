@@ -63,6 +63,7 @@ const Icons = {
   Heart: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
   Zap: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
   Target: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+  CheckCircle: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>,
   AlertTriangle: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   Trash: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
 };
@@ -462,7 +463,6 @@ const [lineups, setLineups] = useState(initialLineups);
   const [settings] = useState({ coachName: 'Coach Rassie Erasmus', teamName: 'Bulls Mini\'s', ageGroup: 'U10' });
   const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [expandedHalf, setExpandedHalf] = useState(null);
-  const [swapMode, setSwapMode] = useState(false);
   const [swapFirstPlayer, setSwapFirstPlayer] = useState(null);
 
   // Allocation Rules Configuration
@@ -513,10 +513,8 @@ const [lineups, setLineups] = useState(initialLineups);
       const current = prev[playerId] || [];
       if (current.includes(positionId)) {
         return { ...prev, [playerId]: current.filter(id => id !== positionId) };
-      } else if (current.length < 2) {
-        return { ...prev, [playerId]: [...current, positionId] };
       } else {
-        return { ...prev, [playerId]: [current[0], positionId] };
+        return { ...prev, [playerId]: [...current, positionId] };
       }
     });
   };
@@ -566,7 +564,12 @@ const [lineups, setLineups] = useState(initialLineups);
     const key = `${playdayId}-${matchId}-${half}`;
     const lineup = lineups[key] || { assignments: {}, bench: [] };
     let happinessScore = 0, strengthScore = 0, trainingCount = 0, maxHappiness = 0, maxStrength = 0;
-    
+    let totalAllocationScore = 0;
+    let positionCount = 0;
+
+    const activeRules = allocationRules[allocationMode];
+    const assigned = new Set();
+
     Object.entries(lineup.assignments).forEach(([posId, playerId]) => {
       if (!playerId) return;
       const ratingKey = `${playerId}-${posId}`;
@@ -574,20 +577,35 @@ const [lineups, setLineups] = useState(initialLineups);
       const isPreferred = isFavoritePosition(playerId, parseInt(posId));
       const timesPlayed = playerPositionCounts[playerId]?.[posId] || 0;
       const trained = training[ratingKey];
-      
+
       strengthScore += rating;
       maxStrength += 5;
       if (isPreferred) happinessScore += 1;
       maxHappiness += 1;
       if (trained && (rating < 3 || timesPlayed === 0)) trainingCount += 1;
+
+      // Calculate allocation score for this position
+      const player = players.find(p => p.id === playerId);
+      const position = positions.find(p => p.id === parseInt(posId));
+      if (player && position) {
+        const { score } = calculatePlayerPositionScore(player, position, assigned, activeRules);
+        if (score > -Infinity) {
+          totalAllocationScore += score;
+          positionCount++;
+        }
+        assigned.add(playerId);
+      }
     });
-    
+
+    const avgAllocationScore = positionCount > 0 ? totalAllocationScore / positionCount : 0;
+
     return {
       happiness: maxHappiness > 0 ? Math.round((happinessScore / maxHappiness) * 100) : 0,
       strength: maxStrength > 0 ? Math.round((strengthScore / maxStrength) * 100) : 0,
       training: trainingCount,
       filled: Object.keys(lineup.assignments).length,
       bench: lineup.bench?.length || 0,
+      allocationScore: Math.round(avgAllocationScore * 10) / 10, // Round to 1 decimal
     };
   };
 
@@ -829,17 +847,6 @@ const [lineups, setLineups] = useState(initialLineups);
     }));
   };
 
-  const reorderRules = (fromIndex, toIndex) => {
-    setAllocationRules(prev => {
-      const rules = [...prev[allocationMode]];
-      // Don't allow moving locked rules
-      if (rules[fromIndex].locked || rules[toIndex].locked) return prev;
-      const [removed] = rules.splice(fromIndex, 1);
-      rules.splice(toIndex, 0, removed);
-      return { ...prev, [allocationMode]: rules };
-    });
-  };
-
   const handleSwapPositions = (playdayId, matchId, half, player1Id, player2Id) => {
     const key = `${playdayId}-${matchId}-${half}`;
     updateLineup(playdayId, matchId, half, (prev) => {
@@ -902,9 +909,10 @@ const [lineups, setLineups] = useState(initialLineups);
 
   const ScoreBadge = ({ scores }) => (
     <div className="flex items-center gap-2 text-[10px]">
-      <div className="flex items-center gap-0.5" title="Happiness"><span className="text-pink-500"><Icons.Heart /></span><span className="font-semibold text-gray-600">{scores.happiness}%</span></div>
-      <div className="flex items-center gap-0.5" title="Strength"><span className="text-amber-500"><Icons.Zap /></span><span className="font-semibold text-gray-600">{scores.strength}%</span></div>
-      <div className="flex items-center gap-0.5" title="Training"><span className="text-blue-500"><Icons.Target /></span><span className="font-semibold text-gray-600">{scores.training}</span></div>
+      <div className="flex items-center gap-0.5" title="Happiness (Favorite positions)"><span className="text-pink-500"><Icons.Heart /></span><span className="font-semibold text-gray-600">{scores.happiness}%</span></div>
+      <div className="flex items-center gap-0.5" title="Strength (Skill ratings)"><span className="text-amber-500"><Icons.Zap /></span><span className="font-semibold text-gray-600">{scores.strength}%</span></div>
+      <div className="flex items-center gap-0.5" title="Training opportunities"><span className="text-blue-500"><Icons.Target /></span><span className="font-semibold text-gray-600">{scores.training}</span></div>
+      <div className="flex items-center gap-0.5" title={`Allocation Score (based on ${allocationMode === 'game' ? 'Game' : 'Training'} rules)`}><span className="text-emerald-500"><Icons.CheckCircle /></span><span className="font-semibold text-gray-600">{scores.allocationScore}</span></div>
     </div>
   );
 
@@ -1021,15 +1029,14 @@ const [lineups, setLineups] = useState(initialLineups);
               </div>
               {isExpanded && (
                 <div className="px-3 pb-3 border-t border-gray-100 bg-gray-50">
-                  <div className="text-xs font-medium text-gray-500 mt-3 mb-1">Favorite Positions (select up to 2)</div>
+                  <div className="text-xs font-medium text-gray-500 mt-3 mb-1">Favorite Positions</div>
                   <div className="flex flex-wrap gap-1 mb-3">
                     {positions.map(pos => {
                       const isFav = isFavoritePosition(player.id, pos.id);
-                      const favIndex = favPositions.indexOf(pos.id);
                       return (
                         <button key={pos.id} onClick={() => toggleFavoritePosition(player.id, pos.id)}
                           className={`px-2 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${isFav ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'}`}>
-                          {isFav && <span className="text-yellow-500">{favIndex === 0 ? '★' : '☆'}</span>}#{pos.code}
+                          {isFav && <span className="text-yellow-500">★</span>}#{pos.code}
                         </button>
                       );
                     })}
@@ -1117,22 +1124,24 @@ const [lineups, setLineups] = useState(initialLineups);
         const isSelected = selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half && selectedPosition?.posId === pos.id && !selectedPosition?.isBench;
         const rating = assignedPlayer ? (ratings[`${assignedPlayer.id}-${pos.id}`] || 0) : 0;
         const isPreferred = assignedPlayer ? isFavoritePosition(assignedPlayer.id, pos.id) : false;
-        const isSwapFirst = swapMode && swapFirstPlayer?.posId === pos.id;
-        const isSwappable = swapMode && assignedPlayer && !isSwapFirst;
+        const isSwapFirst = swapFirstPlayer?.playdayId === selectedPlayday.id && swapFirstPlayer?.matchId === matchId && swapFirstPlayer?.half === half && swapFirstPlayer?.posId === pos.id;
+        const canSwap = swapFirstPlayer && assignedPlayer && !isSwapFirst;
 
         const handleClick = () => {
-          if (swapMode && assignedPlayer) {
-            if (!swapFirstPlayer) {
-              // Select first player to swap
-              setSwapFirstPlayer({ playdayId: selectedPlayday.id, matchId, half, posId: pos.id, playerId: assignedPlayer.id });
-            } else if (swapFirstPlayer.posId !== pos.id) {
-              // Perform swap
-              handleSwapPositions(selectedPlayday.id, matchId, half, swapFirstPlayer.playerId, assignedPlayer.id);
-              setSwapFirstPlayer(null);
-              setSwapMode(false);
-            }
-          } else {
+          // If there's a first player selected for swapping and this position has a player, perform swap
+          if (canSwap) {
+            handleSwapPositions(selectedPlayday.id, matchId, half, swapFirstPlayer.playerId, assignedPlayer.id);
+            setSwapFirstPlayer(null);
+            setSelectedPosition(null);
+          }
+          // If clicking on a filled position and no swap in progress, mark it for swapping
+          else if (assignedPlayer && !selectedPosition) {
+            setSwapFirstPlayer({ playdayId: selectedPlayday.id, matchId, half, posId: pos.id, playerId: assignedPlayer.id });
+          }
+          // Otherwise, toggle position selection for assignment
+          else {
             setSelectedPosition(isSelected ? null : { playdayId: selectedPlayday.id, matchId, half, posId: pos.id, isBench: false });
+            setSwapFirstPlayer(null);
           }
         };
 
@@ -1140,7 +1149,7 @@ const [lineups, setLineups] = useState(initialLineups);
           <button onClick={handleClick}
             className={`relative flex flex-col items-center justify-center rounded-xl transition-all ${
               isSwapFirst ? 'ring-2 ring-purple-400 scale-105 bg-purple-200/40' :
-              isSwappable ? 'ring-2 ring-purple-300 bg-white/30 hover:bg-purple-200/30' :
+              canSwap ? 'ring-2 ring-purple-300 bg-white/30 hover:bg-purple-200/30' :
               isSelected ? 'ring-2 ring-yellow-400 scale-105 bg-white/30' :
               assignedPlayer ? 'bg-white/20 hover:bg-white/30' :
               'bg-white/10 border border-dashed border-white/30 hover:bg-white/20'
@@ -1203,38 +1212,33 @@ const [lineups, setLineups] = useState(initialLineups);
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 transition-colors">
               <Icons.Wand /> Auto Propose ({allocationMode === 'game' ? '🏆' : '📚'})
             </button>
-            <button
-              onClick={() => {
-                setSwapMode(!swapMode);
-                setSwapFirstPlayer(null);
-                setSelectedPosition(null);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                swapMode
-                  ? 'bg-purple-50 text-purple-700 border-purple-200 ring-2 ring-purple-200'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              🔄 {swapMode ? 'Cancel Swap' : 'Swap Positions'}
-            </button>
+            {swapFirstPlayer && (
+              <button
+                onClick={() => {
+                  setSwapFirstPlayer(null);
+                  setSelectedPosition(null);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 transition-colors"
+              >
+                🔄 Cancel Swap
+              </button>
+            )}
           </div>
 
-          {/* Swap Mode Instructions */}
-          {swapMode && (
+          {/* Swap Instructions */}
+          {swapFirstPlayer && (
             <div className="mb-3 bg-purple-50 border border-purple-200 rounded-xl p-3">
               <div className="text-xs font-semibold text-purple-800 mb-1">
-                🔄 Swap Mode Active
+                🔄 Swap Active
               </div>
               <div className="text-xs text-purple-700">
-                {swapFirstPlayer
-                  ? 'Now click on another player to swap positions'
-                  : 'Click on a player to select them for swapping'}
+                Click on another filled position to swap
               </div>
             </div>
           )}
 
           {/* Allocation Explanations */}
-          {!swapMode && allocationExplanations[key] && Object.keys(allocationExplanations[key]).length > 0 && (
+          {!swapFirstPlayer && allocationExplanations[key] && Object.keys(allocationExplanations[key]).length > 0 && (
             <div className="mb-3 bg-blue-50 border border-blue-200 rounded-xl p-3">
               <div className="text-xs font-semibold text-blue-800 mb-2">
                 💡 Auto Allocation Insights (Mode: {allocationMode === 'game' ? '🏆 Game' : '📚 Training'})
@@ -1449,97 +1453,83 @@ const [lineups, setLineups] = useState(initialLineups);
           </div>
         </div>
 
-        {/* Priority Note */}
+        {/* Allocation Formula */}
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-          <div className="text-xs font-semibold text-blue-800 mb-1">Priority System</div>
-          <div className="text-xs text-blue-700">
-            Rules apply top-to-bottom. Reorder with arrows (except locked rules). Higher weights = stronger influence.
+          <div className="text-xs font-semibold text-blue-800 mb-2">Allocation Formula</div>
+          <div className="text-xs text-blue-700 mb-2">
+            Player-Position Score = Σ (Rule Weight × Rule Contribution)
+          </div>
+          <div className="text-xs text-blue-600 font-mono bg-white/50 p-2 rounded">
+            Score = {activeRules.filter(r => r.enabled && r.type === 'SOFT').map((r, i) =>
+              `${i > 0 ? ' + ' : ''}(${Math.round(r.weight * 100)}% × ${r.name.split(' ')[0]})`
+            ).join('')}
           </div>
         </div>
 
-        {/* Rules List */}
-        <div className="space-y-2">
-          {activeRules.map((rule, index) => (
-            <div
-              key={rule.id}
-              className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
-                rule.locked ? 'border-gray-300' : 'border-gray-200'
-              }`}
-            >
-              <div className="p-4">
-                {/* Rule Header */}
-                <div className="flex items-start gap-3 mb-2">
-                  {/* Priority Number */}
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
-                      rule.locked ? 'bg-gray-200 text-gray-600' : ''
-                    }`}
-                    style={{ backgroundColor: rule.locked ? undefined : DIOK.blueLight, color: rule.locked ? undefined : 'white' }}
-                  >
-                    {index + 1}
-                  </div>
-
-                  {/* Rule Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="font-semibold text-gray-900">{rule.name}</span>
-                      {rule.locked && (
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border border-gray-300">
-                          🔒 Locked
-                        </span>
-                      )}
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        rule.type === 'HARD' ? 'bg-red-100 text-red-700 border border-red-200' :
-                        rule.type === 'CONFIG' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
-                        'bg-amber-100 text-amber-700 border border-amber-200'
-                      }`}>
-                        {rule.type}
-                      </span>
+        {/* Rules Table */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left py-2 px-3 font-semibold text-gray-700">Rule</th>
+                <th className="text-center py-2 px-2 font-semibold text-gray-700">Type</th>
+                <th className="text-center py-2 px-2 font-semibold text-gray-700">Enabled</th>
+                <th className="text-center py-2 px-3 font-semibold text-gray-700">Weight / Config</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {activeRules.map((rule) => (
+                <tr key={rule.id} className={`${rule.enabled ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50/30 transition-colors`}>
+                  <td className="py-3 px-3">
+                    <div className="flex items-start gap-2">
+                      {rule.locked && <span className="text-[10px] mt-0.5">🔒</span>}
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-900 mb-0.5">{rule.name}</div>
+                        <div className="text-[11px] text-gray-500">{rule.description}</div>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500">{rule.description}</div>
-                  </div>
-
-                  {/* Toggle Switch */}
-                  <button
-                    onClick={() => toggleRule(rule.id)}
-                    disabled={rule.locked}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${
-                      rule.enabled ? 'bg-emerald-500' : 'bg-gray-300'
-                    } ${rule.locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                      rule.enabled ? 'translate-x-6' : 'translate-x-0'
-                    }`} />
-                  </button>
-                </div>
-
-                {/* Weight Slider (for SOFT rules) */}
-                {rule.type === 'SOFT' && rule.enabled && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-gray-600">Weight:</span>
-                      <span className="text-sm font-bold text-gray-900">{Math.round(rule.weight * 100)}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={Math.round(rule.weight * 100)}
-                      onChange={(e) => updateRuleWeight(rule.id, parseInt(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      style={{
-                        background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${rule.weight * 100}%, #e5e7eb ${rule.weight * 100}%, #e5e7eb 100%)`
-                      }}
-                    />
-                  </div>
-                )}
-
-                {/* Config Options (for CONFIG rules) */}
-                {rule.type === 'CONFIG' && rule.enabled && rule.id === 3 && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-gray-600">Available Players:</span>
+                  </td>
+                  <td className="py-3 px-2 text-center">
+                    <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
+                      rule.type === 'HARD' ? 'bg-red-100 text-red-700' :
+                      rule.type === 'CONFIG' ? 'bg-blue-100 text-blue-700' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {rule.type}
+                    </span>
+                  </td>
+                  <td className="py-3 px-2 text-center">
+                    <button
+                      onClick={() => toggleRule(rule.id)}
+                      disabled={rule.locked}
+                      className={`relative w-10 h-5 rounded-full transition-colors inline-block ${
+                        rule.enabled ? 'bg-emerald-500' : 'bg-gray-300'
+                      } ${rule.locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                        rule.enabled ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </td>
+                  <td className="py-3 px-3">
+                    {rule.type === 'SOFT' && rule.enabled && (
                       <div className="flex items-center gap-2">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={Math.round(rule.weight * 100)}
+                          onChange={(e) => updateRuleWeight(rule.id, parseInt(e.target.value))}
+                          className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${rule.weight * 100}%, #e5e7eb ${rule.weight * 100}%, #e5e7eb 100%)`
+                          }}
+                        />
+                        <span className="text-sm font-bold text-gray-900 w-10 text-right">{Math.round(rule.weight * 100)}%</span>
+                      </div>
+                    )}
+                    {rule.type === 'CONFIG' && rule.enabled && rule.id === 3 && (
+                      <div className="flex items-center justify-center gap-2">
                         <input
                           type="number"
                           min="1"
@@ -1554,44 +1544,18 @@ const [lineups, setLineups] = useState(initialLineups);
                               ),
                             }));
                           }}
-                          className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center"
+                          className="w-14 px-2 py-1 text-xs border border-gray-300 rounded-lg text-center"
                         />
-                        <span className="text-xs text-gray-500">/ {players.length}</span>
+                        <span className="text-gray-500">/ {players.length}</span>
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Reorder Buttons */}
-                {!rule.locked && (
-                  <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
-                    <button
-                      onClick={() => reorderRules(index, index - 1)}
-                      disabled={index === 0 || activeRules[index - 1].locked}
-                      className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-colors ${
-                        index === 0 || activeRules[index - 1].locked
-                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      ↑ Move Up
-                    </button>
-                    <button
-                      onClick={() => reorderRules(index, index + 1)}
-                      disabled={index === activeRules.length - 1}
-                      className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold border transition-colors ${
-                        index === activeRules.length - 1
-                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      ↓ Move Down
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+                    )}
+                    {!rule.enabled && <span className="text-gray-400 text-center block">—</span>}
+                    {rule.type === 'HARD' && <span className="text-gray-400 text-center block">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         {/* Help Section */}
@@ -1599,7 +1563,7 @@ const [lineups, setLineups] = useState(initialLineups);
           <div className="text-sm font-semibold text-gray-900 mb-2">How Rules Work</div>
           <div className="space-y-2 text-xs text-gray-600">
             <div><strong>HARD:</strong> Constraints that must be satisfied (cannot be disabled)</div>
-            <div><strong>SOFT:</strong> Optimization goals weighted by priority and strength</div>
+            <div><strong>SOFT:</strong> Optimization goals weighted by importance (higher weight = stronger influence)</div>
             <div><strong>CONFIG:</strong> Settings that filter or configure allocation behavior</div>
           </div>
         </div>
