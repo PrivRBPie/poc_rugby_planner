@@ -463,7 +463,6 @@ const [lineups, setLineups] = useState(initialLineups);
   const [settings] = useState({ coachName: 'Coach Rassie Erasmus', teamName: 'Bulls Mini\'s', ageGroup: 'U10' });
   const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [expandedHalf, setExpandedHalf] = useState(null);
-  const [swapFirstPlayer, setSwapFirstPlayer] = useState(null);
 
   // Allocation Rules Configuration
   const [allocationMode, setAllocationMode] = useState('game'); // 'game' or 'training'
@@ -471,7 +470,7 @@ const [lineups, setLineups] = useState(initialLineups);
     game: [
       { id: 1, name: 'No Duplicate Assignments', type: 'HARD', enabled: true, locked: true, weight: 1.0, description: 'A player can only play ONE position per half' },
       { id: 2, name: 'Equal Play Time', type: 'SOFT', enabled: true, locked: false, weight: 0.80, description: 'Each player should play the same amount of time within limits' },
-      { id: 3, name: 'Available Players Limit', type: 'CONFIG', enabled: true, locked: false, weight: 1.0, description: 'Coach sets how many players are available for game experience', limit: 16 },
+      { id: 3, name: 'Development Players', type: 'CONFIG', enabled: true, locked: false, weight: 1.0, description: 'Number of less experienced players to include for growth opportunities', limit: 6 },
       { id: 4, name: 'Optimize Half Score', type: 'SOFT', enabled: true, locked: false, weight: 0.60, description: 'Prefer higher-rated players in each position' },
       { id: 5, name: 'Position Variety', type: 'SOFT', enabled: false, locked: false, weight: 0.40, description: 'Encourage players to try different positions over time' },
       { id: 6, name: 'Player Preference (Fun)', type: 'SOFT', enabled: true, locked: false, weight: 0.70, description: 'Optimize for what players prefer/enjoy' },
@@ -479,7 +478,7 @@ const [lineups, setLineups] = useState(initialLineups);
     training: [
       { id: 1, name: 'No Duplicate Assignments', type: 'HARD', enabled: true, locked: true, weight: 1.0, description: 'A player can only play ONE position per half' },
       { id: 2, name: 'Equal Play Time', type: 'SOFT', enabled: true, locked: false, weight: 0.90, description: 'Each player should play the same amount of time within limits' },
-      { id: 3, name: 'Available Players Limit', type: 'CONFIG', enabled: true, locked: false, weight: 1.0, description: 'Coach sets how many players are available for game experience', limit: 16 },
+      { id: 3, name: 'Development Players', type: 'CONFIG', enabled: true, locked: false, weight: 1.0, description: 'Number of less experienced players to include for growth opportunities', limit: 12 },
       { id: 4, name: 'Optimize Half Score', type: 'SOFT', enabled: false, locked: false, weight: 0.30, description: 'Prefer higher-rated players in each position' },
       { id: 5, name: 'Position Variety', type: 'SOFT', enabled: true, locked: false, weight: 0.80, description: 'Encourage players to try different positions over time' },
       { id: 6, name: 'Player Preference (Fun)', type: 'SOFT', enabled: true, locked: false, weight: 0.50, description: 'Optimize for what players prefer/enjoy' },
@@ -496,8 +495,8 @@ const [lineups, setLineups] = useState(initialLineups);
     { id: 'rules', label: 'Rules', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg> },
   ];
 
-  const BENCH_SIZE = 5;
-  
+  const BENCH_SIZE = 8;
+
   const allHalves = useMemo(() => {
     if (!selectedPlayday) return [];
     return selectedPlayday.matches.flatMap(m => [
@@ -684,37 +683,43 @@ const [lineups, setLineups] = useState(initialLineups);
     const trainingKey = `${player.id}-${position.id}`;
     if (!training[trainingKey]) return { score: -Infinity, explanations: ['Not trained for this position'] };
 
-    // Apply SOFT rules in priority order
+    // Apply SOFT rules - each normalized to 0-100 scale before weighting
     for (const rule of rules.filter(r => r.enabled && r.type === 'SOFT')) {
       switch(rule.id) {
-        case 2: // Equal Play Time
-          const maxField = Math.max(...Object.values(fieldHistory), 0);
+        case 2: // Equal Play Time (0-100 scale: fewer halves played = higher score)
+          const maxField = Math.max(...Object.values(fieldHistory), 1);
+          const minField = Math.min(...Object.values(fieldHistory), 0);
           const playerField = fieldHistory[player.id] || 0;
-          const fairnessScore = (maxField - playerField) * rule.weight;
+          // Inverse: players with fewer halves get higher scores
+          const fairnessNormalized = maxField > minField ? ((maxField - playerField) / (maxField - minField)) * 100 : 100;
+          const fairnessScore = (fairnessNormalized / 100) * rule.weight * 10;
           score += fairnessScore;
-          explanations.push(`Fair play: ${playerField} halves played (${fairnessScore.toFixed(2)} pts)`);
+          explanations.push(`Equal play (${playerField} halves): ${fairnessScore.toFixed(2)} pts`);
           break;
 
-        case 4: // Optimize Half Score
+        case 4: // Optimize Half Score (0-100 scale based on rating)
           const rating = ratings[trainingKey] || 0;
-          const strengthScore = (rating / 5) * rule.weight;
+          const strengthNormalized = (rating / 5) * 100; // 0-5 stars -> 0-100
+          const strengthScore = (strengthNormalized / 100) * rule.weight * 10;
           score += strengthScore;
-          explanations.push(`Skill rating: ${rating}/5 stars (${strengthScore.toFixed(2)} pts)`);
+          explanations.push(`Skill (${rating}★): ${strengthScore.toFixed(2)} pts`);
           break;
 
-        case 5: // Position Variety
+        case 5: // Position Variety (0-100 scale: never played = 100, played 5+ times = near 0)
           const timesPlayed = playerPositionCounts[player.id]?.[position.id] || 0;
-          const varietyScore = (1 / (timesPlayed + 1)) * rule.weight;
+          const varietyNormalized = Math.max(0, 100 - (timesPlayed * 20)); // 0 plays=100, 1=80, 2=60, 3=40, 4=20, 5+=0
+          const varietyScore = (varietyNormalized / 100) * rule.weight * 10;
           score += varietyScore;
-          explanations.push(`Position variety: played ${timesPlayed}× (${varietyScore.toFixed(2)} pts)`);
+          explanations.push(`Variety (${timesPlayed}× before): ${varietyScore.toFixed(2)} pts`);
           break;
 
-        case 6: // Player Preference (Fun)
+        case 6: // Player Preference (0-100 scale: favorite=100, not=0)
           const isFavorite = favoritePositions[player.id]?.includes(position.id);
-          const preferenceScore = (isFavorite ? 1.0 : 0) * rule.weight;
+          const preferenceNormalized = isFavorite ? 100 : 0;
+          const preferenceScore = (preferenceNormalized / 100) * rule.weight * 10;
           score += preferenceScore;
           if (isFavorite) {
-            explanations.push(`Favorite position! (${preferenceScore.toFixed(2)} pts)`);
+            explanations.push(`Favorite ★: ${preferenceScore.toFixed(2)} pts`);
           }
           break;
       }
@@ -911,7 +916,7 @@ const [lineups, setLineups] = useState(initialLineups);
     <div className="flex items-center gap-2 text-[10px]">
       <div className="flex items-center gap-0.5" title="Happiness (Favorite positions)"><span className="text-pink-500"><Icons.Heart /></span><span className="font-semibold text-gray-600">{scores.happiness}%</span></div>
       <div className="flex items-center gap-0.5" title="Strength (Skill ratings)"><span className="text-amber-500"><Icons.Zap /></span><span className="font-semibold text-gray-600">{scores.strength}%</span></div>
-      <div className="flex items-center gap-0.5" title="Training opportunities"><span className="text-blue-500"><Icons.Target /></span><span className="font-semibold text-gray-600">{scores.training}</span></div>
+      <div className="flex items-center gap-0.5" title="Development opportunities (low rating or new position)"><span className="text-blue-500"><Icons.Target /></span><span className="font-semibold text-gray-600">{scores.training}</span></div>
       <div className="flex items-center gap-0.5" title={`Allocation Score (based on ${allocationMode === 'game' ? 'Game' : 'Training'} rules)`}><span className="text-emerald-500"><Icons.CheckCircle /></span><span className="font-semibold text-gray-600">{scores.allocationScore}</span></div>
     </div>
   );
@@ -1124,34 +1129,72 @@ const [lineups, setLineups] = useState(initialLineups);
         const isSelected = selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half && selectedPosition?.posId === pos.id && !selectedPosition?.isBench;
         const rating = assignedPlayer ? (ratings[`${assignedPlayer.id}-${pos.id}`] || 0) : 0;
         const isPreferred = assignedPlayer ? isFavoritePosition(assignedPlayer.id, pos.id) : false;
-        const isSwapFirst = swapFirstPlayer?.playdayId === selectedPlayday.id && swapFirstPlayer?.matchId === matchId && swapFirstPlayer?.half === half && swapFirstPlayer?.posId === pos.id;
-        const canSwap = swapFirstPlayer && assignedPlayer && !isSwapFirst;
 
-        const handleClick = () => {
-          // If there's a first player selected for swapping and this position has a player, perform swap
-          if (canSwap) {
-            handleSwapPositions(selectedPlayday.id, matchId, half, swapFirstPlayer.playerId, assignedPlayer.id);
-            setSwapFirstPlayer(null);
-            setSelectedPosition(null);
-          }
-          // If clicking on a filled position and no swap in progress, mark it for swapping
-          else if (assignedPlayer && !selectedPosition) {
-            setSwapFirstPlayer({ playdayId: selectedPlayday.id, matchId, half, posId: pos.id, playerId: assignedPlayer.id });
-          }
-          // Otherwise, toggle position selection for assignment
-          else {
-            setSelectedPosition(isSelected ? null : { playdayId: selectedPlayday.id, matchId, half, posId: pos.id, isBench: false });
-            setSwapFirstPlayer(null);
+        const handleDragStart = (e) => {
+          if (!assignedPlayer) return;
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('application/json', JSON.stringify({
+            playdayId: selectedPlayday.id,
+            matchId,
+            half,
+            posId: pos.id,
+            playerId: assignedPlayer.id,
+            isBench: false
+          }));
+        };
+
+        const handleDragOver = (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+        };
+
+        const handleDrop = (e) => {
+          e.preventDefault();
+          const dragData = JSON.parse(e.dataTransfer.getData('application/json'));
+
+          // Only allow drops within the same half
+          if (dragData.playdayId !== selectedPlayday.id || dragData.matchId !== matchId || dragData.half !== half) return;
+
+          // Swap the two players
+          if (dragData.isBench) {
+            // Bench to field: swap bench player with field player
+            const key = `${selectedPlayday.id}-${matchId}-${half}`;
+            updateLineup(selectedPlayday.id, matchId, half, (prev) => {
+              const newAssignments = { ...prev.assignments };
+              const newBench = [...(prev.bench || [])];
+
+              // Put field player on bench
+              if (assignedPlayer) {
+                newBench[dragData.benchIndex] = assignedPlayer.id;
+              } else {
+                newBench.splice(dragData.benchIndex, 1);
+              }
+
+              // Put bench player on field
+              newAssignments[pos.id] = dragData.playerId;
+
+              return { ...prev, assignments: newAssignments, bench: newBench };
+            });
+          } else {
+            // Field to field: swap two field positions
+            handleSwapPositions(selectedPlayday.id, matchId, half, dragData.playerId, assignedPlayer?.id);
           }
         };
 
+        const handleClick = () => {
+          setSelectedPosition(isSelected ? null : { playdayId: selectedPlayday.id, matchId, half, posId: pos.id, isBench: false });
+        };
+
         return (
-          <button onClick={handleClick}
+          <button
+            onClick={handleClick}
+            draggable={!!assignedPlayer}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
             className={`relative flex flex-col items-center justify-center rounded-xl transition-all ${
-              isSwapFirst ? 'ring-2 ring-purple-400 scale-105 bg-purple-200/40' :
-              canSwap ? 'ring-2 ring-purple-300 bg-white/30 hover:bg-purple-200/30' :
               isSelected ? 'ring-2 ring-yellow-400 scale-105 bg-white/30' :
-              assignedPlayer ? 'bg-white/20 hover:bg-white/30' :
+              assignedPlayer ? 'bg-white/20 hover:bg-white/30 cursor-move' :
               'bg-white/10 border border-dashed border-white/30 hover:bg-white/20'
             }`}
             style={{ width: '44px', height: '44px' }}>
@@ -1162,7 +1205,6 @@ const [lineups, setLineups] = useState(initialLineups);
                 <div className="flex items-center gap-0.5">{isPreferred && <span className="text-yellow-300 text-[7px]">★</span>}<span className="text-[6px] text-white/70">{'★'.repeat(Math.min(rating, 3))}</span></div>
               </>
             ) : <span className="text-[8px] text-white/50">tap</span>}
-            {isSwapFirst && <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 text-white rounded-full text-[8px] flex items-center justify-center font-bold">1</div>}
           </button>
         );
       };
@@ -1172,9 +1214,70 @@ const [lineups, setLineups] = useState(initialLineups);
         const player = players.find(p => p.id === playerId);
         const isSelected = selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half && selectedPosition?.isBench && selectedPosition?.benchIndex === idx;
         const benchCount = player ? benchHistory[player.id] : 0;
+
+        const handleDragStart = (e) => {
+          if (!player) return;
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('application/json', JSON.stringify({
+            playdayId: selectedPlayday.id,
+            matchId,
+            half,
+            benchIndex: idx,
+            playerId: player.id,
+            isBench: true
+          }));
+        };
+
+        const handleDragOver = (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+        };
+
+        const handleDrop = (e) => {
+          e.preventDefault();
+          const dragData = JSON.parse(e.dataTransfer.getData('application/json'));
+
+          // Only allow drops within the same half
+          if (dragData.playdayId !== selectedPlayday.id || dragData.matchId !== matchId || dragData.half !== half) return;
+
+          if (dragData.isBench) {
+            // Bench to bench: swap bench positions
+            updateLineup(selectedPlayday.id, matchId, half, (prev) => {
+              const newBench = [...(prev.bench || [])];
+              const temp = newBench[idx];
+              newBench[idx] = dragData.playerId;
+              newBench[dragData.benchIndex] = temp;
+              return { ...prev, bench: newBench };
+            });
+          } else {
+            // Field to bench: swap field player with bench player
+            updateLineup(selectedPlayday.id, matchId, half, (prev) => {
+              const newAssignments = { ...prev.assignments };
+              const newBench = [...(prev.bench || [])];
+
+              // Put bench player on field
+              if (player) {
+                newAssignments[dragData.posId] = player.id;
+              } else {
+                delete newAssignments[dragData.posId];
+              }
+
+              // Put field player on bench
+              newBench[idx] = dragData.playerId;
+
+              return { ...prev, assignments: newAssignments, bench: newBench };
+            });
+          }
+        };
+
         return (
-          <button onClick={() => setSelectedPosition(isSelected ? null : { playdayId: selectedPlayday.id, matchId, half, posId: null, isBench: true, benchIndex: idx })}
-            className={`flex flex-col items-center justify-center rounded-xl transition-all ${isSelected ? 'ring-2 ring-yellow-400 scale-105 bg-white/30' : player ? 'bg-white/20 hover:bg-white/30' : 'bg-white/10 border border-dashed border-white/30 hover:bg-white/20'}`}
+          <button
+            onClick={() => setSelectedPosition(isSelected ? null : { playdayId: selectedPlayday.id, matchId, half, posId: null, isBench: true, benchIndex: idx })}
+            draggable={!!player}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            className={`flex flex-col items-center justify-center rounded-xl transition-all ${isSelected ? 'ring-2 ring-yellow-400 scale-105 bg-white/30' : player ? 'bg-white/20 hover:bg-white/30 cursor-move' : 'bg-white/10 border border-dashed border-white/30 hover:bg-white/20'}`}
             style={{ width: '40px', height: '44px' }}>
             <span className="text-[9px] font-bold text-white/60">B{idx + 1}</span>
             {player ? (
@@ -1212,33 +1315,13 @@ const [lineups, setLineups] = useState(initialLineups);
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 transition-colors">
               <Icons.Wand /> Auto Propose ({allocationMode === 'game' ? '🏆' : '📚'})
             </button>
-            {swapFirstPlayer && (
-              <button
-                onClick={() => {
-                  setSwapFirstPlayer(null);
-                  setSelectedPosition(null);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 transition-colors"
-              >
-                🔄 Cancel Swap
-              </button>
-            )}
+            <div className="text-xs text-gray-500 flex items-center gap-1">
+              💡 Drag & drop to swap positions
+            </div>
           </div>
 
-          {/* Swap Instructions */}
-          {swapFirstPlayer && (
-            <div className="mb-3 bg-purple-50 border border-purple-200 rounded-xl p-3">
-              <div className="text-xs font-semibold text-purple-800 mb-1">
-                🔄 Swap Active
-              </div>
-              <div className="text-xs text-purple-700">
-                Click on another filled position to swap
-              </div>
-            </div>
-          )}
-
           {/* Allocation Explanations */}
-          {!swapFirstPlayer && allocationExplanations[key] && Object.keys(allocationExplanations[key]).length > 0 && (
+          {allocationExplanations[key] && Object.keys(allocationExplanations[key]).length > 0 && (
             <div className="mb-3 bg-blue-50 border border-blue-200 rounded-xl p-3">
               <div className="text-xs font-semibold text-blue-800 mb-2">
                 💡 Auto Allocation Insights (Mode: {allocationMode === 'game' ? '🏆 Game' : '📚 Training'})
@@ -1283,7 +1366,7 @@ const [lineups, setLineups] = useState(initialLineups);
 
                   <div className="flex-1 overflow-auto">
                     {best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1">✓ Best Matches</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
-                    {alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1">◐ Alternatives</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
+                    {alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1">◐ Development Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
                     {selectedPosition.isBench && best.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="space-y-1">{best.filter(p => !p.isAssignedElsewhereInHalf).slice(0, 8).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div>}
                     {!selectedPosition.isBench && best.length === 0 && alternatives.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No trained players</div>}
                   </div>
@@ -1529,11 +1612,11 @@ const [lineups, setLineups] = useState(initialLineups);
                       </div>
                     )}
                     {rule.type === 'CONFIG' && rule.enabled && rule.id === 3 && (
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center gap-2">
                         <input
-                          type="number"
-                          min="1"
-                          max={players.length}
+                          type="range"
+                          min="0"
+                          max="20"
                           value={rule.limit || 16}
                           onChange={(e) => {
                             const newLimit = parseInt(e.target.value);
@@ -1544,9 +1627,12 @@ const [lineups, setLineups] = useState(initialLineups);
                               ),
                             }));
                           }}
-                          className="w-14 px-2 py-1 text-xs border border-gray-300 rounded-lg text-center"
+                          className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${(rule.limit / 20) * 100}%, #e5e7eb ${(rule.limit / 20) * 100}%, #e5e7eb 100%)`
+                          }}
                         />
-                        <span className="text-gray-500">/ {players.length}</span>
+                        <span className="text-sm font-bold text-gray-900 w-10 text-right">{rule.limit || 16}</span>
                       </div>
                     )}
                     {!rule.enabled && <span className="text-gray-400 text-center block">—</span>}
