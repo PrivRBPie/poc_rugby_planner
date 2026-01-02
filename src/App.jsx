@@ -922,45 +922,64 @@ const [lineups, setLineups] = useState(initialLineups);
     setPlaydays(playdays.map(p => p.id !== selectedPlaydayId ? p : { ...p, matches: p.matches.filter(m => m.id !== matchId) }));
   };
 
-  const getNextDayOfWeek = (dayOfWeek) => {
+  const getNextDayOfWeek = (dayOfWeek, fromDate = new Date()) => {
     // dayOfWeek: 0 = Sunday, 3 = Wednesday, 6 = Saturday
-    const today = new Date();
-    const resultDate = new Date(today);
-    resultDate.setDate(today.getDate() + ((dayOfWeek + 7 - today.getDay()) % 7 || 7));
+    const resultDate = new Date(fromDate);
+    resultDate.setDate(fromDate.getDate() + ((dayOfWeek + 7 - fromDate.getDay()) % 7 || 7));
     return resultDate.toISOString().split('T')[0];
   };
 
+  const getNextAvailableDate = (dayOfWeek, type) => {
+    const existingDates = playdays.map(p => p.date);
+    let candidateDate = getNextDayOfWeek(dayOfWeek);
+
+    // Keep finding next date until we find one that doesn't exist
+    while (existingDates.includes(candidateDate)) {
+      const nextWeek = new Date(candidateDate);
+      nextWeek.setDate(nextWeek.getDate() + 1); // Move to next day to avoid same date
+      candidateDate = getNextDayOfWeek(dayOfWeek, nextWeek);
+    }
+
+    return candidateDate;
+  };
+
   const addNextGameDay = () => {
-    const nextSaturday = getNextDayOfWeek(6);
+    const nextSaturday = getNextAvailableDate(6, 'game');
     const id = Math.max(0, ...playdays.map(p => p.id)) + 1;
     const gameMatches = [
       { id: 1, opponent: 'TBD', number: 1 },
       { id: 2, opponent: 'TBD', number: 2 },
       { id: 3, opponent: 'TBD', number: 3 },
     ];
-    setPlaydays([...playdays, {
+    const newPlaydays = [...playdays, {
       id,
       date: nextSaturday,
       name: `Game Day ${playdays.filter(p => p.type === 'game').length + 1}`,
       type: 'game',
       matches: gameMatches
-    }]);
+    }];
+    // Sort by date descending
+    newPlaydays.sort((a, b) => new Date(b.date) - new Date(a.date));
+    setPlaydays(newPlaydays);
     setSelectedPlaydayId(id);
   };
 
   const addNextTrainingDay = () => {
-    const nextWednesday = getNextDayOfWeek(3);
+    const nextWednesday = getNextAvailableDate(3, 'training');
     const id = Math.max(0, ...playdays.map(p => p.id)) + 1;
     const trainingMatch = [
       { id: 1, opponent: 'Training Session', number: 1 },
     ];
-    setPlaydays([...playdays, {
+    const newPlaydays = [...playdays, {
       id,
       date: nextWednesday,
       name: `Training ${playdays.filter(p => p.type === 'training').length + 1}`,
       type: 'training',
       matches: trainingMatch
-    }]);
+    }];
+    // Sort by date descending
+    newPlaydays.sort((a, b) => new Date(b.date) - new Date(a.date));
+    setPlaydays(newPlaydays);
     setSelectedPlaydayId(id);
   };
 
