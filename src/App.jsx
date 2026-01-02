@@ -469,19 +469,19 @@ const [lineups, setLineups] = useState(initialLineups);
   const [allocationRules, setAllocationRules] = useState({
     game: [
       { id: 1, name: 'No Duplicate Assignments', type: 'HARD', enabled: true, locked: true, weight: 1.0, description: 'A player can only play ONE position per half' },
-      { id: 2, name: 'Equal Play Time', type: 'SOFT', enabled: true, locked: false, weight: 0.80, description: 'Each player should play the same amount of time within limits' },
-      { id: 3, name: 'Development Players', type: 'CONFIG', enabled: true, locked: false, weight: 1.0, description: 'Number of less experienced players to include for growth opportunities', limit: 6 },
-      { id: 4, name: 'Optimize Half Score', type: 'SOFT', enabled: true, locked: false, weight: 0.60, description: 'Prefer higher-rated players in each position' },
+      { id: 2, name: 'Fair PlayTime', type: 'SOFT', enabled: true, locked: false, weight: 0.80, description: 'Each player should play the same amount of time within limits' },
+      { id: 3, name: 'Learning Opportunities', type: 'SOFT', enabled: true, locked: false, weight: 0.30, description: 'Prefer less experienced players for growth opportunities', limit: 6 },
+      { id: 4, name: 'Player Skill', type: 'SOFT', enabled: true, locked: false, weight: 0.60, description: 'Prefer higher-rated players in each position' },
       { id: 5, name: 'Position Variety', type: 'SOFT', enabled: false, locked: false, weight: 0.40, description: 'Encourage players to try different positions over time' },
-      { id: 6, name: 'Player Preference (Fun)', type: 'SOFT', enabled: true, locked: false, weight: 0.70, description: 'Optimize for what players prefer/enjoy' },
+      { id: 6, name: 'Player Fun', type: 'SOFT', enabled: true, locked: false, weight: 0.70, description: 'Assign players to their favorite positions' },
     ],
     training: [
       { id: 1, name: 'No Duplicate Assignments', type: 'HARD', enabled: true, locked: true, weight: 1.0, description: 'A player can only play ONE position per half' },
-      { id: 2, name: 'Equal Play Time', type: 'SOFT', enabled: true, locked: false, weight: 0.90, description: 'Each player should play the same amount of time within limits' },
-      { id: 3, name: 'Development Players', type: 'CONFIG', enabled: true, locked: false, weight: 1.0, description: 'Number of less experienced players to include for growth opportunities', limit: 12 },
-      { id: 4, name: 'Optimize Half Score', type: 'SOFT', enabled: false, locked: false, weight: 0.30, description: 'Prefer higher-rated players in each position' },
+      { id: 2, name: 'Fair PlayTime', type: 'SOFT', enabled: true, locked: false, weight: 0.90, description: 'Each player should play the same amount of time within limits' },
+      { id: 3, name: 'Learning Opportunities', type: 'SOFT', enabled: true, locked: false, weight: 0.70, description: 'Prefer less experienced players for growth opportunities', limit: 12 },
+      { id: 4, name: 'Player Skill', type: 'SOFT', enabled: false, locked: false, weight: 0.30, description: 'Prefer higher-rated players in each position' },
       { id: 5, name: 'Position Variety', type: 'SOFT', enabled: true, locked: false, weight: 0.80, description: 'Encourage players to try different positions over time' },
-      { id: 6, name: 'Player Preference (Fun)', type: 'SOFT', enabled: true, locked: false, weight: 0.50, description: 'Optimize for what players prefer/enjoy' },
+      { id: 6, name: 'Player Fun', type: 'SOFT', enabled: true, locked: false, weight: 0.50, description: 'Assign players to their favorite positions' },
     ],
   });
 
@@ -686,7 +686,7 @@ const [lineups, setLineups] = useState(initialLineups);
     // Apply SOFT rules - each normalized to 0-100 scale before weighting
     for (const rule of rules.filter(r => r.enabled && r.type === 'SOFT')) {
       switch(rule.id) {
-        case 2: // Equal Play Time (0-100 scale: fewer halves played = higher score)
+        case 2: // Fair PlayTime (0-100 scale: fewer halves played = higher score)
           const maxField = Math.max(...Object.values(fieldHistory), 1);
           const minField = Math.min(...Object.values(fieldHistory), 0);
           const playerField = fieldHistory[player.id] || 0;
@@ -694,10 +694,22 @@ const [lineups, setLineups] = useState(initialLineups);
           const fairnessNormalized = maxField > minField ? ((maxField - playerField) / (maxField - minField)) * 100 : 100;
           const fairnessScore = (fairnessNormalized / 100) * rule.weight * 10;
           score += fairnessScore;
-          explanations.push(`Equal play (${playerField} halves): ${fairnessScore.toFixed(2)} pts`);
+          explanations.push(`PlayTime (${playerField} halves): ${fairnessScore.toFixed(2)} pts`);
           break;
 
-        case 4: // Optimize Half Score (0-100 scale based on rating)
+        case 3: // Learning Opportunities (0-100 scale: low rating or new to position = higher score)
+          const rating3 = ratings[trainingKey] || 0;
+          const timesPlayed3 = playerPositionCounts[player.id]?.[position.id] || 0;
+          const isDevelopment = rating3 < 3 || timesPlayed3 === 0;
+          const developmentNormalized = isDevelopment ? 100 : 0;
+          const developmentScore = (developmentNormalized / 100) * rule.weight * 10;
+          score += developmentScore;
+          if (isDevelopment) {
+            explanations.push(`Learning (${rating3 < 3 ? 'low rating' : 'new position'}): ${developmentScore.toFixed(2)} pts`);
+          }
+          break;
+
+        case 4: // Player Skill (0-100 scale based on rating)
           const rating = ratings[trainingKey] || 0;
           const strengthNormalized = (rating / 5) * 100; // 0-5 stars -> 0-100
           const strengthScore = (strengthNormalized / 100) * rule.weight * 10;
@@ -713,13 +725,13 @@ const [lineups, setLineups] = useState(initialLineups);
           explanations.push(`Variety (${timesPlayed}× before): ${varietyScore.toFixed(2)} pts`);
           break;
 
-        case 6: // Player Preference (0-100 scale: favorite=100, not=0)
+        case 6: // Player Fun (0-100 scale: favorite=100, not=0)
           const isFavorite = favoritePositions[player.id]?.includes(position.id);
           const preferenceNormalized = isFavorite ? 100 : 0;
           const preferenceScore = (preferenceNormalized / 100) * rule.weight * 10;
           score += preferenceScore;
           if (isFavorite) {
-            explanations.push(`Favorite ★: ${preferenceScore.toFixed(2)} pts`);
+            explanations.push(`Fun (favorite ★): ${preferenceScore.toFixed(2)} pts`);
           }
           break;
       }
@@ -914,9 +926,9 @@ const [lineups, setLineups] = useState(initialLineups);
 
   const ScoreBadge = ({ scores }) => (
     <div className="flex items-center gap-2 text-[10px]">
-      <div className="flex items-center gap-0.5" title="Happiness (Favorite positions)"><span className="text-pink-500"><Icons.Heart /></span><span className="font-semibold text-gray-600">{scores.happiness}%</span></div>
-      <div className="flex items-center gap-0.5" title="Strength (Skill ratings)"><span className="text-amber-500"><Icons.Zap /></span><span className="font-semibold text-gray-600">{scores.strength}%</span></div>
-      <div className="flex items-center gap-0.5" title="Development opportunities (low rating or new position)"><span className="text-blue-500"><Icons.Target /></span><span className="font-semibold text-gray-600">{scores.training}</span></div>
+      <div className="flex items-center gap-0.5" title="Fun (Favorite positions assigned)"><span className="text-pink-500"><Icons.Heart /></span><span className="font-semibold text-gray-600">{scores.happiness}%</span></div>
+      <div className="flex items-center gap-0.5" title="Skill (Player ratings)"><span className="text-amber-500"><Icons.Zap /></span><span className="font-semibold text-gray-600">{scores.strength}%</span></div>
+      <div className="flex items-center gap-0.5" title="Learning (Low rating or new position)"><span className="text-blue-500"><Icons.Target /></span><span className="font-semibold text-gray-600">{scores.training}</span></div>
       <div className="flex items-center gap-0.5" title={`Allocation Score (based on ${allocationMode === 'game' ? 'Game' : 'Training'} rules)`}><span className="text-emerald-500"><Icons.CheckCircle /></span><span className="font-semibold text-gray-600">{scores.allocationScore}</span></div>
     </div>
   );
@@ -1365,8 +1377,8 @@ const [lineups, setLineups] = useState(initialLineups);
                   )}
 
                   <div className="flex-1 overflow-auto">
-                    {best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1">✓ Best Matches</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
-                    {alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1">◐ Development Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
+                    {best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1">✓ Skilled Players</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
+                    {alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1">◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
                     {selectedPosition.isBench && best.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="space-y-1">{best.filter(p => !p.isAssignedElsewhereInHalf).slice(0, 8).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div>}
                     {!selectedPosition.isBench && best.length === 0 && alternatives.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No trained players</div>}
                   </div>
@@ -1595,7 +1607,50 @@ const [lineups, setLineups] = useState(initialLineups);
                     </button>
                   </td>
                   <td className="py-3 px-3">
-                    {rule.type === 'SOFT' && rule.enabled && (
+                    {rule.type === 'SOFT' && rule.enabled && rule.id === 3 && (
+                      <div className="flex items-center gap-3">
+                        {/* Limit slider on left */}
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="text-xs text-gray-500 w-12">Limit:</span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="20"
+                            value={rule.limit || 6}
+                            onChange={(e) => {
+                              const newLimit = parseInt(e.target.value);
+                              setAllocationRules(prev => ({
+                                ...prev,
+                                [allocationMode]: prev[allocationMode].map(r =>
+                                  r.id === rule.id ? { ...r, limit: newLimit } : r
+                                ),
+                              }));
+                            }}
+                            className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            style={{
+                              background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${(rule.limit / 20) * 100}%, #e5e7eb ${(rule.limit / 20) * 100}%, #e5e7eb 100%)`
+                            }}
+                          />
+                          <span className="text-sm font-bold text-gray-900 w-6 text-right">{rule.limit || 6}</span>
+                        </div>
+                        {/* Weight slider on right */}
+                        <div className="flex items-center gap-2 flex-1">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={Math.round(rule.weight * 100)}
+                            onChange={(e) => updateRuleWeight(rule.id, parseInt(e.target.value))}
+                            className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            style={{
+                              background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${rule.weight * 100}%, #e5e7eb ${rule.weight * 100}%, #e5e7eb 100%)`
+                            }}
+                          />
+                          <span className="text-sm font-bold text-gray-900 w-10 text-right">{Math.round(rule.weight * 100)}%</span>
+                        </div>
+                      </div>
+                    )}
+                    {rule.type === 'SOFT' && rule.enabled && rule.id !== 3 && (
                       <div className="flex items-center gap-2">
                         <input
                           type="range"
@@ -1609,30 +1664,6 @@ const [lineups, setLineups] = useState(initialLineups);
                           }}
                         />
                         <span className="text-sm font-bold text-gray-900 w-10 text-right">{Math.round(rule.weight * 100)}%</span>
-                      </div>
-                    )}
-                    {rule.type === 'CONFIG' && rule.enabled && rule.id === 3 && (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="range"
-                          min="0"
-                          max="20"
-                          value={rule.limit || 16}
-                          onChange={(e) => {
-                            const newLimit = parseInt(e.target.value);
-                            setAllocationRules(prev => ({
-                              ...prev,
-                              [allocationMode]: prev[allocationMode].map(r =>
-                                r.id === rule.id ? { ...r, limit: newLimit } : r
-                              ),
-                            }));
-                          }}
-                          className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                          style={{
-                            background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${(rule.limit / 20) * 100}%, #e5e7eb ${(rule.limit / 20) * 100}%, #e5e7eb 100%)`
-                          }}
-                        />
-                        <span className="text-sm font-bold text-gray-900 w-10 text-right">{rule.limit || 16}</span>
                       </div>
                     )}
                     {!rule.enabled && <span className="text-gray-400 text-center block">—</span>}
