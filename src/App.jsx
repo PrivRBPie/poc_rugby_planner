@@ -109,15 +109,21 @@ export default function RugbyLineupPlanner() {
   const [players] = useState(initialPlayers);
   
   const [playdays, setPlaydays] = useState([
-    { id: 1, date: '2025-12-06', name: 'Delft', matches: [
-      { id: 1, opponent: 'RRC B', time: '09:30' },
-      { id: 2, opponent: 'Delft A', time: '10:00' },
-      { id: 3, opponent: 'RRC A', time: '11:00' },
+    { id: 1, date: '2025-12-03', name: 'Training Week 1', type: 'training', matches: [
+      { id: 1, opponent: 'Training Session', number: 1 },
     ]},
-	 { id: 4, date: '2025-12-13', name: 'Stade France', matches: [
-      { id: 1, opponent: 'Steenboks', time: '09:30' },
-      { id: 2, opponent: 'All Blacks', time: '10:00' },
-      { id: 3, opponent: 'Red Rose', time: '11:00' },
+    { id: 2, date: '2025-12-06', name: 'Delft', type: 'game', matches: [
+      { id: 1, opponent: 'RRC B', number: 1 },
+      { id: 2, opponent: 'Delft A', number: 2 },
+      { id: 3, opponent: 'RRC A', number: 3 },
+    ]},
+    { id: 3, date: '2025-12-10', name: 'Training Week 2', type: 'training', matches: [
+      { id: 1, opponent: 'Training Session', number: 1 },
+    ]},
+    { id: 4, date: '2025-12-13', name: 'Stade France', type: 'game', matches: [
+      { id: 1, opponent: 'Steenboks', number: 1 },
+      { id: 2, opponent: 'All Blacks', number: 2 },
+      { id: 3, opponent: 'Red Rose', number: 3 },
     ]},
   ]);
   
@@ -458,8 +464,8 @@ const [lineups, setLineups] = useState(initialLineups);
   const [showAddPlayday, setShowAddPlayday] = useState(false);
   const [showAddMatch, setShowAddMatch] = useState(false);
   const [newPlayer, setNewPlayer] = useState({ name: '', miniYear: '1st year' });
-  const [newPlayday, setNewPlayday] = useState({ date: '', name: '' });
-  const [newMatch, setNewMatch] = useState({ opponent: '', time: '' });
+  const [newPlayday, setNewPlayday] = useState({ date: '', name: '', type: 'game' });
+  const [newMatch, setNewMatch] = useState({ opponent: '', number: 1 });
   const [settings] = useState({ coachName: 'Coach Rassie Erasmus', teamName: 'Bulls Mini\'s', ageGroup: 'U10' });
   const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [expandedHalf, setExpandedHalf] = useState(null);
@@ -500,8 +506,8 @@ const [lineups, setLineups] = useState(initialLineups);
   const allHalves = useMemo(() => {
     if (!selectedPlayday) return [];
     return selectedPlayday.matches.flatMap(m => [
-      { matchId: m.id, half: 1, opponent: m.opponent, time: m.time, key: `${selectedPlayday.id}-${m.id}-1` },
-      { matchId: m.id, half: 2, opponent: m.opponent, time: m.time, key: `${selectedPlayday.id}-${m.id}-2` },
+      { matchId: m.id, half: 1, opponent: m.opponent, number: m.number, key: `${selectedPlayday.id}-${m.id}-1` },
+      { matchId: m.id, half: 2, opponent: m.opponent, number: m.number, key: `${selectedPlayday.id}-${m.id}-2` },
     ]);
   }, [selectedPlayday]);
 
@@ -740,13 +746,13 @@ const [lineups, setLineups] = useState(initialLineups);
     return { score, explanations };
   };
 
-  const proposeLineup = (playdayId, matchId, half) => {
+  const proposeLineup = (playdayId, matchId, half, mode = allocationMode) => {
     const assigned = new Set();
     const newAssignments = {};
     const newBench = [];
     const explanationsMap = {};
 
-    const activeRules = allocationRules[allocationMode];
+    const activeRules = allocationRules[mode];
 
     // Phase 1: Assign field positions
     positions.forEach(pos => {
@@ -889,8 +895,8 @@ const [lineups, setLineups] = useState(initialLineups);
   const addPlayday = () => {
     if (!newPlayday.date || !newPlayday.name) return;
     const id = Math.max(0, ...playdays.map(p => p.id)) + 1;
-    setPlaydays([...playdays, { id, date: newPlayday.date, name: newPlayday.name, matches: [] }]);
-    setNewPlayday({ date: '', name: '' });
+    setPlaydays([...playdays, { id, date: newPlayday.date, name: newPlayday.name, type: newPlayday.type, matches: [] }]);
+    setNewPlayday({ date: '', name: '', type: 'game' });
     setShowAddPlayday(false);
   };
 
@@ -901,18 +907,61 @@ const [lineups, setLineups] = useState(initialLineups);
   };
 
   const addMatch = () => {
-    if (!newMatch.opponent || !newMatch.time) return;
+    if (!newMatch.opponent) return;
     setPlaydays(playdays.map(p => {
       if (p.id !== selectedPlaydayId) return p;
       const matchId = Math.max(0, ...p.matches.map(m => m.id)) + 1;
-      return { ...p, matches: [...p.matches, { id: matchId, opponent: newMatch.opponent, time: newMatch.time }] };
+      const nextNumber = Math.max(0, ...p.matches.map(m => m.number || 0)) + 1;
+      return { ...p, matches: [...p.matches, { id: matchId, opponent: newMatch.opponent, number: nextNumber }] };
     }));
-    setNewMatch({ opponent: '', time: '' });
+    setNewMatch({ opponent: '', number: 1 });
     setShowAddMatch(false);
   };
 
   const deleteMatch = (matchId) => {
     setPlaydays(playdays.map(p => p.id !== selectedPlaydayId ? p : { ...p, matches: p.matches.filter(m => m.id !== matchId) }));
+  };
+
+  const getNextDayOfWeek = (dayOfWeek) => {
+    // dayOfWeek: 0 = Sunday, 3 = Wednesday, 6 = Saturday
+    const today = new Date();
+    const resultDate = new Date(today);
+    resultDate.setDate(today.getDate() + ((dayOfWeek + 7 - today.getDay()) % 7 || 7));
+    return resultDate.toISOString().split('T')[0];
+  };
+
+  const addNextGameDay = () => {
+    const nextSaturday = getNextDayOfWeek(6);
+    const id = Math.max(0, ...playdays.map(p => p.id)) + 1;
+    const gameMatches = [
+      { id: 1, opponent: 'TBD', number: 1 },
+      { id: 2, opponent: 'TBD', number: 2 },
+      { id: 3, opponent: 'TBD', number: 3 },
+    ];
+    setPlaydays([...playdays, {
+      id,
+      date: nextSaturday,
+      name: `Game Day ${playdays.filter(p => p.type === 'game').length + 1}`,
+      type: 'game',
+      matches: gameMatches
+    }]);
+    setSelectedPlaydayId(id);
+  };
+
+  const addNextTrainingDay = () => {
+    const nextWednesday = getNextDayOfWeek(3);
+    const id = Math.max(0, ...playdays.map(p => p.id)) + 1;
+    const trainingMatch = [
+      { id: 1, opponent: 'Training Session', number: 1 },
+    ];
+    setPlaydays([...playdays, {
+      id,
+      date: nextWednesday,
+      name: `Training ${playdays.filter(p => p.type === 'training').length + 1}`,
+      type: 'training',
+      matches: trainingMatch
+    }]);
+    setSelectedPlaydayId(id);
   };
 
   const getPositionHistoryText = (playerId) => {
@@ -938,7 +987,10 @@ const [lineups, setLineups] = useState(initialLineups);
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h2 className="text-xl font-bold text-gray-900">Schedule</h2><p className="text-sm text-gray-500">{playdays.length} playday{playdays.length !== 1 ? 's' : ''}</p></div>
-        <button onClick={() => setShowAddPlayday(true)} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Add Playday</button>
+        <div className="flex gap-2">
+          <button onClick={addNextGameDay} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Game Day</button>
+          <button onClick={addNextTrainingDay} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm bg-amber-600 hover:bg-amber-700"><Icons.Plus /> Training</button>
+        </div>
       </div>
       <div className="space-y-3">
         {playdays.map(playday => {
@@ -981,7 +1033,7 @@ const [lineups, setLineups] = useState(initialLineups);
                       {playday.matches.map((match, idx) => (
                         <div key={match.id} className="flex items-center gap-3 bg-white rounded-xl p-3 border border-gray-200">
                           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: DIOK.blueLight }}>M{idx + 1}</div>
-                          <div className="flex-1"><div className="font-medium text-gray-900">vs. {match.opponent}</div><div className="text-xs text-gray-500">{match.time}</div></div>
+                          <div className="flex-1"><div className="font-medium text-gray-900">{playday.type === 'game' ? `vs. ${match.opponent}` : match.opponent}</div><div className="text-xs text-gray-500">{playday.type === 'game' ? `Game ${match.number}` : `Training ${match.number}`}</div></div>
                           <button onClick={() => deleteMatch(match.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icons.Trash /></button>
                         </div>
                       ))}
@@ -1323,26 +1375,21 @@ const [lineups, setLineups] = useState(initialLineups);
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${halfIndex === 0 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
               <Icons.Copy /> Copy Previous
             </button>
-            <button onClick={() => proposeLineup(selectedPlayday.id, matchId, half)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 transition-colors">
-              <Icons.Wand /> Auto Propose ({allocationMode === 'game' ? '🏆' : '📚'})
-            </button>
+            <div className="flex items-center gap-0 border border-amber-200 rounded-lg overflow-hidden">
+              <button onClick={() => proposeLineup(selectedPlayday.id, matchId, half, 'game')}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors border-r border-amber-200">
+                <Icons.Wand /> 🏆 Game
+              </button>
+              <button onClick={() => proposeLineup(selectedPlayday.id, matchId, half, 'training')}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors">
+                <Icons.Wand /> 📚 Training
+              </button>
+            </div>
             <div className="text-xs text-gray-500 flex items-center gap-1">
               💡 Drag & drop to swap positions
             </div>
           </div>
 
-          {/* Allocation Explanations */}
-          {allocationExplanations[key] && Object.keys(allocationExplanations[key]).length > 0 && (
-            <div className="mb-3 bg-blue-50 border border-blue-200 rounded-xl p-3">
-              <div className="text-xs font-semibold text-blue-800 mb-2">
-                💡 Auto Allocation Insights (Mode: {allocationMode === 'game' ? '🏆 Game' : '📚 Training'})
-              </div>
-              <div className="text-xs text-blue-700 mb-2">
-                Click on a field position below to see why that player was selected.
-              </div>
-            </div>
-          )}
           <div className="flex gap-3">
             <div className="flex-1 bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-4 shadow-lg">
               <div className="text-center text-[8px] text-white/50 mb-3 tracking-wider">▲ ATTACK</div>
@@ -1394,7 +1441,7 @@ const [lineups, setLineups] = useState(initialLineups);
       <div className="space-y-3">
         <div><h2 className="text-lg font-bold text-gray-900">{selectedPlayday.name}</h2><p className="text-xs text-gray-500">{selectedPlayday.date} · {selectedPlayday.matches.length} matches</p></div>
         <div className="space-y-2">
-          {allHalves.map(({ matchId, half, opponent, time, key }) => {
+          {allHalves.map(({ matchId, half, opponent, number, key }) => {
             const isExpanded = expandedHalf === key;
             const scores = calculateScores(selectedPlayday.id, matchId, half);
             return (
@@ -1406,7 +1453,7 @@ const [lineups, setLineups] = useState(initialLineups);
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <div><div className="font-semibold text-gray-900 text-sm">vs. {opponent}</div><div className="text-xs text-gray-500">{time} · Half {half}</div></div>
+                        <div><div className="font-semibold text-gray-900 text-sm">{selectedPlayday.type === 'game' ? `vs. ${opponent}` : opponent}</div><div className="text-xs text-gray-500">{selectedPlayday.type === 'game' ? `Game ${number}` : `Training ${number}`} · Half {half}</div></div>
                         <div className="flex flex-col items-end gap-0.5"><ScoreBadge scores={scores} /><span className="text-[9px] text-gray-400">{scores.filled}/12 + {scores.bench}B</span></div>
                       </div>
                     </div>
@@ -1567,14 +1614,16 @@ const [lineups, setLineups] = useState(initialLineups);
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left py-2 px-3 font-semibold text-gray-700">Rule</th>
+                <th className="text-center py-2 px-3 font-semibold text-gray-700">Config</th>
                 <th className="text-center py-2 px-2 font-semibold text-gray-700">Type</th>
                 <th className="text-center py-2 px-2 font-semibold text-gray-700">Enabled</th>
-                <th className="text-center py-2 px-3 font-semibold text-gray-700">Weight / Config</th>
+                <th className="text-center py-2 px-3 font-semibold text-gray-700">Weight</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {activeRules.map((rule) => (
                 <tr key={rule.id} className={`${rule.enabled ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50/30 transition-colors`}>
+                  {/* Rule */}
                   <td className="py-3 px-3">
                     <div className="flex items-start gap-2">
                       {rule.locked && <span className="text-[10px] mt-0.5">🔒</span>}
@@ -1584,6 +1633,36 @@ const [lineups, setLineups] = useState(initialLineups);
                       </div>
                     </div>
                   </td>
+                  {/* Config */}
+                  <td className="py-3 px-3">
+                    {rule.type === 'SOFT' && rule.enabled && rule.id === 3 ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="range"
+                          min="0"
+                          max="20"
+                          value={rule.limit || 6}
+                          onChange={(e) => {
+                            const newLimit = parseInt(e.target.value);
+                            setAllocationRules(prev => ({
+                              ...prev,
+                              [allocationMode]: prev[allocationMode].map(r =>
+                                r.id === rule.id ? { ...r, limit: newLimit } : r
+                              ),
+                            }));
+                          }}
+                          className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${((rule.limit || 6) / 20) * 100}%, #e5e7eb ${((rule.limit || 6) / 20) * 100}%, #e5e7eb 100%)`
+                          }}
+                        />
+                        <span className="text-sm font-bold text-gray-900 w-8 text-right">{rule.limit || 6}</span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 text-center block">—</span>
+                    )}
+                  </td>
+                  {/* Type */}
                   <td className="py-3 px-2 text-center">
                     <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
                       rule.type === 'HARD' ? 'bg-red-100 text-red-700' :
@@ -1593,6 +1672,7 @@ const [lineups, setLineups] = useState(initialLineups);
                       {rule.type}
                     </span>
                   </td>
+                  {/* Enabled */}
                   <td className="py-3 px-2 text-center">
                     <button
                       onClick={() => toggleRule(rule.id)}
@@ -1606,51 +1686,9 @@ const [lineups, setLineups] = useState(initialLineups);
                       }`} />
                     </button>
                   </td>
+                  {/* Weight */}
                   <td className="py-3 px-3">
-                    {rule.type === 'SOFT' && rule.enabled && rule.id === 3 && (
-                      <div className="flex items-center gap-3">
-                        {/* Limit slider on left */}
-                        <div className="flex items-center gap-2 flex-1">
-                          <span className="text-xs text-gray-500 w-12">Limit:</span>
-                          <input
-                            type="range"
-                            min="0"
-                            max="20"
-                            value={rule.limit || 6}
-                            onChange={(e) => {
-                              const newLimit = parseInt(e.target.value);
-                              setAllocationRules(prev => ({
-                                ...prev,
-                                [allocationMode]: prev[allocationMode].map(r =>
-                                  r.id === rule.id ? { ...r, limit: newLimit } : r
-                                ),
-                              }));
-                            }}
-                            className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            style={{
-                              background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${(rule.limit / 20) * 100}%, #e5e7eb ${(rule.limit / 20) * 100}%, #e5e7eb 100%)`
-                            }}
-                          />
-                          <span className="text-sm font-bold text-gray-900 w-6 text-right">{rule.limit || 6}</span>
-                        </div>
-                        {/* Weight slider on right */}
-                        <div className="flex items-center gap-2 flex-1">
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={Math.round(rule.weight * 100)}
-                            onChange={(e) => updateRuleWeight(rule.id, parseInt(e.target.value))}
-                            className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                            style={{
-                              background: `linear-gradient(to right, ${DIOK.blue} 0%, ${DIOK.blue} ${rule.weight * 100}%, #e5e7eb ${rule.weight * 100}%, #e5e7eb 100%)`
-                            }}
-                          />
-                          <span className="text-sm font-bold text-gray-900 w-10 text-right">{Math.round(rule.weight * 100)}%</span>
-                        </div>
-                      </div>
-                    )}
-                    {rule.type === 'SOFT' && rule.enabled && rule.id !== 3 && (
+                    {rule.type === 'SOFT' && rule.enabled ? (
                       <div className="flex items-center gap-2">
                         <input
                           type="range"
@@ -1665,9 +1703,9 @@ const [lineups, setLineups] = useState(initialLineups);
                         />
                         <span className="text-sm font-bold text-gray-900 w-10 text-right">{Math.round(rule.weight * 100)}%</span>
                       </div>
+                    ) : (
+                      <span className="text-gray-400 text-center block">—</span>
                     )}
-                    {!rule.enabled && <span className="text-gray-400 text-center block">—</span>}
-                    {rule.type === 'HARD' && <span className="text-gray-400 text-center block">—</span>}
                   </td>
                 </tr>
               ))}
@@ -1723,14 +1761,14 @@ const [lineups, setLineups] = useState(initialLineups);
         <div className="space-y-4">
           <div><label className="text-sm font-medium text-gray-700 mb-1 block">Date</label><input type="date" value={newPlayday.date} onChange={(e) => setNewPlayday({...newPlayday, date: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900" /></div>
           <div><label className="text-sm font-medium text-gray-700 mb-1 block">Event Name</label><input type="text" value={newPlayday.name} onChange={(e) => setNewPlayday({...newPlayday, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="e.g. Spring Cup Day 1" /></div>
+          <div><label className="text-sm font-medium text-gray-700 mb-1 block">Type</label><select value={newPlayday.type} onChange={(e) => setNewPlayday({...newPlayday, type: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900"><option value="game">Game</option><option value="training">Training</option></select></div>
           <button onClick={addPlayday} disabled={!newPlayday.date || !newPlayday.name.trim()} className={`w-full py-3 rounded-xl font-bold text-white ${newPlayday.date && newPlayday.name.trim() ? '' : 'opacity-50'}`} style={{ backgroundColor: DIOK.blue }}>Add Playday</button>
         </div>
       </BottomSheet>
       <BottomSheet isOpen={showAddMatch} onClose={() => setShowAddMatch(false)} title="Add Match">
         <div className="space-y-4">
           <div><label className="text-sm font-medium text-gray-700 mb-1 block">Opponent</label><input type="text" value={newMatch.opponent} onChange={(e) => setNewMatch({...newMatch, opponent: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="e.g. Blackrock RFC" autoFocus /></div>
-          <div><label className="text-sm font-medium text-gray-700 mb-1 block">Time</label><input type="time" value={newMatch.time} onChange={(e) => setNewMatch({...newMatch, time: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900" /></div>
-          <button onClick={addMatch} disabled={!newMatch.opponent.trim() || !newMatch.time} className={`w-full py-3 rounded-xl font-bold text-white ${newMatch.opponent.trim() && newMatch.time ? '' : 'opacity-50'}`} style={{ backgroundColor: DIOK.blue }}>Add Match</button>
+          <button onClick={addMatch} disabled={!newMatch.opponent.trim()} className={`w-full py-3 rounded-xl font-bold text-white ${newMatch.opponent.trim() ? '' : 'opacity-50'}`} style={{ backgroundColor: DIOK.blue }}>Add Match</button>
         </div>
       </BottomSheet>
       <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } } .animate-slideUp { animation: slideUp 0.3s ease-out; }`}</style>
