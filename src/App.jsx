@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
 // Mini rugby positions (no 6,7,8)
 const positions = [
@@ -471,6 +471,7 @@ const [lineups, setLineups] = useState(initialLineups);
   const [expandedHalf, setExpandedHalf] = useState(null);
   const [editingPlayday, setEditingPlayday] = useState(null);
   const [editingMatch, setEditingMatch] = useState(null);
+  const [showWhySelected, setShowWhySelected] = useState(null); // Format: 'playdayId-matchId-half-posId'
 
   // Allocation Rules Configuration
   const [allocationMode, setAllocationMode] = useState('game'); // 'game' or 'training'
@@ -494,6 +495,142 @@ const [lineups, setLineups] = useState(initialLineups);
   });
 
   const [allocationExplanations, setAllocationExplanations] = useState({});
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+
+  // GitHub Gist configuration for shared data
+  // Set these in your environment or .env.local file
+  const GIST_ID = import.meta.env.VITE_GIST_ID || 'b453bdb17b87d01d506e0ebbb62a5cd3';
+  const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN || '';
+
+  // Load data from GitHub Gist (or fallback to localStorage)
+  useEffect(() => {
+    const loadFromGist = async () => {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        // Fallback to localStorage if Gist not configured
+        loadFromLocalStorage();
+        return;
+      }
+
+      try {
+        setIsSyncing(true);
+        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+
+        if (response.ok) {
+          const gist = await response.json();
+          const data = JSON.parse(gist.files['rugby-data.json'].content);
+
+          setPlaydays(data.playdays || []);
+          setLineups(data.lineups || {});
+          setRatings(data.ratings || {});
+          setTraining(data.training || {});
+          setFavoritePositions(data.favoritePositions || {});
+          setAllocationRules(data.allocationRules || allocationRules);
+          setLastSyncTime(new Date());
+        } else {
+          loadFromLocalStorage();
+        }
+      } catch (error) {
+        console.error('Error loading from Gist:', error);
+        loadFromLocalStorage();
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    const loadFromLocalStorage = () => {
+      try {
+        const savedPlaydays = localStorage.getItem('rugby_playdays');
+        const savedLineups = localStorage.getItem('rugby_lineups');
+        const savedRatings = localStorage.getItem('rugby_ratings');
+        const savedTraining = localStorage.getItem('rugby_training');
+        const savedFavorites = localStorage.getItem('rugby_favorites');
+        const savedRules = localStorage.getItem('rugby_rules');
+
+        if (savedPlaydays) setPlaydays(JSON.parse(savedPlaydays));
+        if (savedLineups) setLineups(JSON.parse(savedLineups));
+        if (savedRatings) setRatings(JSON.parse(savedRatings));
+        if (savedTraining) setTraining(JSON.parse(savedTraining));
+        if (savedFavorites) setFavoritePositions(JSON.parse(savedFavorites));
+        if (savedRules) setAllocationRules(JSON.parse(savedRules));
+      } catch (error) {
+        console.error('Error loading from localStorage:', error);
+      }
+    };
+
+    loadFromGist();
+  }, []);
+
+  // Save to both localStorage AND GitHub Gist
+  const saveToGist = async (data) => {
+    if (!GIST_ID || !GITHUB_TOKEN) return;
+
+    try {
+      setIsSyncing(true);
+      await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          files: {
+            'rugby-data.json': {
+              content: JSON.stringify(data, null, 2)
+            }
+          }
+        })
+      });
+      setLastSyncTime(new Date());
+    } catch (error) {
+      console.error('Error saving to Gist:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Save data whenever it changes (localStorage + Gist)
+  useEffect(() => {
+    localStorage.setItem('rugby_playdays', JSON.stringify(playdays));
+    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
+    saveToGist(data);
+  }, [playdays]);
+
+  useEffect(() => {
+    localStorage.setItem('rugby_lineups', JSON.stringify(lineups));
+    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
+    saveToGist(data);
+  }, [lineups]);
+
+  useEffect(() => {
+    localStorage.setItem('rugby_ratings', JSON.stringify(ratings));
+    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
+    saveToGist(data);
+  }, [ratings]);
+
+  useEffect(() => {
+    localStorage.setItem('rugby_training', JSON.stringify(training));
+    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
+    saveToGist(data);
+  }, [training]);
+
+  useEffect(() => {
+    localStorage.setItem('rugby_favorites', JSON.stringify(favoritePositions));
+    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
+    saveToGist(data);
+  }, [favoritePositions]);
+
+  useEffect(() => {
+    localStorage.setItem('rugby_rules', JSON.stringify(allocationRules));
+    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
+    saveToGist(data);
+  }, [allocationRules]);
 
   const tabs = [
     { id: 'schedule', label: 'Schedule', icon: <Icons.Calendar /> },
@@ -1323,31 +1460,64 @@ const [lineups, setLineups] = useState(initialLineups);
           }
         };
 
-        const handleClick = () => {
+        const handleClick = (e) => {
+          // If player is assigned, show why selected on right-click or long press
+          if (assignedPlayer && e.type === 'contextmenu') {
+            e.preventDefault();
+            const whyKey = `${selectedPlayday.id}-${matchId}-${half}-${pos.id}`;
+            setShowWhySelected(showWhySelected === whyKey ? null : whyKey);
+            return;
+          }
           setSelectedPosition(isSelected ? null : { playdayId: selectedPlayday.id, matchId, half, posId: pos.id, isBench: false });
         };
 
+        const key = `${selectedPlayday.id}-${matchId}-${half}`;
+        const whyKey = `${selectedPlayday.id}-${matchId}-${half}-${pos.id}`;
+        const explanation = assignedPlayer && allocationExplanations[key]?.[`${pos.id}-${assignedPlayer.id}`];
+        const isTrainedForPosition = assignedPlayer && training[`${assignedPlayer.id}-${pos.id}`];
+
         return (
-          <button
-            onClick={handleClick}
-            draggable={!!assignedPlayer}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            className={`relative flex flex-col items-center justify-center rounded-xl transition-all ${
-              isSelected ? 'ring-2 ring-yellow-400 scale-105 bg-white/30' :
-              assignedPlayer ? 'bg-white/20 hover:bg-white/30 cursor-move' :
-              'bg-white/10 border border-dashed border-white/30 hover:bg-white/20'
-            }`}
-            style={{ width: '44px', height: '44px' }}>
-            <span className="text-[10px] font-bold text-yellow-300">#{pos.code}</span>
-            {assignedPlayer ? (
-              <>
-                <div className="w-5 h-5 rounded-full bg-white/90 flex items-center justify-center text-[8px] font-bold text-gray-800">{assignedPlayer.name.split(' ').map(n => n[0]).join('')}</div>
-                <div className="flex items-center gap-0.5">{isPreferred && <span className="text-yellow-300 text-[7px]">★</span>}<span className="text-[6px] text-white/70">{'★'.repeat(Math.min(rating, 3))}</span></div>
-              </>
+          <div className="relative">
+            <button
+              onClick={handleClick}
+              onContextMenu={handleClick}
+              draggable={!!assignedPlayer}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              className={`relative flex flex-col items-center justify-center rounded-xl transition-all ${
+                isSelected ? 'ring-2 ring-yellow-400 scale-105 bg-white/30' :
+                assignedPlayer ? (isTrainedForPosition ? 'bg-white/20 hover:bg-white/30' : 'bg-red-500/60 ring-2 ring-red-400') + ' cursor-move' :
+                'bg-white/10 border border-dashed border-white/30 hover:bg-white/20'
+              }`}
+              style={{ width: '44px', height: '44px' }}>
+              <span className="text-[10px] font-bold text-yellow-300">#{pos.code}</span>
+              {assignedPlayer ? (
+                <>
+                  <div className="w-5 h-5 rounded-full bg-white/90 flex items-center justify-center text-[8px] font-bold text-gray-800">{assignedPlayer.name.split(' ').map(n => n[0]).join('')}</div>
+                  <div className="flex items-center gap-0.5">{isPreferred && <span className="text-yellow-300 text-[7px]">★</span>}<span className="text-[6px] text-white/70">{'★'.repeat(Math.min(rating, 3))}</span></div>
+                </>
             ) : <span className="text-[8px] text-white/50">tap</span>}
           </button>
+          {/* Why Selected Popup */}
+          {showWhySelected === whyKey && explanation && (
+            <div className="absolute z-50 top-full left-0 mt-1 w-48 p-2 bg-blue-50 border-2 border-blue-300 rounded-lg shadow-lg">
+              <div className="text-[9px] font-semibold text-blue-800 mb-1">Why selected:</div>
+              <div className="space-y-0.5">
+                {explanation.explanations.map((exp, idx) => (
+                  <div key={idx} className="text-[8px] text-blue-700">• {exp}</div>
+                ))}
+              </div>
+              <div className="text-[8px] text-blue-600 font-semibold mt-1">
+                Total: {explanation.score.toFixed(2)} pts
+              </div>
+              <button
+                onClick={() => setShowWhySelected(null)}
+                className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center bg-blue-200 hover:bg-blue-300 rounded text-blue-800 text-[10px] font-bold"
+              >×</button>
+            </div>
+          )}
+        </div>
         );
       };
 
@@ -1809,7 +1979,16 @@ const [lineups, setLineups] = useState(initialLineups);
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl text-white font-bold" style={{ backgroundColor: DIOK.blue }}>🏉</div>
-          <div><h1 className="font-bold text-gray-900">{settings.teamName}</h1><p className="text-xs text-gray-500">{settings.ageGroup} · {settings.coachName}</p></div>
+          <div className="flex-1"><h1 className="font-bold text-gray-900">{settings.teamName}</h1><p className="text-xs text-gray-500">{settings.ageGroup} · {settings.coachName}</p></div>
+          {GIST_ID && (
+            <div className="flex items-center gap-1 text-xs">
+              {isSyncing ? (
+                <><span className="animate-spin">⟳</span><span className="text-gray-500">Syncing...</span></>
+              ) : lastSyncTime ? (
+                <><span className="text-green-500">✓</span><span className="text-gray-500">Synced</span></>
+              ) : null}
+            </div>
+          )}
         </div>
       </header>
       <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
