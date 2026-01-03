@@ -1855,36 +1855,103 @@ const [lineups, setLineups] = useState(initialLineups);
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="text-left p-2 font-semibold text-gray-700 sticky left-0 bg-gray-50 min-w-[120px]">Player</th>
-                  {playdayHalves.map(h => <th key={h.key} className="text-center p-2 font-semibold text-gray-700 min-w-[44px]">M{h.matchId}H{h.half}</th>)}
-                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[50px]">Total</th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[50px]">Field/Bench</th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">😊 Fun</th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">📚 Learning</th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[80px]">Satisfaction</th>
                 </tr>
               </thead>
               <tbody>
-                {players.map(player => {
-                  let totalField = 0, totalBench = 0;
-                  return (
-                    <tr key={player.id} className="border-b border-gray-100">
-                      <td className="p-2 sticky left-0 bg-white">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: DIOK.blue }}>{player.name.split(' ').map(n => n[0]).join('')}</div>
-                          <span className="font-medium text-gray-900 truncate">{player.name}</span>
-                        </div>
-                      </td>
-                      {playdayHalves.map(h => {
-                        const assignment = getPlayerAssignment(player.id, h.matchId, h.half);
-                        if (assignment?.type === 'field') totalField++;
-                        if (assignment?.type === 'bench') totalBench++;
-                        return (
-                          <td key={h.key} className="text-center p-1">
-                            {assignment ? <div className={`inline-flex items-center justify-center w-8 h-6 rounded text-[9px] font-semibold ${assignment.type === 'field' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>{assignment.type === 'field' ? `#${assignment.pos?.code}` : 'B'}</div>
-                            : <div className="inline-flex items-center justify-center w-8 h-6 rounded bg-gray-50 text-gray-300">–</div>}
-                          </td>
-                        );
-                      })}
-                      <td className="text-center p-2"><span className="text-emerald-600 font-semibold">{totalField}</span><span className="text-gray-300 mx-0.5">/</span><span className="text-orange-500">{totalBench}</span></td>
-                    </tr>
-                  );
-                })}
+                {(() => {
+                  // Calculate player stats
+                  const playerStats = players.map(player => {
+                    let totalField = 0, totalBench = 0, funCount = 0, learningCount = 0;
+
+                    playdayHalves.forEach(h => {
+                      const assignment = getPlayerAssignment(player.id, h.matchId, h.half);
+                      if (assignment?.type === 'field') {
+                        totalField++;
+                        // Check if it's a favorite position
+                        const isFav = (favoritePositions[player.id] || []).includes(assignment.pos?.id);
+                        if (isFav) funCount++;
+
+                        // Check if it's a learning opportunity (rating <= 2)
+                        const ratingKey = `${player.id}-${assignment.pos?.id}`;
+                        const rating = ratings[ratingKey] || 1;
+                        if (rating <= 2) learningCount++;
+                      }
+                      if (assignment?.type === 'bench') totalBench++;
+                    });
+
+                    // Calculate satisfaction score (0-100)
+                    // Factors: field time (40%), fun (30%), learning balance (20%), bench fairness (10%)
+                    const fieldScore = (totalField / playdayHalves.length) * 40;
+                    const funScore = totalField > 0 ? (funCount / totalField) * 30 : 0;
+                    const learningScore = totalField > 0 ? Math.min((learningCount / totalField) * 20, 20) : 0;
+                    const benchScore = totalBench <= 2 ? 10 : Math.max(0, 10 - (totalBench - 2) * 3);
+                    const satisfaction = fieldScore + funScore + learningScore + benchScore;
+
+                    return {
+                      player,
+                      totalField,
+                      totalBench,
+                      funCount,
+                      learningCount,
+                      satisfaction
+                    };
+                  });
+
+                  // Calculate mean and standard deviation for satisfaction
+                  const satisfactions = playerStats.map(s => s.satisfaction);
+                  const meanSatisfaction = satisfactions.reduce((a, b) => a + b, 0) / satisfactions.length;
+                  const variance = satisfactions.reduce((sum, val) => sum + Math.pow(val - meanSatisfaction, 2), 0) / satisfactions.length;
+                  const stdDev = Math.sqrt(variance);
+
+                  return playerStats.map(({ player, totalField, totalBench, funCount, learningCount, satisfaction }) => {
+                    // Determine if outlier (more than 1 std dev from mean)
+                    const isLowOutlier = satisfaction < (meanSatisfaction - stdDev);
+                    const isHighOutlier = satisfaction > (meanSatisfaction + stdDev);
+
+                    const satisfactionColor = isLowOutlier ? 'bg-red-100 text-red-700 border-red-300' :
+                                             isHighOutlier ? 'bg-green-100 text-green-700 border-green-300' :
+                                             'bg-gray-100 text-gray-700 border-gray-300';
+
+                    return (
+                      <tr key={player.id} className="border-b border-gray-100">
+                        <td className="p-2 sticky left-0 bg-white">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: DIOK.blue }}>{player.name.split(' ').map(n => n[0]).join('')}</div>
+                            <span className="font-medium text-gray-900 truncate">{player.name}</span>
+                          </div>
+                        </td>
+                        <td className="text-center p-2">
+                          <span className="text-emerald-600 font-semibold">{totalField}</span>
+                          <span className="text-gray-300 mx-0.5">/</span>
+                          <span className="text-orange-500">{totalBench}</span>
+                        </td>
+                        <td className="text-center p-2">
+                          <div className="inline-flex items-center gap-1">
+                            <span className="font-semibold text-amber-600">{funCount}</span>
+                            <span className="text-gray-400 text-[10px]">/ {totalField}</span>
+                          </div>
+                        </td>
+                        <td className="text-center p-2">
+                          <div className="inline-flex items-center gap-1">
+                            <span className="font-semibold text-emerald-600">{learningCount}</span>
+                            <span className="text-gray-400 text-[10px]">/ {totalField}</span>
+                          </div>
+                        </td>
+                        <td className="text-center p-2">
+                          <div className={`inline-flex items-center justify-center px-2 py-1 rounded-lg border font-semibold ${satisfactionColor}`}>
+                            {Math.round(satisfaction)}%
+                            {isLowOutlier && <span className="ml-1 text-[10px]">⚠️</span>}
+                            {isHighOutlier && <span className="ml-1 text-[10px]">⭐</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
