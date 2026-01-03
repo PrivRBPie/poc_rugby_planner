@@ -1765,10 +1765,9 @@ const [lineups, setLineups] = useState(initialLineups);
           // Strength: player skill rating (1-5 stars)
           totalStrength += rating;
 
-          // Happiness: favorite position (5) or preferred (3) or normal (1)
-          const isFavorite = favorites[ratingKey] === 'favorite';
-          const isPreferred = favorites[ratingKey] === 'preferred';
-          totalHappiness += isFavorite ? 5 : isPreferred ? 3 : 1;
+          // Happiness: favorite position gives 5 points, otherwise 1
+          const isFavoritePos = (favoritePositions[playerId] || []).includes(posIdNum);
+          totalHappiness += isFavoritePos ? 5 : 1;
 
           // Learning: lower ratings indicate learning opportunities
           totalLearning += rating <= 2 ? 5 : rating === 3 ? 3 : 1;
