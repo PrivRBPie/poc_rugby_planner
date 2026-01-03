@@ -472,6 +472,7 @@ const [lineups, setLineups] = useState(initialLineups);
   const [editingPlayday, setEditingPlayday] = useState(null);
   const [editingMatch, setEditingMatch] = useState(null);
   const [showWhySelected, setShowWhySelected] = useState(null); // Format: 'playdayId-matchId-half-posId'
+  const [showSatisfactionExplanation, setShowSatisfactionExplanation] = useState(false);
 
   // Allocation Rules Configuration
   const [allocationMode, setAllocationMode] = useState('game'); // 'game' or 'training'
@@ -1858,7 +1859,18 @@ const [lineups, setLineups] = useState(initialLineups);
                   <th className="text-center p-2 font-semibold text-gray-700 min-w-[50px]">Field/Bench</th>
                   <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">😊 Fun</th>
                   <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">📚 Learning</th>
-                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[80px]">Satisfaction</th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[80px]">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Satisfaction</span>
+                      <button
+                        onClick={() => setShowSatisfactionExplanation(true)}
+                        className="w-4 h-4 rounded-full bg-blue-500 text-white flex items-center justify-center hover:bg-blue-600 transition-colors"
+                        title="How is satisfaction calculated?"
+                      >
+                        <span className="text-[10px] font-bold">?</span>
+                      </button>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1972,6 +1984,162 @@ const [lineups, setLineups] = useState(initialLineups);
             })}
           </div>
         </div>
+
+        {/* Satisfaction Formula Explanation Modal */}
+        {showSatisfactionExplanation && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSatisfactionExplanation(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between rounded-t-2xl">
+                <h3 className="text-lg font-bold text-gray-900">📊 Satisfaction Score Formula</h3>
+                <button
+                  onClick={() => setShowSatisfactionExplanation(false)}
+                  className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 font-bold transition-colors"
+                >×</button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Overview */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <h4 className="font-semibold text-blue-900 mb-2">What is Satisfaction Score?</h4>
+                  <p className="text-sm text-blue-800">
+                    The satisfaction score (0-100%) measures how well each player's experience balances playing time,
+                    enjoyment (favorite positions), development (learning opportunities), and fairness (bench rotation).
+                  </p>
+                </div>
+
+                {/* Formula Breakdown */}
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-3">Formula Components</h4>
+                  <div className="space-y-3">
+                    {/* Field Time */}
+                    <div className="border border-gray-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-emerald-700">⚽ Field Time</span>
+                        <span className="text-sm font-bold text-emerald-600">40%</span>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-2">How much actual playing time the player gets.</p>
+                      <div className="bg-gray-50 rounded p-2 font-mono text-xs">
+                        Score = (Field Appearances ÷ Total Halves) × 40
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Example: 4 field appearances in 6 halves = (4/6) × 40 = 26.7 points
+                      </p>
+                    </div>
+
+                    {/* Fun Factor */}
+                    <div className="border border-gray-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-amber-700">😊 Fun Factor</span>
+                        <span className="text-sm font-bold text-amber-600">30%</span>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-2">How often the player plays in their favorite positions.</p>
+                      <div className="bg-gray-50 rounded p-2 font-mono text-xs">
+                        Score = (Favorite Position Plays ÷ Field Appearances) × 30
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Example: 2 favorite position plays in 4 field appearances = (2/4) × 30 = 15 points
+                      </p>
+                    </div>
+
+                    {/* Learning */}
+                    <div className="border border-gray-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-emerald-700">📚 Learning Opportunities</span>
+                        <span className="text-sm font-bold text-emerald-600">20%</span>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-2">Balanced development through new/challenging positions (≤2 stars).</p>
+                      <div className="bg-gray-50 rounded p-2 font-mono text-xs">
+                        Score = min((Learning Plays ÷ Field Appearances) × 20, 20)
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Example: 1 learning play in 4 field appearances = (1/4) × 20 = 5 points<br/>
+                        Note: Capped at 20 to balance learning with competence
+                      </p>
+                    </div>
+
+                    {/* Bench Fairness */}
+                    <div className="border border-gray-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-orange-700">🪑 Bench Fairness</span>
+                        <span className="text-sm font-bold text-orange-600">10%</span>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-2">Fair distribution of bench time across all players.</p>
+                      <div className="bg-gray-50 rounded p-2 font-mono text-xs">
+                        If bench ≤ 2: Score = 10<br/>
+                        If bench > 2: Score = max(0, 10 - (bench - 2) × 3)
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Example: 1 bench = 10 points | 3 bench = 7 points | 5 bench = 1 point
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Total Formula */}
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-4">
+                  <h4 className="font-semibold text-gray-900 mb-2">Total Satisfaction Score</h4>
+                  <div className="bg-white rounded-lg p-3 font-mono text-sm">
+                    Satisfaction = Field Time + Fun + Learning + Bench Fairness
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2">
+                    Maximum possible score: 100% (40 + 30 + 20 + 10)
+                  </p>
+                </div>
+
+                {/* Color Coding */}
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-3">Color Indicators</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="px-3 py-1 rounded-lg bg-red-100 text-red-700 border border-red-300 font-semibold text-xs">
+                        45% ⚠️
+                      </div>
+                      <span className="text-sm text-gray-700">
+                        <strong>Red:</strong> Below average (more than 1 standard deviation below mean) - needs attention
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="px-3 py-1 rounded-lg bg-gray-100 text-gray-700 border border-gray-300 font-semibold text-xs">
+                        58%
+                      </div>
+                      <span className="text-sm text-gray-700">
+                        <strong>Gray:</strong> Average satisfaction (within 1 standard deviation of mean)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="px-3 py-1 rounded-lg bg-green-100 text-green-700 border border-green-300 font-semibold text-xs">
+                        78% ⭐
+                      </div>
+                      <span className="text-sm text-gray-700">
+                        <strong>Green:</strong> Above average (more than 1 standard deviation above mean) - thriving
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Statistical Analysis */}
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                  <h4 className="font-semibold text-purple-900 mb-2">📈 Statistical Analysis</h4>
+                  <p className="text-xs text-purple-800">
+                    Outlier detection uses standard deviation to identify players whose satisfaction significantly differs
+                    from the team average. This helps coaches quickly spot players who may need schedule adjustments
+                    or additional attention to improve their experience.
+                  </p>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setShowSatisfactionExplanation(false)}
+                    className="px-4 py-2 rounded-lg font-semibold text-white transition-colors"
+                    style={{ backgroundColor: DIOK.blue }}
+                  >
+                    Got it!
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
