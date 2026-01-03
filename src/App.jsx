@@ -1968,22 +1968,6 @@ const [lineups, setLineups] = useState(initialLineups);
             </table>
           </div>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-          <div className="font-semibold text-gray-900 mb-3">Fairness Check</div>
-          <div className="space-y-2">
-            {players.map(player => {
-              const field = fieldHistory[player.id] || 0;
-              const bench = benchHistory[player.id] || 0;
-              return (
-                <div key={player.id} className="flex items-center gap-3">
-                  <div className="w-20 text-xs font-medium text-gray-700 truncate">{player.name.split(' ')[0]}</div>
-                  <div className="flex-1 flex items-center gap-0.5">{Array.from({ length: 6 }).map((_, i) => <div key={i} className={`h-3 flex-1 rounded-sm ${i < field ? 'bg-emerald-400' : i < field + bench ? 'bg-orange-400' : 'bg-gray-200'}`} />)}</div>
-                  <div className="text-xs text-gray-500 w-12 text-right">{field}F+{bench}B</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
 
         {/* Satisfaction Formula Explanation Modal */}
         {showSatisfactionExplanation && (
