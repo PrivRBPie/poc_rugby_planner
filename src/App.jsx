@@ -105,7 +105,7 @@ const BottomSheet = ({ isOpen, onClose, title, children }) => {
 const DIOK = { blue: '#1e3a5f', blueLight: '#2d5a87', gray: '#f8fafc' };
 
 export default function RugbyLineupPlanner() {
-  const [activeTab, setActiveTab] = useState('schedule');
+  const [activeTab, setActiveTab] = useState('squad');
   const [players] = useState(initialPlayers);
   
   const [playdays, setPlaydays] = useState([
@@ -633,8 +633,8 @@ const [lineups, setLineups] = useState(initialLineups);
   }, [allocationRules]);
 
   const tabs = [
-    { id: 'schedule', label: 'Schedule', icon: <Icons.Calendar /> },
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
+    { id: 'schedule', label: 'Schedule', icon: <Icons.Calendar /> },
     { id: 'lineup', label: 'Lineup', icon: <Icons.Grid /> },
     { id: 'overview', label: 'Overview', icon: <Icons.Eye /> },
     { id: 'rules', label: 'Rules', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg> },
@@ -917,10 +917,15 @@ const [lineups, setLineups] = useState(initialLineups);
       }
     });
 
-    // Phase 2: Assign bench (prioritize players with most bench time for fairness)
+    // Phase 2: Assign bench (prioritize players with MOST field time - give them a rest)
     const benchCandidates = availablePlayers
       .filter(p => !assigned.has(p.id))
-      .sort((a, b) => (benchHistory[a.id] || 0) - (benchHistory[b.id] || 0))
+      .sort((a, b) => {
+        // Players with more field time should go to bench first (to balance playtime)
+        const aFieldTime = fieldHistory[a.id] || 0;
+        const bFieldTime = fieldHistory[b.id] || 0;
+        return bFieldTime - aFieldTime; // Descending: most field time first
+      })
       .slice(0, BENCH_SIZE);
 
     benchCandidates.forEach(p => {
@@ -1730,9 +1735,109 @@ const [lineups, setLineups] = useState(initialLineups);
       return null;
     };
 
+    // Calculate overall statistics across all halves
+    const calculateOverallStats = () => {
+      let totalStrength = 0;
+      let totalHappiness = 0;
+      let totalLearning = 0;
+      let assignmentCount = 0;
+
+      allHalves.forEach(({ matchId, half }) => {
+        const key = `${selectedPlayday.id}-${matchId}-${half}`;
+        const lineup = lineups[key] || { assignments: {}, bench: [] };
+
+        // Only count field assignments (not bench)
+        Object.entries(lineup.assignments).forEach(([posId, playerId]) => {
+          const player = players.find(p => p.id === playerId);
+          if (!player) return;
+
+          const posIdNum = parseInt(posId);
+          const ratingKey = `${playerId}-${posIdNum}`;
+          const rating = ratings[ratingKey] || 1;
+
+          // Strength: player skill rating (1-5 stars)
+          totalStrength += rating;
+
+          // Happiness: favorite position (5) or preferred (3) or normal (1)
+          const isFavorite = favorites[ratingKey] === 'favorite';
+          const isPreferred = favorites[ratingKey] === 'preferred';
+          totalHappiness += isFavorite ? 5 : isPreferred ? 3 : 1;
+
+          // Learning: lower ratings indicate learning opportunities
+          totalLearning += rating <= 2 ? 5 : rating === 3 ? 3 : 1;
+
+          assignmentCount++;
+        });
+      });
+
+      // Calculate averages and percentages
+      const avgStrength = assignmentCount > 0 ? (totalStrength / assignmentCount) : 0;
+      const avgHappiness = assignmentCount > 0 ? (totalHappiness / assignmentCount) : 0;
+      const avgLearning = assignmentCount > 0 ? (totalLearning / assignmentCount) : 0;
+
+      // Convert to percentages (max values: strength=5, happiness=5, learning=5)
+      const strengthPct = (avgStrength / 5) * 100;
+      const happinessPct = (avgHappiness / 5) * 100;
+      const learningPct = (avgLearning / 5) * 100;
+
+      return { strengthPct, happinessPct, learningPct, assignmentCount };
+    };
+
+    const overallStats = calculateOverallStats();
+
     return (
       <div className="space-y-4">
         <div><h2 className="text-xl font-bold text-gray-900">Planning Overview</h2><p className="text-sm text-gray-500">{selectedPlayday.name} · {selectedPlayday.matches.length} matches</p></div>
+
+        {/* Overall Statistics */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+          <div className="font-semibold text-gray-900 mb-3">Overall Statistics</div>
+          <div className="grid grid-cols-3 gap-4">
+            {/* Strength */}
+            <div className="bg-blue-50 rounded-xl p-3 border border-blue-200">
+              <div className="text-xs font-semibold text-blue-800 mb-2 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                </svg>
+                Strength
+              </div>
+              <div className="text-2xl font-bold text-blue-600">{Math.round(overallStats.strengthPct)}%</div>
+              <div className="mt-2 h-2 bg-blue-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${overallStats.strengthPct}%` }} />
+              </div>
+              <div className="text-[10px] text-blue-600 mt-1">Player skill utilization</div>
+            </div>
+
+            {/* Happiness */}
+            <div className="bg-amber-50 rounded-xl p-3 border border-amber-200">
+              <div className="text-xs font-semibold text-amber-800 mb-2 flex items-center gap-1">
+                <span className="text-sm">😊</span>
+                Happiness
+              </div>
+              <div className="text-2xl font-bold text-amber-600">{Math.round(overallStats.happinessPct)}%</div>
+              <div className="mt-2 h-2 bg-amber-100 rounded-full overflow-hidden">
+                <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${overallStats.happinessPct}%` }} />
+              </div>
+              <div className="text-[10px] text-amber-600 mt-1">Preferred position matches</div>
+            </div>
+
+            {/* Learning */}
+            <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200">
+              <div className="text-xs font-semibold text-emerald-800 mb-2 flex items-center gap-1">
+                <span className="text-sm">📚</span>
+                Learning
+              </div>
+              <div className="text-2xl font-bold text-emerald-600">{Math.round(overallStats.learningPct)}%</div>
+              <div className="mt-2 h-2 bg-emerald-100 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${overallStats.learningPct}%` }} />
+              </div>
+              <div className="text-[10px] text-emerald-600 mt-1">Development opportunities</div>
+            </div>
+          </div>
+          <div className="text-xs text-gray-500 mt-3 text-center">
+            Based on {overallStats.assignmentCount} field assignments across {allHalves.length} halves
+          </div>
+        </div>
         <div className="flex gap-4 text-xs">
           <div className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-emerald-100 border border-emerald-300" /><span>Field</span></div>
           <div className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-orange-100 border border-orange-300" /><span>Bench</span></div>
@@ -1979,7 +2084,15 @@ const [lineups, setLineups] = useState(initialLineups);
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl text-white font-bold" style={{ backgroundColor: DIOK.blue }}>🏉</div>
-          <div className="flex-1"><h1 className="font-bold text-gray-900">{settings.teamName}</h1><p className="text-xs text-gray-500">{settings.ageGroup} · {settings.coachName}</p></div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-gray-900">{settings.teamName}</h1>
+              {activeTab === 'lineup' && selectedPlayday && (
+                <span className="text-sm font-semibold text-blue-600">• {selectedPlayday.name}</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500">{settings.ageGroup} · {settings.coachName}</p>
+          </div>
           {GIST_ID && (
             <div className="flex items-center gap-1 text-xs">
               {isSyncing ? (
