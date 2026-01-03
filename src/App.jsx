@@ -1726,6 +1726,13 @@ const [lineups, setLineups] = useState(initialLineups);
   // ==================== OVERVIEW VIEW ====================
   const OverviewView = () => {
     if (!selectedPlayday) return null;
+
+    // Get all halves for this playday
+    const playdayHalves = selectedPlayday.matches.flatMap(m => [
+      { matchId: m.id, half: 1, opponent: m.opponent, number: m.number, key: `${selectedPlayday.id}-${m.id}-1` },
+      { matchId: m.id, half: 2, opponent: m.opponent, number: m.number, key: `${selectedPlayday.id}-${m.id}-2` },
+    ]);
+
     const getPlayerAssignment = (playerId, matchId, half) => {
       const key = `${selectedPlayday.id}-${matchId}-${half}`;
       const lineup = lineups[key] || { assignments: {}, bench: [] };
@@ -1742,7 +1749,7 @@ const [lineups, setLineups] = useState(initialLineups);
       let totalLearning = 0;
       let assignmentCount = 0;
 
-      allHalves.forEach(({ matchId, half }) => {
+      playdayHalves.forEach(({ matchId, half }) => {
         const key = `${selectedPlayday.id}-${matchId}-${half}`;
         const lineup = lineups[key] || { assignments: {}, bench: [] };
 
@@ -1835,7 +1842,7 @@ const [lineups, setLineups] = useState(initialLineups);
             </div>
           </div>
           <div className="text-xs text-gray-500 mt-3 text-center">
-            Based on {overallStats.assignmentCount} field assignments across {allHalves.length} halves
+            Based on {overallStats.assignmentCount} field assignments across {playdayHalves.length} halves
           </div>
         </div>
         <div className="flex gap-4 text-xs">
@@ -1849,7 +1856,7 @@ const [lineups, setLineups] = useState(initialLineups);
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="text-left p-2 font-semibold text-gray-700 sticky left-0 bg-gray-50 min-w-[120px]">Player</th>
-                  {allHalves.map(h => <th key={h.key} className="text-center p-2 font-semibold text-gray-700 min-w-[44px]">M{h.matchId}H{h.half}</th>)}
+                  {playdayHalves.map(h => <th key={h.key} className="text-center p-2 font-semibold text-gray-700 min-w-[44px]">M{h.matchId}H{h.half}</th>)}
                   <th className="text-center p-2 font-semibold text-gray-700 min-w-[50px]">Total</th>
                 </tr>
               </thead>
@@ -1864,7 +1871,7 @@ const [lineups, setLineups] = useState(initialLineups);
                           <span className="font-medium text-gray-900 truncate">{player.name}</span>
                         </div>
                       </td>
-                      {allHalves.map(h => {
+                      {playdayHalves.map(h => {
                         const assignment = getPlayerAssignment(player.id, h.matchId, h.half);
                         if (assignment?.type === 'field') totalField++;
                         if (assignment?.type === 'bench') totalBench++;
