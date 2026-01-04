@@ -1527,7 +1527,13 @@ const [lineups, setLineups] = useState(initialLineups);
               {assignedPlayer ? (
                 <>
                   <div className="w-5 h-5 rounded-full bg-white/90 flex items-center justify-center text-[8px] font-bold text-gray-800">{assignedPlayer.name.split(' ').map(n => n[0]).join('')}</div>
-                  <div className="flex items-center gap-0.5">{isPreferred && <span className="text-yellow-300 text-[7px]">★</span>}<span className="text-[6px] text-white/70">{'★'.repeat(Math.min(rating, 3))}</span></div>
+                  <div className="flex items-center gap-0.5">
+                    {isPreferred && <span className="text-yellow-300 text-[7px]">★</span>}
+                    {[1,2,3,4,5].map(s => <span key={s} className={`text-[6px] ${s <= rating ? 'text-yellow-300' : 'text-white/30'}`}>★</span>)}
+                  </div>
+                  {(playerPositionCounts[assignedPlayer.id]?.[pos.id] || 0) > 0 && (
+                    <span className="text-[6px] font-semibold text-blue-200">{playerPositionCounts[assignedPlayer.id][pos.id]}×</span>
+                  )}
                 </>
             ) : <span className="text-[8px] text-white/50">tap</span>}
           </button>
@@ -1900,18 +1906,7 @@ const [lineups, setLineups] = useState(initialLineups);
                   <th className="text-center p-2 font-semibold text-gray-700 min-w-[50px]">Field/Bench</th>
                   <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">😊 Fun</th>
                   <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">📚 Learning</th>
-                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[80px]">
-                    <div className="flex items-center justify-center gap-1">
-                      <span>Satisfaction</span>
-                      <button
-                        onClick={() => setShowSatisfactionExplanation(true)}
-                        className="w-4 h-4 rounded-full bg-blue-500 text-white flex items-center justify-center hover:bg-blue-600 transition-colors"
-                        title="How is satisfaction calculated?"
-                      >
-                        <span className="text-[10px] font-bold">?</span>
-                      </button>
-                    </div>
-                  </th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[80px]">Satisfaction</th>
                 </tr>
               </thead>
               <tbody>
@@ -2642,16 +2637,46 @@ const [lineups, setLineups] = useState(initialLineups);
     <div className="min-h-screen" style={{ backgroundColor: DIOK.gray }}>
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl text-white font-bold" style={{ backgroundColor: DIOK.blue }}>🏉</div>
+          {/* Bulls Logo */}
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden" style={{ backgroundColor: DIOK.blue }}>
+            <img src="https://i.postimg.cc/QdGCy0QV/Bulls-Logo.png" alt="Bulls" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+            <span className="text-xl text-white font-bold" style={{ display: 'none' }}>🏉</span>
+          </div>
+
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-gray-900">{settings.teamName}</h1>
-              {activeTab === 'lineup' && selectedPlayday && (
-                <span className="text-sm font-semibold text-blue-600">• {selectedPlayday.name}</span>
-              )}
             </div>
             <p className="text-xs text-gray-500">{settings.ageGroup} · {settings.coachName}</p>
           </div>
+
+          {/* Date Selector for Lineup/Overview */}
+          {(activeTab === 'lineup' || activeTab === 'overview') && playdays.length > 0 && (
+            <div className="flex-shrink-0" style={{ minWidth: '220px' }}>
+              <select
+                value={selectedPlaydayId?.toString() || ''}
+                onChange={(e) => {
+                  const playdayId = parseInt(e.target.value);
+                  if (!isNaN(playdayId)) {
+                    setSelectedPlaydayId(playdayId);
+                  }
+                }}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {[...playdays].sort((a, b) => new Date(b.date) - new Date(a.date)).map(pd => (
+                  <option key={pd.id} value={pd.id.toString()}>
+                    {pd.name} ({pd.type === 'game' ? '🏆' : '📚'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* DIOK Logo */}
+          <div className="w-8 h-8 rounded flex items-center justify-center overflow-hidden bg-white">
+            <img src="https://i.postimg.cc/prsYtmq7/DIOK-Logo.png" alt="DIOK" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
+          </div>
+
           {GIST_ID && (
             <div className="flex items-center gap-1 text-xs">
               {isSyncing ? (
@@ -2664,31 +2689,11 @@ const [lineups, setLineups] = useState(initialLineups);
         </div>
       </header>
 
-      {/* Playday Selector for Lineup and Overview */}
-      {(activeTab === 'lineup' || activeTab === 'overview') && (
-        <div className="sticky top-[60px] z-30 bg-gradient-to-r from-blue-50 to-purple-50 border-b border-gray-200 shadow-sm">
+      {/* Match selector buttons remain for Lineup view */}
+      {activeTab === 'lineup' && selectedPlayday && (
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-b border-gray-200">
           <div className="max-w-3xl mx-auto px-4 py-3">
             <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">Viewing</label>
-                <select
-                  value={selectedPlaydayId?.toString() || ''}
-                  onChange={(e) => {
-                    const playdayId = parseInt(e.target.value);
-                    if (!isNaN(playdayId)) {
-                      setSelectedPlaydayId(playdayId);
-                    }
-                  }}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {playdays.length === 0 && <option value="">No game days scheduled</option>}
-                  {[...playdays].sort((a, b) => new Date(b.date) - new Date(a.date)).map(pd => (
-                    <option key={pd.id} value={pd.id.toString()}>
-                      {pd.name} - {pd.date} ({pd.type === 'game' ? '🏆 Game' : '📚 Training'})
-                    </option>
-                  ))}
-                </select>
-              </div>
               {selectedPlayday && (
                 <div className="text-right">
                   <div className="text-xs text-gray-600">Matches</div>
