@@ -42,8 +42,7 @@ const initialPlayers = [
 const availabilityOptions = [
   { value: 'available', label: 'Available', icon: '✓', color: '#059669', bg: '#d1fae5' },
   { value: 'train-only', label: 'Train Only', icon: '◐', color: '#ca8a04', bg: '#fef9c3' },
-  { value: 'injured', label: 'Injured', icon: '✕', color: '#dc2626', bg: '#fee2e2' },
-  { value: 'absent', label: 'Absent', icon: '−', color: '#6b7280', bg: '#f3f4f6' },
+  { value: 'unavailable', label: 'Unavailable', icon: '✕', color: '#dc2626', bg: '#fee2e2' },
 ];
 
 
@@ -1294,7 +1293,7 @@ const [lineups, setLineups] = useState(initialLineups);
         <button onClick={() => setShowAddPlayer(true)} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Add</button>
       </div>
       <div className="space-y-2">
-        {players.map(player => {
+        {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(player => {
           const playerAvail = availability[player.id] || 'available';
           const isExpanded = expandedPlayer === player.id;
           const favPositions = favoritePositions[player.id] || [];
