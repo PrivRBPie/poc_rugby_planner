@@ -720,7 +720,7 @@ const [lineups, setLineups] = useState(initialLineups);
   const calculateScores = (playdayId, matchId, half) => {
     const key = `${playdayId}-${matchId}-${half}`;
     const lineup = lineups[key] || { assignments: {}, bench: [] };
-    let happinessScore = 0, strengthScore = 0, trainingCount = 0, maxHappiness = 0, maxStrength = 0;
+    let happinessScore = 0, strengthScore = 0, learningCount = 0, maxHappiness = 0, maxStrength = 0;
     let totalAllocationScore = 0;
     let positionCount = 0;
 
@@ -739,7 +739,13 @@ const [lineups, setLineups] = useState(initialLineups);
       maxStrength += 5;
       if (isPreferred) happinessScore += 1;
       maxHappiness += 1;
-      if (trained && (rating < 3 || timesPlayed === 0)) trainingCount += 1;
+
+      // Count as learning if:
+      // 1. NOT trained (red position) = learning new position
+      // 2. OR trained but rating <= maxStars AND timesPlayed <= maxGames
+      if (!trained || (rating <= learningPlayerConfig.maxStars && timesPlayed <= learningPlayerConfig.maxGames)) {
+        learningCount += 1;
+      }
 
       // Calculate allocation score for this position
       const player = players.find(p => p.id === playerId);
@@ -759,7 +765,7 @@ const [lineups, setLineups] = useState(initialLineups);
     return {
       happiness: maxHappiness > 0 ? Math.round((happinessScore / maxHappiness) * 100) : 0,
       strength: maxStrength > 0 ? Math.round((strengthScore / maxStrength) * 100) : 0,
-      training: trainingCount,
+      learning: learningCount,
       filled: Object.keys(lineup.assignments).length,
       bench: lineup.bench?.length || 0,
       allocationScore: Math.round(avgAllocationScore * 10) / 10, // Round to 1 decimal
@@ -1180,7 +1186,7 @@ const [lineups, setLineups] = useState(initialLineups);
     <div className="flex items-center gap-2 text-[10px]">
       <div className="flex items-center gap-0.5" title="Fun (Favorite positions assigned)"><span className="text-pink-500"><Icons.Heart /></span><span className="font-semibold text-gray-600">{scores.happiness}%</span></div>
       <div className="flex items-center gap-0.5" title="Skill (Player ratings)"><span className="text-amber-500"><Icons.Zap /></span><span className="font-semibold text-gray-600">{scores.strength}%</span></div>
-      <div className="flex items-center gap-0.5" title="Learning (Low rating or new position)"><span className="text-blue-500"><Icons.Target /></span><span className="font-semibold text-gray-600">{scores.training}</span></div>
+      <div className="flex items-center gap-0.5" title="Learning opportunities (Untrained positions + low rating/experience)"><span className="text-blue-500"><Icons.Target /></span><span className="font-semibold text-gray-600">{scores.learning}/{scores.filled}</span></div>
       <div className="flex items-center gap-0.5" title={`Allocation Score (based on ${allocationMode === 'game' ? 'Game' : 'Training'} rules)`}><span className="text-emerald-500"><Icons.CheckCircle /></span><span className="font-semibold text-gray-600">{scores.allocationScore}</span></div>
     </div>
   );
