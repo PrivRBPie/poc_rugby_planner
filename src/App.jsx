@@ -1528,12 +1528,14 @@ const [lineups, setLineups] = useState(initialLineups);
                 <>
                   <div className="w-5 h-5 rounded-full bg-white/90 flex items-center justify-center text-[8px] font-bold text-gray-800">{assignedPlayer.name.split(' ').map(n => n[0]).join('')}</div>
                   <div className="flex items-center gap-0.5">
-                    {isPreferred && <span className="text-yellow-300 text-[7px]">★</span>}
                     {[1,2,3,4,5].map(s => <span key={s} className={`text-[6px] ${s <= rating ? 'text-yellow-300' : 'text-white/30'}`}>★</span>)}
                   </div>
-                  {(playerPositionCounts[assignedPlayer.id]?.[pos.id] || 0) > 0 && (
-                    <span className="text-[6px] font-semibold text-blue-200">{playerPositionCounts[assignedPlayer.id][pos.id]}×</span>
-                  )}
+                  <div className="flex items-center gap-0.5">
+                    {(playerPositionCounts[assignedPlayer.id]?.[pos.id] || 0) > 0 && (
+                      <span className="text-[6px] font-semibold text-blue-200">{playerPositionCounts[assignedPlayer.id][pos.id]}×</span>
+                    )}
+                    {isPreferred && <span className="text-[7px] text-pink-300">♥</span>}
+                  </div>
                 </>
             ) : <span className="text-[8px] text-white/50">tap</span>}
           </button>
@@ -1862,11 +1864,11 @@ const [lineups, setLineups] = useState(initialLineups);
               <div className="text-[10px] text-blue-600 mt-1">Player skill utilization</div>
             </div>
 
-            {/* Happiness */}
+            {/* Satisfaction */}
             <div className="bg-amber-50 rounded-xl p-3 border border-amber-200">
               <div className="text-xs font-semibold text-amber-800 mb-2 flex items-center gap-1">
                 <span className="text-sm">😊</span>
-                Happiness
+                Satisfaction
               </div>
               <div className="text-2xl font-bold text-amber-600">{Math.round(overallStats.happinessPct)}%</div>
               <div className="mt-2 h-2 bg-amber-100 rounded-full overflow-hidden">
@@ -2639,7 +2641,7 @@ const [lineups, setLineups] = useState(initialLineups);
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           {/* Bulls Logo */}
           <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden" style={{ backgroundColor: DIOK.blue }}>
-            <img src="https://i.postimg.cc/QdGCy0QV/Bulls-Logo.png" alt="Bulls" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+            <img src="/logos/bulls.svg" alt="Bulls" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
             <span className="text-xl text-white font-bold" style={{ display: 'none' }}>🏉</span>
           </div>
 
@@ -2674,7 +2676,7 @@ const [lineups, setLineups] = useState(initialLineups);
 
           {/* DIOK Logo */}
           <div className="w-8 h-8 rounded flex items-center justify-center overflow-hidden bg-white">
-            <img src="https://i.postimg.cc/prsYtmq7/DIOK-Logo.png" alt="DIOK" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
+            <img src="/logos/diok.svg" alt="DIOK" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
           </div>
 
           {GIST_ID && (
@@ -2688,22 +2690,6 @@ const [lineups, setLineups] = useState(initialLineups);
           )}
         </div>
       </header>
-
-      {/* Match selector buttons remain for Lineup view */}
-      {activeTab === 'lineup' && selectedPlayday && (
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-b border-gray-200">
-          <div className="max-w-3xl mx-auto px-4 py-3">
-            <div className="flex items-center gap-3">
-              {selectedPlayday && (
-                <div className="text-right">
-                  <div className="text-xs text-gray-600">Matches</div>
-                  <div className="text-lg font-bold" style={{ color: DIOK.blue }}>{selectedPlayday.matches.length}</div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
         {activeTab === 'schedule' && <ScheduleView />}
