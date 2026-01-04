@@ -1941,7 +1941,7 @@ const [lineups, setLineups] = useState(initialLineups);
                       learningCount,
                       satisfaction
                     };
-                  });
+                  }).sort((a, b) => a.satisfaction - b.satisfaction); // Sort by satisfaction ascending (lowest first)
 
                   // Calculate mean and standard deviation for satisfaction
                   const satisfactions = playerStats.map(s => s.satisfaction);
