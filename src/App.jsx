@@ -2198,6 +2198,108 @@ const [lineups, setLineups] = useState(initialLineups);
             </div>
           </div>
 
+          {/* How Optimization Works */}
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+            <div className="text-sm font-semibold text-purple-900 mb-3">🎯 How Auto-Propose Optimizes Lineups</div>
+
+            <div className="space-y-3 text-xs text-purple-900">
+              <div>
+                <div className="font-semibold mb-1">Algorithm Overview</div>
+                <div className="text-purple-800">
+                  The Auto-Propose feature uses a <strong>greedy optimization algorithm</strong> with constraint satisfaction to find the best lineup for each half.
+                </div>
+              </div>
+
+              <div className="bg-white/50 rounded-lg p-3 space-y-2">
+                <div className="font-semibold text-purple-900">Phase 1: Field Position Assignment</div>
+                <div className="text-purple-800 space-y-1.5">
+                  <div><strong>1. For each position</strong> (in order: Prop, Hooker, Lock, etc.):</div>
+                  <div className="ml-4">
+                    • <strong>Filter candidates:</strong> Only players who are available AND not already assigned in this half
+                  </div>
+                  <div className="ml-4">
+                    • <strong>Score each candidate:</strong> Calculate player-position score using the formula above
+                  </div>
+                  <div className="ml-4 space-y-1">
+                    <div>• <strong>Apply HARD constraints:</strong></div>
+                    <div className="ml-4 text-[11px]">
+                      ✗ Player already assigned → Score = -∞ (rejected)<br/>
+                      ✗ Player not trained for position → Score = -∞ (rejected)
+                    </div>
+                  </div>
+                  <div className="ml-4 space-y-1">
+                    <div>• <strong>Apply SOFT rules</strong> (if enabled, each normalized 0-100):</div>
+                    <div className="ml-4 text-[11px] space-y-0.5">
+                      <div><strong>PlayTime:</strong> Players with fewer halves played get higher scores</div>
+                      <div className="ml-4 italic">Formula: ((maxField - playerField) / (maxField - minField)) × 100</div>
+
+                      <div><strong>Learning:</strong> Low-rated or new-to-position players score 100, others 0</div>
+                      <div className="ml-4 italic">Criteria: rating &lt; 3 OR never played this position</div>
+
+                      <div><strong>Skill:</strong> Higher star ratings get higher scores</div>
+                      <div className="ml-4 italic">Formula: (rating / 5) × 100</div>
+
+                      <div><strong>Variety:</strong> Players new to position score higher</div>
+                      <div className="ml-4 italic">Formula: max(0, 100 - timesPlayed × 20)</div>
+                      <div className="ml-4 italic">0 times = 100, 1 time = 80, 2 = 60, ... 5+ = 0</div>
+
+                      <div><strong>Fun:</strong> Favorite positions score 100, others 0</div>
+                      <div className="ml-4 italic">Binary: isFavorite ? 100 : 0</div>
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    • <strong>Weight and sum:</strong> Each rule's normalized score is multiplied by its weight percentage
+                  </div>
+                  <div className="ml-4">
+                    • <strong>Select best candidate:</strong> Player with highest total score gets assigned
+                  </div>
+                  <div className="ml-4">
+                    • <strong>Mark as assigned:</strong> Player is now unavailable for other positions in this half
+                  </div>
+                  <div><strong>2. Repeat</strong> for all 15 positions</div>
+                </div>
+              </div>
+
+              <div className="bg-white/50 rounded-lg p-3 space-y-2">
+                <div className="font-semibold text-purple-900">Phase 2: Bench Assignment</div>
+                <div className="text-purple-800 space-y-1.5">
+                  <div><strong>1. Filter remaining players:</strong> Only those not assigned to field positions</div>
+                  <div><strong>2. Sort by field time:</strong> Players with MOST field time go to bench first (gives them rest)</div>
+                  <div className="ml-4 text-[11px] italic">Descending sort: highest fieldHistory[playerId] first</div>
+                  <div><strong>3. Take top 8:</strong> Fill all {BENCH_SIZE} bench slots</div>
+                </div>
+              </div>
+
+              <div className="bg-white/50 rounded-lg p-3 space-y-2">
+                <div className="font-semibold text-purple-900">Key Algorithm Properties</div>
+                <div className="text-purple-800 space-y-1">
+                  <div><strong>✓ Greedy:</strong> Assigns positions one at a time, always picking best available candidate</div>
+                  <div><strong>✓ Order-dependent:</strong> Processes positions sequentially (may favor earlier positions)</div>
+                  <div><strong>✓ Constraint satisfaction:</strong> HARD rules eliminate invalid options (-∞ score)</div>
+                  <div><strong>✓ Multi-objective:</strong> SOFT rules balance competing goals (fairness vs skill vs fun)</div>
+                  <div><strong>⚠ Local optimum:</strong> May not find globally optimal solution, but fast and good enough</div>
+                  <div className="text-[11px] italic ml-4">
+                    Why: Assigning best player to Position 1 might prevent a better overall lineup,<br/>
+                    but trying all combinations would be too slow (15! = 1.3 trillion possibilities)
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white/50 rounded-lg p-3 space-y-2">
+                <div className="font-semibold text-purple-900">Understanding the Weights</div>
+                <div className="text-purple-800 space-y-1">
+                  <div>Rule weights (0-100%) determine relative importance:</div>
+                  <div className="ml-4 text-[11px]">
+                    • <strong>40% PlayTime + 5% Skill</strong> → Strongly favors fairness over performance<br/>
+                    • <strong>5% PlayTime + 40% Skill</strong> → Strongly favors strongest players<br/>
+                    • <strong>Equal weights</strong> → Balanced consideration of all factors
+                  </div>
+                  <div className="mt-1">Each SOFT rule contributes: (normalized_0_to_100 / 100) × weight × 10 points</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Rules Table */}
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
             <table className="w-full text-xs">
