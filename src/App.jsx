@@ -2356,6 +2356,38 @@ const [lineups, setLineups] = useState(initialLineups);
           )}
         </div>
       </header>
+
+      {/* Playday Selector for Lineup and Overview */}
+      {(activeTab === 'lineup' || activeTab === 'overview') && (
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-b border-gray-200 shadow-sm">
+          <div className="max-w-3xl mx-auto px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Viewing</label>
+                <select
+                  value={selectedPlayday?.id || ''}
+                  onChange={(e) => setSelectedPlayday(playdays.find(pd => pd.id === parseInt(e.target.value)))}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {playdays.length === 0 && <option value="">No game days scheduled</option>}
+                  {playdays.map(pd => (
+                    <option key={pd.id} value={pd.id}>
+                      {pd.name} - {pd.date} ({pd.type === 'game' ? '🏆 Game' : '📚 Training'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selectedPlayday && (
+                <div className="text-right">
+                  <div className="text-xs text-gray-600">Matches</div>
+                  <div className="text-lg font-bold" style={{ color: DIOK.blue }}>{selectedPlayday.matches.length}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
         {activeTab === 'schedule' && <ScheduleView />}
         {activeTab === 'squad' && <SquadView />}
