@@ -79,7 +79,7 @@ const StarRating = ({ value, onChange, readonly = false }) => (
 );
 
 const BenchIndicator = ({ count }) => (
-  <div className="flex gap-0.5" title={`${count}× on bench`}>
+  <div className="flex gap-0.5" title={`${count}× on bench this game day`}>
     {[1, 2, 3, 4, 5].map((i) => (
       <div key={i} className={`w-2 h-2 rounded-full ${i <= count ? 'bg-orange-400' : 'bg-gray-200'}`} />
     ))}
@@ -766,24 +766,40 @@ const [lineups, setLineups] = useState(initialLineups);
     const assignedInHalf = getAssignedInHalf(playdayId, matchId, half);
     const key = `${playdayId}-${matchId}-${half}`;
     const lineup = lineups[key] || { assignments: {}, bench: [] };
-    
+
+    // Calculate bench count for this specific playday
+    const playday = playdays.find(pd => pd.id === playdayId);
+    const playdayBenchCounts = {};
+    if (playday) {
+      playday.matches.forEach(m => {
+        [1, 2].forEach(h => {
+          const lineupKey = `${playdayId}-${m.id}-${h}`;
+          const matchLineup = lineups[lineupKey] || { assignments: {}, bench: [] };
+          (matchLineup.bench || []).forEach(playerId => {
+            if (playerId) playdayBenchCounts[playerId] = (playdayBenchCounts[playerId] || 0) + 1;
+          });
+        });
+      });
+    }
+
     return availablePlayers.map(p => {
       const trainingKey = `${p.id}-${positionId}`;
       const trained = training[trainingKey] || false;
       const rating = trained ? (ratings[trainingKey] || 0) : 0;
       const isPreferred = isFavoritePosition(p.id, positionId);
-      const benchCount = benchHistory[p.id] || 0;
+      const benchCount = benchHistory[p.id] || 0; // Overall bench count
+      const playdayBenchCount = playdayBenchCounts[p.id] || 0; // Bench count for this playday only
       const fieldCount = fieldHistory[p.id] || 0;
       const timesAtPosition = playerPositionCounts[p.id]?.[positionId] || 0;
-      const isAssignedElsewhereInHalf = assignedInHalf.has(p.id) && 
+      const isAssignedElsewhereInHalf = assignedInHalf.has(p.id) &&
         (forBench ? !lineup.bench?.includes(p.id) : lineup.assignments[positionId] !== p.id);
       const isCurrentlyHere = forBench ? lineup.bench?.includes(p.id) : lineup.assignments[positionId] === p.id;
       
       let score = 1000;
       if (forBench) score = benchCount * 100 - fieldCount * 10;
       else if (trained) score = 100 - (rating * 10) - (isPreferred ? 50 : 0);
-      
-      return { ...p, trained, rating, isPreferred, benchCount, fieldCount, timesAtPosition, isAssignedElsewhereInHalf, isCurrentlyHere, score };
+
+      return { ...p, trained, rating, isPreferred, benchCount, playdayBenchCount, fieldCount, timesAtPosition, isAssignedElsewhereInHalf, isCurrentlyHere, score };
     }).sort((a, b) => {
       if (a.isCurrentlyHere !== b.isCurrentlyHere) return a.isCurrentlyHere ? -1 : 1;
       if (a.isAssignedElsewhereInHalf !== b.isAssignedElsewhereInHalf) return a.isAssignedElsewhereInHalf ? 1 : -1;
@@ -1531,7 +1547,18 @@ const [lineups, setLineups] = useState(initialLineups);
         const playerId = lineup.bench?.[idx];
         const player = players.find(p => p.id === playerId);
         const isSelected = selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half && selectedPosition?.isBench && selectedPosition?.benchIndex === idx;
-        const benchCount = player ? benchHistory[player.id] : 0;
+
+        // Calculate bench count for this playday only
+        let playdayBenchCount = 0;
+        if (player) {
+          selectedPlayday.matches.forEach(m => {
+            [1, 2].forEach(h => {
+              const lineupKey = `${selectedPlayday.id}-${m.id}-${h}`;
+              const matchLineup = lineups[lineupKey] || { assignments: {}, bench: [] };
+              if (matchLineup.bench?.includes(player.id)) playdayBenchCount++;
+            });
+          });
+        }
 
         const handleDragStart = (e) => {
           if (!player) return;
@@ -1601,7 +1628,7 @@ const [lineups, setLineups] = useState(initialLineups);
             {player ? (
               <>
                 <div className="w-5 h-5 rounded-full bg-white/90 flex items-center justify-center text-[7px] font-bold text-gray-800">{player.name.split(' ').map(n => n[0]).join('')}</div>
-                <div className="flex gap-0.5 mt-0.5">{[1,2,3].map(i => <div key={i} className={`w-1 h-1 rounded-full ${i <= benchCount ? 'bg-orange-400' : 'bg-white/30'}`} />)}</div>
+                <div className="flex gap-0.5 mt-0.5">{[1,2,3].map(i => <div key={i} className={`w-1 h-1 rounded-full ${i <= playdayBenchCount ? 'bg-orange-400' : 'bg-white/30'}`} />)}</div>
               </>
             ) : <span className="text-[7px] text-white/40">tap</span>}
           </button>
@@ -1615,7 +1642,7 @@ const [lineups, setLineups] = useState(initialLineups);
             <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: DIOK.blue }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1"><span className="font-medium text-gray-900 truncate">{p.name.split(' ')[0]}</span>{p.isPreferred && !forBench && <span className="text-yellow-500">★</span>}</div>
-              {forBench ? <BenchIndicator count={p.benchCount} /> : <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}{p.timesAtPosition > 0 && <span className="text-[9px] text-gray-400 ml-1">{p.timesAtPosition}×</span>}</div>}
+              {forBench ? <BenchIndicator count={p.playdayBenchCount || 0} /> : <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}{p.timesAtPosition > 0 && <span className="text-[9px] text-gray-400 ml-1">{p.timesAtPosition}×</span>}</div>}
             </div>
           </div>
           {p.isAssignedElsewhereInHalf && <div className="text-[9px] text-red-500 flex items-center gap-0.5 mt-0.5"><Icons.AlertTriangle /> Already assigned</div>}
@@ -1678,9 +1705,9 @@ const [lineups, setLineups] = useState(initialLineups);
                   )}
 
                   <div className="flex-1 overflow-auto">
-                    {best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1">✓ Skilled Players</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
-                    {alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1">◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
-                    {selectedPosition.isBench && best.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="space-y-1">{best.filter(p => !p.isAssignedElsewhereInHalf).slice(0, 8).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div>}
+                    {best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1" title="Players with 3+ stars or previous experience in this position">✓ Skilled Players</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
+                    {alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title="Players trained for this position but still developing (1-2 stars, no prior games)">◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
+                    {selectedPosition.isBench && best.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="mb-1"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1" title="Dots show how many times on bench this game day">Available Players</div><div className="space-y-1">{best.filter(p => !p.isAssignedElsewhereInHalf).slice(0, 8).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div></div>}
                     {!selectedPosition.isBench && best.length === 0 && alternatives.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No trained players</div>}
                   </div>
                 </>
