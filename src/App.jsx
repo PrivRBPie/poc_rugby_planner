@@ -1644,8 +1644,12 @@ const [lineups, setLineups] = useState(initialLineups);
           <div className="flex items-center gap-1.5">
             <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: DIOK.blue }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1"><span className="font-medium text-gray-900 truncate">{p.name.split(' ')[0]}</span>{p.isPreferred && !forBench && <span className="text-yellow-500">★</span>}</div>
-              {forBench ? <BenchIndicator count={p.playdayBenchCount || 0} /> : <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}{p.timesAtPosition > 0 && <span className="text-[9px] text-gray-400 ml-1">{p.timesAtPosition}×</span>}</div>}
+              <div className="flex items-center gap-1">
+                <span className="font-medium text-gray-900 truncate">{p.name.split(' ')[0]}</span>
+                {p.isPreferred && !forBench && <span className="text-yellow-500">★</span>}
+                {!forBench && p.timesAtPosition > 0 && <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-1 rounded">{p.timesAtPosition}×</span>}
+              </div>
+              {forBench ? <BenchIndicator count={p.playdayBenchCount || 0} /> : <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}</div>}
             </div>
           </div>
           {p.isAssignedElsewhereInHalf && <div className="text-[9px] text-red-500 flex items-center gap-0.5 mt-0.5"><Icons.AlertTriangle /> Already assigned</div>}
@@ -2421,7 +2425,7 @@ const [lineups, setLineups] = useState(initialLineups);
 
       {/* Playday Selector for Lineup and Overview */}
       {(activeTab === 'lineup' || activeTab === 'overview') && (
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-b border-gray-200 shadow-sm">
+        <div className="sticky top-[60px] z-30 bg-gradient-to-r from-blue-50 to-purple-50 border-b border-gray-200 shadow-sm">
           <div className="max-w-3xl mx-auto px-4 py-3">
             <div className="flex items-center gap-3">
               <div className="flex-1">
