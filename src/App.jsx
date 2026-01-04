@@ -495,6 +495,10 @@ const [lineups, setLineups] = useState(initialLineups);
   });
 
   const [allocationExplanations, setAllocationExplanations] = useState({});
+  const [learningPlayerConfig, setLearningPlayerConfig] = useState({
+    maxStars: 2,  // Players with ≤ this many stars are considered learning
+    maxGames: 0,  // Players with ≤ this many games at position are considered learning
+  });
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
 
@@ -811,8 +815,8 @@ const [lineups, setLineups] = useState(initialLineups);
     if (forBench) return { best: candidates, alternatives: [] };
     const trained = candidates.filter(c => c.trained && !c.isAssignedElsewhereInHalf);
     return {
-      best: trained.filter(c => c.rating >= 3 || c.timesAtPosition > 0),
-      alternatives: trained.filter(c => c.rating < 3 && c.timesAtPosition === 0),
+      best: trained.filter(c => c.rating > learningPlayerConfig.maxStars || c.timesAtPosition > learningPlayerConfig.maxGames),
+      alternatives: trained.filter(c => c.rating <= learningPlayerConfig.maxStars && c.timesAtPosition <= learningPlayerConfig.maxGames),
     };
   };
 
@@ -1704,8 +1708,8 @@ const [lineups, setLineups] = useState(initialLineups);
                   )}
 
                   <div className="flex-1 overflow-auto">
-                    {!selectedPosition.isBench && best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1" title="Players with 3+ stars or previous experience in this position">✓ Skilled Players</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
-                    {!selectedPosition.isBench && alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title="Players trained for this position but still developing (1-2 stars, no prior games)">◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
+                    {!selectedPosition.isBench && best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1" title={`Players with >${learningPlayerConfig.maxStars} stars or >${learningPlayerConfig.maxGames} games at this position`}>✓ Skilled Players</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
+                    {!selectedPosition.isBench && alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title={`Players with ≤${learningPlayerConfig.maxStars} stars and ≤${learningPlayerConfig.maxGames} games at this position`}>◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
                     {selectedPosition.isBench && candidates.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="mb-1"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1" title="Dots show how many times on bench this game day">Available Players</div><div className="space-y-1">{candidates.filter(p => !p.isAssignedElsewhereInHalf).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div></div>}
                     {!selectedPosition.isBench && best.length === 0 && alternatives.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No trained players</div>}
                   </div>
@@ -2196,6 +2200,63 @@ const [lineups, setLineups] = useState(initialLineups);
             {allocationMode === 'game'
               ? '🏆 Optimized for winning - emphasizes skill ratings and player preferences'
               : '📚 Optimized for development - emphasizes fairness and position variety'}
+          </div>
+        </div>
+
+        {/* Learning Player Configuration */}
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+          <div className="text-sm font-semibold text-emerald-900 mb-2">📚 Learning Player Definition</div>
+          <p className="text-xs text-emerald-700 mb-3">
+            Define when a player is considered "learning" at a position. Learning players appear in the amber "Learning Players" section when selecting positions.
+          </p>
+
+          <div className="space-y-4">
+            {/* Max Stars Slider */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-emerald-800">Maximum Star Rating</label>
+                <span className="text-sm font-bold text-emerald-600">{learningPlayerConfig.maxStars} ★</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="5"
+                value={learningPlayerConfig.maxStars}
+                onChange={(e) => setLearningPlayerConfig(prev => ({ ...prev, maxStars: parseInt(e.target.value) }))}
+                className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <p className="text-xs text-emerald-600 mt-1">
+                Players with ≤ {learningPlayerConfig.maxStars} {learningPlayerConfig.maxStars === 1 ? 'star' : 'stars'} are considered learning
+              </p>
+            </div>
+
+            {/* Max Games Slider */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-emerald-800">Maximum Games Played</label>
+                <span className="text-sm font-bold text-emerald-600">{learningPlayerConfig.maxGames}</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="5"
+                value={learningPlayerConfig.maxGames}
+                onChange={(e) => setLearningPlayerConfig(prev => ({ ...prev, maxGames: parseInt(e.target.value) }))}
+                className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <p className="text-xs text-emerald-600 mt-1">
+                Players with ≤ {learningPlayerConfig.maxGames} {learningPlayerConfig.maxGames === 1 ? 'game' : 'games'} at this position are considered learning
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 p-3 bg-white/50 rounded-lg border border-emerald-300">
+            <div className="text-xs font-semibold text-emerald-900 mb-1">Current Rule:</div>
+            <div className="text-xs text-emerald-700">
+              A player is a <span className="font-bold">Learning Player</span> at a position if they have{' '}
+              <span className="font-bold">≤ {learningPlayerConfig.maxStars} stars</span> AND{' '}
+              <span className="font-bold">≤ {learningPlayerConfig.maxGames} {learningPlayerConfig.maxGames === 1 ? 'game' : 'games'}</span> of experience.
+            </div>
           </div>
         </div>
 
