@@ -1940,7 +1940,7 @@ const [lineups, setLineups] = useState(initialLineups);
                     const funScore = totalField > 0 ? (funCount / totalField) * satisfactionWeights.fun : 0;
                     const learningScore = totalField > 0 ? Math.min((learningCount / totalField) * satisfactionWeights.learning, satisfactionWeights.learning) : 0;
                     const benchScore = totalBench <= 2 ? satisfactionWeights.benchFairness : Math.max(0, satisfactionWeights.benchFairness - (totalBench - 2) * 3);
-                    const satisfaction = fieldScore + funScore + learningScore + benchScore;
+                    const satisfaction = Math.min(100, fieldScore + funScore + learningScore + benchScore); // Cap at 100
 
                     return {
                       player,
@@ -2172,71 +2172,80 @@ const [lineups, setLineups] = useState(initialLineups);
     const activeRules = allocationRules[allocationMode];
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Allocation Rules</h2>
-          <p className="text-sm text-gray-500">Configure validation and optimization</p>
+          <h2 className="text-xl font-bold text-gray-900">Rules Configuration</h2>
+          <p className="text-sm text-gray-500">Configure allocation rules and player satisfaction formula</p>
         </div>
 
-        {/* Mode Toggle */}
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3">
-          <div className="text-xs font-semibold text-amber-800 mb-2">Mode Selection</div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setAllocationMode('game')}
-              className={`flex-1 py-2 px-3 rounded-xl font-semibold text-sm transition-all ${
-                allocationMode === 'game'
-                  ? 'text-white shadow-md'
-                  : 'bg-white text-gray-600 border border-gray-200'
-              }`}
-              style={{ backgroundColor: allocationMode === 'game' ? DIOK.blue : undefined }}
-            >
-              🏆 Game Mode
-            </button>
-            <button
-              onClick={() => setAllocationMode('training')}
-              className={`flex-1 py-2 px-3 rounded-xl font-semibold text-sm transition-all ${
-                allocationMode === 'training'
-                  ? 'text-white shadow-md'
-                  : 'bg-white text-gray-600 border border-gray-200'
-              }`}
-              style={{ backgroundColor: allocationMode === 'training' ? DIOK.blue : undefined }}
-            >
-              📚 Training Mode
-            </button>
+        {/* Allocation Rules Section */}
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Allocation Rules</h3>
+            <p className="text-xs text-gray-500">Configure validation and optimization for auto-propose</p>
           </div>
-          <div className="text-xs text-amber-700 mt-2">
-            {allocationMode === 'game'
-              ? '🏆 Optimized for winning - emphasizes skill ratings and player preferences'
-              : '📚 Optimized for development - emphasizes fairness and position variety'}
-          </div>
-        </div>
 
-        {/* Allocation Formula */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-          <div className="text-xs font-semibold text-blue-800 mb-2">Allocation Formula</div>
-          <div className="text-xs text-blue-700 mb-2">
-            Player-Position Score = Σ (Rule Weight × Rule Contribution)
+          {/* Allocation Formula */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <div className="text-xs font-semibold text-blue-800 mb-2">Allocation Formula</div>
+            <div className="text-xs text-blue-700 mb-2">
+              Player-Position Score = Σ (Rule Weight × Rule Contribution)
+            </div>
+            <div className="text-xs text-blue-600 font-mono bg-white/50 p-2 rounded">
+              Score = {activeRules.filter(r => r.enabled && r.type === 'SOFT').map((r, i) =>
+                `${i > 0 ? ' + ' : ''}(${Math.round(r.weight * 100)}% × ${r.name.split(' ')[0]})`
+              ).join('')}
+            </div>
           </div>
-          <div className="text-xs text-blue-600 font-mono bg-white/50 p-2 rounded">
-            Score = {activeRules.filter(r => r.enabled && r.type === 'SOFT').map((r, i) =>
-              `${i > 0 ? ' + ' : ''}(${Math.round(r.weight * 100)}% × ${r.name.split(' ')[0]})`
-            ).join('')}
-          </div>
-        </div>
 
-        {/* Rules Table */}
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-          <table className="w-full text-xs">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left py-2 px-3 font-semibold text-gray-700">Rule</th>
-                <th className="text-center py-2 px-3 font-semibold text-gray-700">Config</th>
-                <th className="text-center py-2 px-2 font-semibold text-gray-700">Type</th>
-                <th className="text-center py-2 px-2 font-semibold text-gray-700">Enabled</th>
-                <th className="text-center py-2 px-3 font-semibold text-gray-700">Weight</th>
-              </tr>
-            </thead>
+          {/* Rules Table */}
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th colSpan="5" className="py-3 px-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-left font-semibold text-gray-700">Mode Selection</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setAllocationMode('game')}
+                          className={`py-1.5 px-3 rounded-lg font-semibold text-xs transition-all ${
+                            allocationMode === 'game'
+                              ? 'text-white shadow-md'
+                              : 'bg-white text-gray-600 border border-gray-200'
+                          }`}
+                          style={{ backgroundColor: allocationMode === 'game' ? DIOK.blue : undefined }}
+                        >
+                          🏆 Game
+                        </button>
+                        <button
+                          onClick={() => setAllocationMode('training')}
+                          className={`py-1.5 px-3 rounded-lg font-semibold text-xs transition-all ${
+                            allocationMode === 'training'
+                              ? 'text-white shadow-md'
+                              : 'bg-white text-gray-600 border border-gray-200'
+                          }`}
+                          style={{ backgroundColor: allocationMode === 'training' ? DIOK.blue : undefined }}
+                        >
+                          📚 Training
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-gray-600 mt-1.5 text-left">
+                      {allocationMode === 'game'
+                        ? '🏆 Optimized for winning - emphasizes skill ratings and player preferences'
+                        : '📚 Optimized for development - emphasizes fairness and position variety'}
+                    </div>
+                  </th>
+                </tr>
+                <tr>
+                  <th className="text-left py-2 px-3 font-semibold text-gray-700">Rule</th>
+                  <th className="text-center py-2 px-3 font-semibold text-gray-700">Config</th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-700">Type</th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-700">Enabled</th>
+                  <th className="text-center py-2 px-3 font-semibold text-gray-700">Weight</th>
+                </tr>
+              </thead>
             <tbody className="divide-y divide-gray-100">
               {activeRules.map((rule) => (
                 <tr key={rule.id} className={`${rule.enabled ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50/30 transition-colors`}>
@@ -2330,7 +2339,24 @@ const [lineups, setLineups] = useState(initialLineups);
           </table>
         </div>
 
-        {/* Learning Player Configuration */}
+        {/* How Rules Work */}
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+          <div className="text-sm font-semibold text-gray-900 mb-2">How Rules Work</div>
+          <div className="space-y-2 text-xs text-gray-600">
+            <div><strong>HARD:</strong> Constraints that must be satisfied (cannot be disabled)</div>
+            <div><strong>SOFT:</strong> Optimization goals weighted by importance (higher weight = stronger influence)</div>
+            <div><strong>CONFIG:</strong> Settings that filter or configure allocation behavior</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Learning Player Definition Section */}
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">Learning Player Definition</h3>
+          <p className="text-xs text-gray-500">Define when a player is considered "learning" at a position</p>
+        </div>
+
         <div className="space-y-3">
           {/* Blue explanation box */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
@@ -2388,12 +2414,19 @@ const [lineups, setLineups] = useState(initialLineups);
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Satisfaction Score Configuration */}
+      {/* Player Satisfaction Formula Section */}
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">Player Satisfaction Formula</h3>
+          <p className="text-xs text-gray-500">Configure how player satisfaction is calculated in Overview</p>
+        </div>
+
         <div className="space-y-3">
           {/* Blue explanation box */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-            <div className="text-xs font-semibold text-blue-800 mb-2">😊 Player Satisfaction Formula</div>
+            <div className="text-xs font-semibold text-blue-800 mb-2">😊 Satisfaction Score Components</div>
             <p className="text-xs text-blue-700 mb-2">
               Configure how player satisfaction is calculated in the Overview screen. Satisfaction score measures how well each player's experience balances playing time, enjoyment, development, and fairness.
             </p>
@@ -2490,17 +2523,8 @@ const [lineups, setLineups] = useState(initialLineups);
             </div>
           </div>
         </div>
-
-        {/* Help Section */}
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-2">How Rules Work</div>
-          <div className="space-y-2 text-xs text-gray-600">
-            <div><strong>HARD:</strong> Constraints that must be satisfied (cannot be disabled)</div>
-            <div><strong>SOFT:</strong> Optimization goals weighted by importance (higher weight = stronger influence)</div>
-            <div><strong>CONFIG:</strong> Settings that filter or configure allocation behavior</div>
-          </div>
-        </div>
       </div>
+    </div>
     );
   };
 
