@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import bullsLogo from './assets/bulls.svg';
+import diokLogo from './assets/diok.svg';
 
 // Mini rugby positions (no 6,7,8)
 const positions = [
@@ -2641,7 +2643,7 @@ const [lineups, setLineups] = useState(initialLineups);
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           {/* Bulls Logo */}
           <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden bg-blue-600">
-            <img src="/logos/bulls.svg" alt="Bulls" className="w-full h-full object-cover" />
+            <img src={bullsLogo} alt="Bulls" className="w-full h-full object-cover" />
           </div>
 
           <div className="flex-1">
@@ -2675,7 +2677,7 @@ const [lineups, setLineups] = useState(initialLineups);
 
           {/* DIOK Logo */}
           <div className="w-10 h-10 rounded flex items-center justify-center overflow-hidden bg-white border border-gray-200">
-            <img src="/logos/diok.svg" alt="DIOK" className="w-full h-full object-contain" />
+            <img src={diokLogo} alt="DIOK" className="w-full h-full object-contain" />
           </div>
 
           {GIST_ID && (
