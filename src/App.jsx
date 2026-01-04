@@ -1705,9 +1705,9 @@ const [lineups, setLineups] = useState(initialLineups);
                   )}
 
                   <div className="flex-1 overflow-auto">
-                    {best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1" title="Players with 3+ stars or previous experience in this position">✓ Skilled Players</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
-                    {alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title="Players trained for this position but still developing (1-2 stars, no prior games)">◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
-                    {selectedPosition.isBench && best.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="mb-1"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1" title="Dots show how many times on bench this game day">Available Players</div><div className="space-y-1">{best.filter(p => !p.isAssignedElsewhereInHalf).slice(0, 8).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div></div>}
+                    {!selectedPosition.isBench && best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1" title="Players with 3+ stars or previous experience in this position">✓ Skilled Players</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
+                    {!selectedPosition.isBench && alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title="Players trained for this position but still developing (1-2 stars, no prior games)">◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
+                    {selectedPosition.isBench && candidates.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="mb-1"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1" title="Dots show how many times on bench this game day">Available Players</div><div className="space-y-1">{candidates.filter(p => !p.isAssignedElsewhereInHalf).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div></div>}
                     {!selectedPosition.isBench && best.length === 0 && alternatives.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No trained players</div>}
                   </div>
                 </>
@@ -2366,11 +2366,14 @@ const [lineups, setLineups] = useState(initialLineups);
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Viewing</label>
                 <select
                   value={selectedPlayday?.id || ''}
-                  onChange={(e) => setSelectedPlayday(playdays.find(pd => pd.id === parseInt(e.target.value)))}
+                  onChange={(e) => {
+                    const newPlayday = playdays.find(pd => pd.id === parseInt(e.target.value));
+                    setSelectedPlayday(newPlayday);
+                  }}
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {playdays.length === 0 && <option value="">No game days scheduled</option>}
-                  {playdays.map(pd => (
+                  {[...playdays].sort((a, b) => new Date(b.date) - new Date(a.date)).map(pd => (
                     <option key={pd.id} value={pd.id}>
                       {pd.name} - {pd.date} ({pd.type === 'game' ? '🏆 Game' : '📚 Training'})
                     </option>
