@@ -2640,9 +2640,8 @@ const [lineups, setLineups] = useState(initialLineups);
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           {/* Bulls Logo */}
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden" style={{ backgroundColor: DIOK.blue }}>
-            <img src="/logos/bulls.svg" alt="Bulls" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
-            <span className="text-xl text-white font-bold" style={{ display: 'none' }}>🏉</span>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden bg-blue-600">
+            <img src="/logos/bulls.svg" alt="Bulls" className="w-full h-full object-cover" />
           </div>
 
           <div className="flex-1">
@@ -2675,8 +2674,8 @@ const [lineups, setLineups] = useState(initialLineups);
           )}
 
           {/* DIOK Logo */}
-          <div className="w-8 h-8 rounded flex items-center justify-center overflow-hidden bg-white">
-            <img src="/logos/diok.svg" alt="DIOK" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
+          <div className="w-10 h-10 rounded flex items-center justify-center overflow-hidden bg-white border border-gray-200">
+            <img src="/logos/diok.svg" alt="DIOK" className="w-full h-full object-contain" />
           </div>
 
           {GIST_ID && (
