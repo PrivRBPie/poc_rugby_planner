@@ -499,6 +499,12 @@ const [lineups, setLineups] = useState(initialLineups);
     maxStars: 2,  // Players with ≤ this many stars are considered learning
     maxGames: 0,  // Players with ≤ this many games at position are considered learning
   });
+  const [satisfactionWeights, setSatisfactionWeights] = useState({
+    fieldTime: 40,      // Weight for field time (default 40%)
+    fun: 30,            // Weight for favorite positions (default 30%)
+    learning: 20,       // Weight for learning opportunities (default 20%)
+    benchFairness: 10,  // Weight for bench fairness (default 10%)
+  });
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
 
@@ -1929,12 +1935,11 @@ const [lineups, setLineups] = useState(initialLineups);
                       if (assignment?.type === 'bench') totalBench++;
                     });
 
-                    // Calculate satisfaction score (0-100)
-                    // Factors: field time (40%), fun (30%), learning balance (20%), bench fairness (10%)
-                    const fieldScore = (totalField / playdayHalves.length) * 40;
-                    const funScore = totalField > 0 ? (funCount / totalField) * 30 : 0;
-                    const learningScore = totalField > 0 ? Math.min((learningCount / totalField) * 20, 20) : 0;
-                    const benchScore = totalBench <= 2 ? 10 : Math.max(0, 10 - (totalBench - 2) * 3);
+                    // Calculate satisfaction score (0-100) using configured weights
+                    const fieldScore = (totalField / playdayHalves.length) * satisfactionWeights.fieldTime;
+                    const funScore = totalField > 0 ? (funCount / totalField) * satisfactionWeights.fun : 0;
+                    const learningScore = totalField > 0 ? Math.min((learningCount / totalField) * satisfactionWeights.learning, satisfactionWeights.learning) : 0;
+                    const benchScore = totalBench <= 2 ? satisfactionWeights.benchFairness : Math.max(0, satisfactionWeights.benchFairness - (totalBench - 2) * 3);
                     const satisfaction = fieldScore + funScore + learningScore + benchScore;
 
                     return {
@@ -2378,6 +2383,108 @@ const [lineups, setLineups] = useState(initialLineups);
                 />
                 <p className="text-xs text-gray-600 mt-1">
                   Players with ≤ {learningPlayerConfig.maxGames} {learningPlayerConfig.maxGames === 1 ? 'game' : 'games'} at this position
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Satisfaction Score Configuration */}
+        <div className="space-y-3">
+          {/* Blue explanation box */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <div className="text-xs font-semibold text-blue-800 mb-2">😊 Player Satisfaction Formula</div>
+            <p className="text-xs text-blue-700 mb-2">
+              Configure how player satisfaction is calculated in the Overview screen. Satisfaction score measures how well each player's experience balances playing time, enjoyment, development, and fairness.
+            </p>
+            <div className="text-xs text-blue-700 font-mono bg-white/50 p-2 rounded">
+              Satisfaction = (Field Time × {satisfactionWeights.fieldTime}%) + (Fun × {satisfactionWeights.fun}%) + (Learning × {satisfactionWeights.learning}%) + (Bench Fairness × {satisfactionWeights.benchFairness}%)
+            </div>
+            <div className="text-xs text-blue-700 mt-2">
+              <strong>Total must equal 100%:</strong> Current = {satisfactionWeights.fieldTime + satisfactionWeights.fun + satisfactionWeights.learning + satisfactionWeights.benchFairness}%
+            </div>
+          </div>
+
+          {/* White controls box */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="space-y-4">
+              {/* Field Time Weight */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">⚽ Field Time Weight</label>
+                  <span className="text-sm font-bold" style={{ color: DIOK.blue }}>{satisfactionWeights.fieldTime}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={satisfactionWeights.fieldTime}
+                  onChange={(e) => setSatisfactionWeights(prev => ({ ...prev, fieldTime: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  style={{ accentColor: DIOK.blue }}
+                />
+                <p className="text-xs text-gray-600 mt-1">
+                  How much actual playing time affects satisfaction
+                </p>
+              </div>
+
+              {/* Fun Weight */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">😊 Fun Factor Weight</label>
+                  <span className="text-sm font-bold" style={{ color: DIOK.blue }}>{satisfactionWeights.fun}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={satisfactionWeights.fun}
+                  onChange={(e) => setSatisfactionWeights(prev => ({ ...prev, fun: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  style={{ accentColor: DIOK.blue }}
+                />
+                <p className="text-xs text-gray-600 mt-1">
+                  Playing in favorite positions affects satisfaction
+                </p>
+              </div>
+
+              {/* Learning Weight */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">📚 Learning Opportunities Weight</label>
+                  <span className="text-sm font-bold" style={{ color: DIOK.blue }}>{satisfactionWeights.learning}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={satisfactionWeights.learning}
+                  onChange={(e) => setSatisfactionWeights(prev => ({ ...prev, learning: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  style={{ accentColor: DIOK.blue }}
+                />
+                <p className="text-xs text-gray-600 mt-1">
+                  Development through challenging positions affects satisfaction
+                </p>
+              </div>
+
+              {/* Bench Fairness Weight */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">🪑 Bench Fairness Weight</label>
+                  <span className="text-sm font-bold" style={{ color: DIOK.blue }}>{satisfactionWeights.benchFairness}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={satisfactionWeights.benchFairness}
+                  onChange={(e) => setSatisfactionWeights(prev => ({ ...prev, benchFairness: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  style={{ accentColor: DIOK.blue }}
+                />
+                <p className="text-xs text-gray-600 mt-1">
+                  Fair distribution of bench time affects satisfaction
                 </p>
               </div>
             </div>
