@@ -2203,63 +2203,6 @@ const [lineups, setLineups] = useState(initialLineups);
           </div>
         </div>
 
-        {/* Learning Player Configuration */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
-          <div className="text-sm font-semibold text-emerald-900 mb-2">📚 Learning Player Definition</div>
-          <p className="text-xs text-emerald-700 mb-3">
-            Define when a player is considered "learning" at a position. Learning players appear in the amber "Learning Players" section when selecting positions.
-          </p>
-
-          <div className="space-y-4">
-            {/* Max Stars Slider */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-emerald-800">Maximum Star Rating</label>
-                <span className="text-sm font-bold text-emerald-600">{learningPlayerConfig.maxStars} ★</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="5"
-                value={learningPlayerConfig.maxStars}
-                onChange={(e) => setLearningPlayerConfig(prev => ({ ...prev, maxStars: parseInt(e.target.value) }))}
-                className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <p className="text-xs text-emerald-600 mt-1">
-                Players with ≤ {learningPlayerConfig.maxStars} {learningPlayerConfig.maxStars === 1 ? 'star' : 'stars'} are considered learning
-              </p>
-            </div>
-
-            {/* Max Games Slider */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-emerald-800">Maximum Games Played</label>
-                <span className="text-sm font-bold text-emerald-600">{learningPlayerConfig.maxGames}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="5"
-                value={learningPlayerConfig.maxGames}
-                onChange={(e) => setLearningPlayerConfig(prev => ({ ...prev, maxGames: parseInt(e.target.value) }))}
-                className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer"
-              />
-              <p className="text-xs text-emerald-600 mt-1">
-                Players with ≤ {learningPlayerConfig.maxGames} {learningPlayerConfig.maxGames === 1 ? 'game' : 'games'} at this position are considered learning
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-3 p-3 bg-white/50 rounded-lg border border-emerald-300">
-            <div className="text-xs font-semibold text-emerald-900 mb-1">Current Rule:</div>
-            <div className="text-xs text-emerald-700">
-              A player is a <span className="font-bold">Learning Player</span> at a position if they have{' '}
-              <span className="font-bold">≤ {learningPlayerConfig.maxStars} stars</span> AND{' '}
-              <span className="font-bold">≤ {learningPlayerConfig.maxGames} {learningPlayerConfig.maxGames === 1 ? 'game' : 'games'}</span> of experience.
-            </div>
-          </div>
-        </div>
-
         {/* Allocation Formula */}
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
           <div className="text-xs font-semibold text-blue-800 mb-2">Allocation Formula</div>
@@ -2378,6 +2321,65 @@ const [lineups, setLineups] = useState(initialLineups);
           </table>
         </div>
 
+        {/* Learning Player Configuration */}
+        <div className="space-y-3">
+          {/* Blue explanation box */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <div className="text-xs font-semibold text-blue-800 mb-2">📚 Learning Player Definition</div>
+            <p className="text-xs text-blue-700">
+              Define when a player is considered "learning" at a position. Learning players appear in the amber "Learning Players" section when selecting positions.
+            </p>
+            <div className="mt-2 text-xs text-blue-700">
+              A player is a <span className="font-bold">Learning Player</span> at a position if they meet <span className="font-bold">BOTH</span> criteria below:
+            </div>
+          </div>
+
+          {/* White controls box */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="space-y-4">
+              {/* Max Stars Slider */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">Maximum Star Rating</label>
+                  <span className="text-sm font-bold" style={{ color: DIOK.blue }}>{learningPlayerConfig.maxStars} ★</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="5"
+                  value={learningPlayerConfig.maxStars}
+                  onChange={(e) => setLearningPlayerConfig(prev => ({ ...prev, maxStars: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  style={{ accentColor: DIOK.blue }}
+                />
+                <p className="text-xs text-gray-600 mt-1">
+                  Players with ≤ {learningPlayerConfig.maxStars} {learningPlayerConfig.maxStars === 1 ? 'star' : 'stars'} at this position
+                </p>
+              </div>
+
+              {/* Max Games Slider */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700">Maximum Games Played</label>
+                  <span className="text-sm font-bold" style={{ color: DIOK.blue }}>{learningPlayerConfig.maxGames}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="5"
+                  value={learningPlayerConfig.maxGames}
+                  onChange={(e) => setLearningPlayerConfig(prev => ({ ...prev, maxGames: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  style={{ accentColor: DIOK.blue }}
+                />
+                <p className="text-xs text-gray-600 mt-1">
+                  Players with ≤ {learningPlayerConfig.maxGames} {learningPlayerConfig.maxGames === 1 ? 'game' : 'games'} at this position
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Help Section */}
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <div className="text-sm font-semibold text-gray-900 mb-2">How Rules Work</div>
@@ -2425,16 +2427,19 @@ const [lineups, setLineups] = useState(initialLineups);
               <div className="flex-1">
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Viewing</label>
                 <select
-                  value={selectedPlayday?.id || ''}
+                  value={selectedPlayday?.id?.toString() || ''}
                   onChange={(e) => {
-                    const newPlayday = playdays.find(pd => pd.id === parseInt(e.target.value));
-                    setSelectedPlayday(newPlayday);
+                    const playdayId = parseInt(e.target.value);
+                    const newPlayday = playdays.find(pd => pd.id === playdayId);
+                    if (newPlayday) {
+                      setSelectedPlayday(newPlayday);
+                    }
                   }}
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {playdays.length === 0 && <option value="">No game days scheduled</option>}
                   {[...playdays].sort((a, b) => new Date(b.date) - new Date(a.date)).map(pd => (
-                    <option key={pd.id} value={pd.id}>
+                    <option key={pd.id} value={pd.id.toString()}>
                       {pd.name} - {pd.date} ({pd.type === 'game' ? '🏆 Game' : '📚 Training'})
                     </option>
                   ))}
