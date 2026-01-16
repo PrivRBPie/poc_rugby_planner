@@ -323,6 +323,7 @@ const [lineups, setLineups] = useState({});
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [isOutOfSync, setIsOutOfSync] = useState(false);
   const [lastGistUpdate, setLastGistUpdate] = useState(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   // GitHub Gist configuration for shared data
   // Set these in your environment or .env.local file
@@ -370,6 +371,7 @@ const [lineups, setLineups] = useState({});
           localStorage.setItem('rugby_favorites', JSON.stringify(data.favoritePositions || {}));
           localStorage.setItem('rugby_rules', JSON.stringify(data.allocationRules || allocationRules));
           localStorage.setItem('rugby_last_gist_update', gist.updated_at);
+          setHasLoaded(true);
         } else {
           loadFromLocalStorage();
         }
@@ -398,8 +400,10 @@ const [lineups, setLineups] = useState({});
         if (savedFavorites) setFavoritePositions(JSON.parse(savedFavorites));
         if (savedRules) setAllocationRules(JSON.parse(savedRules));
         if (savedLastUpdate) setLastGistUpdate(savedLastUpdate);
+        setHasLoaded(true);
       } catch (error) {
         console.error('Error loading from localStorage:', error);
+        setHasLoaded(true);
       }
     };
 
@@ -518,40 +522,46 @@ const [lineups, setLineups] = useState({});
 
   // Save data whenever it changes (localStorage + Gist)
   useEffect(() => {
+    if (!hasLoaded) return; // Don't save until initial data is loaded
     localStorage.setItem('rugby_playdays', JSON.stringify(playdays));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToGist(data);
-  }, [playdays]);
+  }, [playdays, hasLoaded]);
 
   useEffect(() => {
+    if (!hasLoaded) return; // Don't save until initial data is loaded
     localStorage.setItem('rugby_lineups', JSON.stringify(lineups));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToGist(data);
-  }, [lineups]);
+  }, [lineups, hasLoaded]);
 
   useEffect(() => {
+    if (!hasLoaded) return; // Don't save until initial data is loaded
     localStorage.setItem('rugby_ratings', JSON.stringify(ratings));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToGist(data);
-  }, [ratings]);
+  }, [ratings, hasLoaded]);
 
   useEffect(() => {
+    if (!hasLoaded) return; // Don't save until initial data is loaded
     localStorage.setItem('rugby_training', JSON.stringify(training));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToGist(data);
-  }, [training]);
+  }, [training, hasLoaded]);
 
   useEffect(() => {
+    if (!hasLoaded) return; // Don't save until initial data is loaded
     localStorage.setItem('rugby_favorites', JSON.stringify(favoritePositions));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToGist(data);
-  }, [favoritePositions]);
+  }, [favoritePositions, hasLoaded]);
 
   useEffect(() => {
+    if (!hasLoaded) return; // Don't save until initial data is loaded
     localStorage.setItem('rugby_rules', JSON.stringify(allocationRules));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToGist(data);
-  }, [allocationRules]);
+  }, [allocationRules, hasLoaded]);
 
   const tabs = [
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
