@@ -256,209 +256,20 @@ export default function RugbyLineupPlanner() {
   },
 });
 
-const [lineups, setLineups] = useState(initialLineups);
+const [lineups, setLineups] = useState({});
   
   
   
   
   
   const [availability, setAvailability] = useState({});
-  const [training, setTraining] = useState({
-	   // 1 – Eick Soe
-  '1-1': true, '1-2': true, '1-3': true, '1-4': true, '1-5': true, '1-15': true,
-
-  // 2 – Janes Bark
-  '2-1': true, '2-2': true, '2-3': true, '2-4': true, '2-5': true,
-  '2-9': true, '2-10': true, '2-12': true, '2-13': true, '2-15': true,
-
-  // 3 – Esca Zand
-  '3-1': true, '3-3': true, '3-4': true, '3-5': true,
-  '3-12': true, '3-13': true, '3-15': true,
-
-  // 4 – Huib Schr
-  '4-1': true, '4-2': true, '4-3': true, '4-4': true, '4-5': true, '4-15': true,
-
-  // 5 – Dries Wage
-  '5-10': true, '5-11': true, '5-13': true, '5-14': true, '5-15': true,
-
-  // 6 – Liam Hass
-  '6-10': true, '6-11': true, '6-12': true, '6-13': true,
-
-  // 7 – Francois Ross
-  '7-1': true, '7-2': true, '7-3': true, '7-4': true, '7-5': true,
-
-  // 8 – Lewis Deel
-  '8-10': true, '8-11': true, '8-12': true, '8-13': true,
-
-  // 9 – Tobia Conc
-  '9-9': true, '9-10': true, '9-13': true,
-
-  // 10 – Alexander Jans
-  '10-1': true, '10-2': true, '10-3': true, '10-4': true, '10-5': true, '10-12': true,
-
-  // 11 – Okke Zwaa
-  '11-10': true, '11-14': true,
-
-  // 12 – Rosa On
-  '12-1': true, '12-2': true, '12-3': true, '12-4': true, '12-5': true,
-  '12-9': true, '12-11': true, '12-12': true, '12-13': true, '12-14': true, '12-15': true,
-
-  // 13 – Yannick Huis
-  '13-4': true, '13-5': true, '13-9': true, '13-10': true, '13-12': true, '13-13': true,
-
-  // 14 – Ot Dubbe
-  '14-1': true, '14-2': true, '14-3': true, '14-4': true, '14-5': true, '14-15': true,
-
-  // 15 – Tjalle Kals
-  '15-10': true, '15-11': true, '15-12': true, '15-13': true,
-
-  // 16 – Chris Klin
-  '16-1': true, '16-2': true, '16-3': true, '16-4': true, '16-5': true,
-  '16-10': true, '16-12': true, '16-13': true, '16-15': true,
-
-  // 17 – Ivan vdWa
-  '17-10': true, '17-13': true,
-
-  // 18 – Edward Serf
-  '18-1': true, '18-2': true, '18-3': true, '18-4': true, '18-5': true,
-
-  // 19 – Teo Gorri
-  '19-1': true, '19-2': true, '19-3': true, '19-4': true, '19-5': true,
-
-  // 20 – Hedwig Bong
-  '20-1': true, '20-3': true, '20-10': true, '20-12': true, '20-13': true,
-  });
+  const [training, setTraining] = useState({});
   
   
-  const [ratings, setRatings] = useState({
-   // 1 – Eick Soe
-  '1-1': 4, '1-2': 4, '1-3': 4, '1-4': 2, '1-5': 2, '1-15': 4,
-
-  // 2 – Janes Bark
-  '2-1': 4, '2-2': 3, '2-3': 4, '2-4': 4, '2-5': 4,
-  '2-9': 5, '2-10': 4, '2-12': 4, '2-13': 4, '2-15': 3,
-
-  // 3 – Esca Zand
-  '3-1': 2, '3-3': 2, '3-4': 4, '3-5': 4,
-  '3-12': 5, '3-13': 5, '3-15': 5,
-
-  // 4 – Huib Schr
-  '4-1': 4, '4-2': 4, '4-3': 4, '4-4': 3, '4-5': 3, '4-15': 3,
-
-  // 5 – Dries Wage
-  '5-11': 1, '5-13': 1, '5-15': 5,
-
-  // 6 – Liam Hass
-  '6-11': 1, '6-12': 1, '6-13': 1, '6-14': 1,
-
-  // 7 – Francois Ross
-  '7-1': 5, '7-2': 5, '7-3': 5, '7-4': 5, '7-5': 5,
-
-  // 8 – Lewis Deel
-  '8-11': 5, '8-12': 5, '8-13': 5, '8-14': 5,
-
-  // 9 – Tobia Conc
-  '9-10': 5, '9-11': 5, '9-15': 5,
-
-  // 10 – Alexander Jans
-  '10-1': 4, '10-2': 2, '10-3': 4, '10-4': 5, '10-5': 5, '10-11': 3,
-
-  // 11 – Okke Zwaa
-  '11-11': 2, '11-15': 1,
-
-  // 12 – Rosa On
-  '12-1': 3, '12-2': 2, '12-3': 3, '12-4': 5, '12-5': 5,
-  '12-9': 3, '12-11': 3, '12-12': 4, '12-13': 4, '12-14': 3, '12-15': 2,
-
-  // 13 – Yannick Huis
-  '13-4': 3, '13-5': 3, '13-9': 5, '13-10': 5,
-  '13-12': 4, '13-13': 4,
-
-  // 14 – Ot Dubbe
-  '14-1': 4, '14-2': 5, '14-3': 4, '14-4': 3, '14-5': 3, '14-15': 4,
-
-  // 15 – Tjalle Kals
-  '15-11': 4, '15-12': 3, '15-13': 3, '15-14': 4,
-
-  // 16 – Chris Klin
-  '16-1': 3, '16-2': 4, '16-3': 3, '16-4': 3, '16-5': 3,
-  '16-10': 3, '16-12': 2, '16-13': 2, '16-15': 2,
-
-  // 17 – Ivan vdWa
-  '17-11': 1, '17-14': 1,
-
-  // 18 – Edward Serf
-  '18-1': 5, '18-2': 5, '18-3': 5, '18-4': 4, '18-5': 4,
-
-  // 19 – Teo Gorri
-  '19-1': 5, '19-2': 5, '19-3': 5, '19-4': 4, '19-5': 4,
-
-  // 20 – Hedwig Bong
-  '20-1': 3, '20-3': 3, '20-10': 3, '20-12': 2, '20-13': 2,
-  });
+  const [ratings, setRatings] = useState({});
   
   // Two favorite positions per player
-  const [favoritePositions, setFavoritePositions] = useState({
- 1: [2, 15],
-
-  // 2 – Janes Bark
-  2: [11, 12],
-
-  // 3 – Esca Zand
-  3: [13, 14],
-
-  // 4 – Huib Schr
-  4: [1, 15],
-
-  // 5 – Dries Wage
-  5: [11, 13],
-
-  // 6 – Liam Hass
-  6: [11, 13],
-
-  // 7 – Francois Ross
-  7: [1, 3],
-
-  // 8 – Lewis Deel
-  8: [11, 13],
-
-  // 9 – Tobia Conc
-  9: [11, 15],
-
-  // 10 – Alexander Jans
-  10: [4, 5],
-
-  // 11 – Okke Zwaa
-  11: [11, 14],
-
-  // 12 – Rosa On
-  12: [11, 14],
-
-  // 13 – Yannick Huis
-  13: [10, 11],
-
-  // 14 – Ot Dubbe
-  14: [1, 15],
-
-  // 15 – Tjalle Kals
-  15: [11, 14],
-
-  // 16 – Chris Klin
-  16: [2, 4],
-
-  // 17 – Ivan vdWa
-  17: [11, 14],
-
-  // 18 – Edward Serf
-  18: [2, 3],
-
-  // 19 – Teo Gorri
-  19: [1, 2],
-
-  // 20 – Hedwig Bong
-  20: [11, 14],
-
-  });
+  const [favoritePositions, setFavoritePositions] = useState({});
   
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
@@ -510,6 +321,8 @@ const [lineups, setLineups] = useState(initialLineups);
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [isOutOfSync, setIsOutOfSync] = useState(false);
+  const [lastGistUpdate, setLastGistUpdate] = useState(null);
 
   // GitHub Gist configuration for shared data
   // Set these in your environment or .env.local file
@@ -538,6 +351,7 @@ const [lineups, setLineups] = useState(initialLineups);
           const gist = await response.json();
           const data = JSON.parse(gist.files['rugby-data.json'].content);
 
+          // Update state with fresh data from Gist
           setPlaydays(data.playdays || []);
           setLineups(data.lineups || {});
           setRatings(data.ratings || {});
@@ -545,6 +359,17 @@ const [lineups, setLineups] = useState(initialLineups);
           setFavoritePositions(data.favoritePositions || {});
           setAllocationRules(data.allocationRules || allocationRules);
           setLastSyncTime(new Date());
+          setLastGistUpdate(gist.updated_at);
+          setIsOutOfSync(false);
+
+          // Also update localStorage with fresh data from Gist
+          localStorage.setItem('rugby_playdays', JSON.stringify(data.playdays || []));
+          localStorage.setItem('rugby_lineups', JSON.stringify(data.lineups || {}));
+          localStorage.setItem('rugby_ratings', JSON.stringify(data.ratings || {}));
+          localStorage.setItem('rugby_training', JSON.stringify(data.training || {}));
+          localStorage.setItem('rugby_favorites', JSON.stringify(data.favoritePositions || {}));
+          localStorage.setItem('rugby_rules', JSON.stringify(data.allocationRules || allocationRules));
+          localStorage.setItem('rugby_last_gist_update', gist.updated_at);
         } else {
           loadFromLocalStorage();
         }
@@ -564,6 +389,7 @@ const [lineups, setLineups] = useState(initialLineups);
         const savedTraining = localStorage.getItem('rugby_training');
         const savedFavorites = localStorage.getItem('rugby_favorites');
         const savedRules = localStorage.getItem('rugby_rules');
+        const savedLastUpdate = localStorage.getItem('rugby_last_gist_update');
 
         if (savedPlaydays) setPlaydays(JSON.parse(savedPlaydays));
         if (savedLineups) setLineups(JSON.parse(savedLineups));
@@ -571,6 +397,7 @@ const [lineups, setLineups] = useState(initialLineups);
         if (savedTraining) setTraining(JSON.parse(savedTraining));
         if (savedFavorites) setFavoritePositions(JSON.parse(savedFavorites));
         if (savedRules) setAllocationRules(JSON.parse(savedRules));
+        if (savedLastUpdate) setLastGistUpdate(savedLastUpdate);
       } catch (error) {
         console.error('Error loading from localStorage:', error);
       }
@@ -579,13 +406,42 @@ const [lineups, setLineups] = useState(initialLineups);
     loadFromGist();
   }, []);
 
+  // Periodic check for updates (every 30 seconds)
+  useEffect(() => {
+    if (!GIST_ID || !GITHUB_TOKEN) return;
+
+    const checkForUpdates = async () => {
+      try {
+        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+
+        if (response.ok) {
+          const gist = await response.json();
+          // Check if Gist was updated after our last known update
+          if (lastGistUpdate && gist.updated_at !== lastGistUpdate) {
+            setIsOutOfSync(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking for updates:', error);
+      }
+    };
+
+    const interval = setInterval(checkForUpdates, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, [GIST_ID, GITHUB_TOKEN, lastGistUpdate]);
+
   // Save to both localStorage AND GitHub Gist
   const saveToGist = async (data) => {
     if (!GIST_ID || !GITHUB_TOKEN) return;
 
     try {
       setIsSyncing(true);
-      await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
         method: 'PATCH',
         headers: {
           'Authorization': `token ${GITHUB_TOKEN}`,
@@ -600,9 +456,61 @@ const [lineups, setLineups] = useState(initialLineups);
           }
         })
       });
+
+      if (response.ok) {
+        const gist = await response.json();
+        setLastGistUpdate(gist.updated_at);
+        localStorage.setItem('rugby_last_gist_update', gist.updated_at);
+      }
+
       setLastSyncTime(new Date());
+      setIsOutOfSync(false);
     } catch (error) {
       console.error('Error saving to Gist:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Refresh data from Gist
+  const refreshFromGist = async () => {
+    if (!GIST_ID || !GITHUB_TOKEN) return;
+
+    try {
+      setIsSyncing(true);
+      const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (response.ok) {
+        const gist = await response.json();
+        const data = JSON.parse(gist.files['rugby-data.json'].content);
+
+        // Update state with fresh data
+        setPlaydays(data.playdays || []);
+        setLineups(data.lineups || {});
+        setRatings(data.ratings || {});
+        setTraining(data.training || {});
+        setFavoritePositions(data.favoritePositions || {});
+        setAllocationRules(data.allocationRules || allocationRules);
+        setLastSyncTime(new Date());
+        setLastGistUpdate(gist.updated_at);
+        setIsOutOfSync(false);
+
+        // Update localStorage
+        localStorage.setItem('rugby_playdays', JSON.stringify(data.playdays || []));
+        localStorage.setItem('rugby_lineups', JSON.stringify(data.lineups || {}));
+        localStorage.setItem('rugby_ratings', JSON.stringify(data.ratings || {}));
+        localStorage.setItem('rugby_training', JSON.stringify(data.training || {}));
+        localStorage.setItem('rugby_favorites', JSON.stringify(data.favoritePositions || {}));
+        localStorage.setItem('rugby_rules', JSON.stringify(data.allocationRules || allocationRules));
+        localStorage.setItem('rugby_last_gist_update', gist.updated_at);
+      }
+    } catch (error) {
+      console.error('Error refreshing from Gist:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -2687,12 +2595,26 @@ const [lineups, setLineups] = useState(initialLineups);
           </div>
 
           {GIST_ID && (
-            <div className="flex items-center gap-1 text-xs">
-              {isSyncing ? (
-                <><span className="animate-spin">⟳</span><span className="text-gray-500">Syncing...</span></>
-              ) : lastSyncTime ? (
-                <><span className="text-green-500">✓</span><span className="text-gray-500">Synced</span></>
-              ) : null}
+            <div className="flex items-center gap-2">
+              {isOutOfSync && (
+                <button
+                  onClick={refreshFromGist}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                  title="New updates available from other trainers. Click to refresh."
+                >
+                  <span>⟳</span>
+                  <span>Update Available</span>
+                </button>
+              )}
+              {!isOutOfSync && (
+                <div className="flex items-center gap-1 text-xs">
+                  {isSyncing ? (
+                    <><span className="animate-spin">⟳</span><span className="text-gray-500">Syncing...</span></>
+                  ) : lastSyncTime ? (
+                    <><span className="text-green-500">✓</span><span className="text-gray-500">Synced</span></>
+                  ) : null}
+                </div>
+              )}
             </div>
           )}
         </div>
