@@ -324,6 +324,7 @@ const [lineups, setLineups] = useState({});
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [rugbyDataId, setRugbyDataId] = useState(null);
+  const [isReceivingUpdate, setIsReceivingUpdate] = useState(false);
 
   // Load data from Supabase on mount
   useEffect(() => {
@@ -410,6 +411,9 @@ const [lineups, setLineups] = useState({});
           console.log('Real-time update received:', payload);
           const newData = payload.new.data;
 
+          // Set flag to prevent save loop
+          setIsReceivingUpdate(true);
+
           // Update state with new data
           setPlaydays(newData.playdays || []);
           setLineups(newData.lineups || {});
@@ -418,6 +422,9 @@ const [lineups, setLineups] = useState({});
           setFavoritePositions(newData.favoritePositions || {});
           setAllocationRules(newData.allocationRules || allocationRules);
           setLastSyncTime(new Date());
+
+          // Reset flag after state updates complete
+          setTimeout(() => setIsReceivingUpdate(false), 100);
         }
       )
       .subscribe();
@@ -453,40 +460,40 @@ const [lineups, setLineups] = useState({});
 
   // Save data whenever it changes to Supabase
   useEffect(() => {
-    if (!hasLoaded) return; // Don't save until initial data is loaded
+    if (!hasLoaded || isReceivingUpdate) return; // Don't save until initial data is loaded OR during real-time update
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToSupabase(data);
-  }, [playdays, hasLoaded]);
+  }, [playdays, hasLoaded, isReceivingUpdate]);
 
   useEffect(() => {
-    if (!hasLoaded) return; // Don't save until initial data is loaded
+    if (!hasLoaded || isReceivingUpdate) return;
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToSupabase(data);
-  }, [lineups, hasLoaded]);
+  }, [lineups, hasLoaded, isReceivingUpdate]);
 
   useEffect(() => {
-    if (!hasLoaded) return; // Don't save until initial data is loaded
+    if (!hasLoaded || isReceivingUpdate) return;
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToSupabase(data);
-  }, [ratings, hasLoaded]);
+  }, [ratings, hasLoaded, isReceivingUpdate]);
 
   useEffect(() => {
-    if (!hasLoaded) return; // Don't save until initial data is loaded
+    if (!hasLoaded || isReceivingUpdate) return;
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToSupabase(data);
-  }, [training, hasLoaded]);
+  }, [training, hasLoaded, isReceivingUpdate]);
 
   useEffect(() => {
-    if (!hasLoaded) return; // Don't save until initial data is loaded
+    if (!hasLoaded || isReceivingUpdate) return;
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToSupabase(data);
-  }, [favoritePositions, hasLoaded]);
+  }, [favoritePositions, hasLoaded, isReceivingUpdate]);
 
   useEffect(() => {
-    if (!hasLoaded) return; // Don't save until initial data is loaded
+    if (!hasLoaded || isReceivingUpdate) return;
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
     saveToSupabase(data);
-  }, [allocationRules, hasLoaded]);
+  }, [allocationRules, hasLoaded, isReceivingUpdate]);
 
   const tabs = [
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
