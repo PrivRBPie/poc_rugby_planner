@@ -356,6 +356,7 @@ const [lineups, setLineups] = useState({});
           setTraining(rugbyData.training || {});
           setFavoritePositions(rugbyData.favoritePositions || {});
           setAllocationRules(rugbyData.allocationRules || allocationRules);
+          setAvailability(rugbyData.availability || {});
           setRugbyDataId(data.id);
           setLastSyncTime(new Date());
           setHasLoaded(true);
@@ -367,7 +368,8 @@ const [lineups, setLineups] = useState({});
             ratings: {},
             training: {},
             favoritePositions: {},
-            allocationRules: allocationRules
+            allocationRules: allocationRules,
+            availability: {}
           };
 
           const { data: newData, error: insertError } = await supabase
@@ -418,6 +420,7 @@ const [lineups, setLineups] = useState({});
         setTraining(rugbyData.training || {});
         setFavoritePositions(rugbyData.favoritePositions || {});
         setAllocationRules(rugbyData.allocationRules || allocationRules);
+        setAvailability(rugbyData.availability || {});
         setLastSyncTime(new Date());
         setHasUnsavedChanges(false);
       }
@@ -434,7 +437,7 @@ const [lineups, setLineups] = useState({});
 
     try {
       setIsSyncing(true);
-      const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
+      const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules, availability };
 
       const { error } = await supabase
         .from('rugby_data')
@@ -460,7 +463,7 @@ const [lineups, setLineups] = useState({});
   useEffect(() => {
     if (!hasLoaded) return;
     setHasUnsavedChanges(true);
-  }, [playdays, lineups, ratings, training, favoritePositions, allocationRules, hasLoaded]);
+  }, [playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, hasLoaded]);
 
   const tabs = [
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
