@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import bullsLogo from './assets/bulls.svg';
 import diokLogo from './assets/diok.svg';
+import { supabase } from './supabaseClient';
 
 // Mini rugby positions (no 6,7,8)
 const positions = [
@@ -321,246 +322,170 @@ const [lineups, setLineups] = useState({});
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
-  const [isOutOfSync, setIsOutOfSync] = useState(false);
-  const [lastGistUpdate, setLastGistUpdate] = useState(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [rugbyDataId, setRugbyDataId] = useState(null);
 
-  // GitHub Gist configuration for shared data
-  // Set these in your environment or .env.local file
-  const GIST_ID = import.meta.env.VITE_GIST_ID || 'b453bdb17b87d01d506e0ebbb62a5cd3';
-  const GITHUB_TOKEN = import.meta.env.VITE_GITHUB_TOKEN || '';
-
-  // Load data from GitHub Gist (or fallback to localStorage)
+  // Load data from Supabase on mount
   useEffect(() => {
-    const loadFromGist = async () => {
-      if (!GIST_ID || !GITHUB_TOKEN) {
-        // Fallback to localStorage if Gist not configured
-        loadFromLocalStorage();
-        return;
-      }
-
+    const loadFromSupabase = async () => {
       try {
         setIsSyncing(true);
-        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-          headers: {
-            'Authorization': `token ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json'
-          }
-        });
 
-        if (response.ok) {
-          const gist = await response.json();
-          const data = JSON.parse(gist.files['rugby-data.json'].content);
+        // Fetch the latest rugby data
+        const { data, error } = await supabase
+          .from('rugby_data')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .single();
 
-          // Update state with fresh data from Gist
-          setPlaydays(data.playdays || []);
-          setLineups(data.lineups || {});
-          setRatings(data.ratings || {});
-          setTraining(data.training || {});
-          setFavoritePositions(data.favoritePositions || {});
-          setAllocationRules(data.allocationRules || allocationRules);
+        if (error) {
+          console.error('Error loading from Supabase:', error);
+          setHasLoaded(true);
+          return;
+        }
+
+        if (data && data.data) {
+          const rugbyData = data.data;
+
+          // Update state with data from Supabase
+          setPlaydays(rugbyData.playdays || []);
+          setLineups(rugbyData.lineups || {});
+          setRatings(rugbyData.ratings || {});
+          setTraining(rugbyData.training || {});
+          setFavoritePositions(rugbyData.favoritePositions || {});
+          setAllocationRules(rugbyData.allocationRules || allocationRules);
+          setRugbyDataId(data.id);
           setLastSyncTime(new Date());
-          setLastGistUpdate(gist.updated_at);
-          setIsOutOfSync(false);
-
-          // Also update localStorage with fresh data from Gist
-          localStorage.setItem('rugby_playdays', JSON.stringify(data.playdays || []));
-          localStorage.setItem('rugby_lineups', JSON.stringify(data.lineups || {}));
-          localStorage.setItem('rugby_ratings', JSON.stringify(data.ratings || {}));
-          localStorage.setItem('rugby_training', JSON.stringify(data.training || {}));
-          localStorage.setItem('rugby_favorites', JSON.stringify(data.favoritePositions || {}));
-          localStorage.setItem('rugby_rules', JSON.stringify(data.allocationRules || allocationRules));
-          localStorage.setItem('rugby_last_gist_update', gist.updated_at);
           setHasLoaded(true);
         } else {
-          loadFromLocalStorage();
+          // No data yet, create initial row
+          const initialData = {
+            playdays: [],
+            lineups: {},
+            ratings: {},
+            training: {},
+            favoritePositions: {},
+            allocationRules: allocationRules
+          };
+
+          const { data: newData, error: insertError } = await supabase
+            .from('rugby_data')
+            .insert([{ team_name: 'Bulls Mini\'s', data: initialData }])
+            .select()
+            .single();
+
+          if (!insertError && newData) {
+            setRugbyDataId(newData.id);
+          }
+
+          setHasLoaded(true);
         }
       } catch (error) {
-        console.error('Error loading from Gist:', error);
-        loadFromLocalStorage();
+        console.error('Error loading from Supabase:', error);
+        setHasLoaded(true);
       } finally {
         setIsSyncing(false);
       }
     };
 
-    const loadFromLocalStorage = () => {
-      try {
-        const savedPlaydays = localStorage.getItem('rugby_playdays');
-        const savedLineups = localStorage.getItem('rugby_lineups');
-        const savedRatings = localStorage.getItem('rugby_ratings');
-        const savedTraining = localStorage.getItem('rugby_training');
-        const savedFavorites = localStorage.getItem('rugby_favorites');
-        const savedRules = localStorage.getItem('rugby_rules');
-        const savedLastUpdate = localStorage.getItem('rugby_last_gist_update');
-
-        if (savedPlaydays) setPlaydays(JSON.parse(savedPlaydays));
-        if (savedLineups) setLineups(JSON.parse(savedLineups));
-        if (savedRatings) setRatings(JSON.parse(savedRatings));
-        if (savedTraining) setTraining(JSON.parse(savedTraining));
-        if (savedFavorites) setFavoritePositions(JSON.parse(savedFavorites));
-        if (savedRules) setAllocationRules(JSON.parse(savedRules));
-        if (savedLastUpdate) setLastGistUpdate(savedLastUpdate);
-        setHasLoaded(true);
-      } catch (error) {
-        console.error('Error loading from localStorage:', error);
-        setHasLoaded(true);
-      }
-    };
-
-    loadFromGist();
+    loadFromSupabase();
   }, []);
 
-  // Periodic check for updates (every 30 seconds)
+  // Subscribe to real-time updates from Supabase
   useEffect(() => {
-    if (!GIST_ID || !GITHUB_TOKEN) return;
+    if (!rugbyDataId) return;
 
-    const checkForUpdates = async () => {
-      try {
-        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-          headers: {
-            'Authorization': `token ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json'
-          }
-        });
-
-        if (response.ok) {
-          const gist = await response.json();
-          // Check if Gist was updated after our last known update
-          if (lastGistUpdate && gist.updated_at !== lastGistUpdate) {
-            setIsOutOfSync(true);
-          }
-        }
-      } catch (error) {
-        console.error('Error checking for updates:', error);
-      }
-    };
-
-    const interval = setInterval(checkForUpdates, 30000); // Check every 30 seconds
-    return () => clearInterval(interval);
-  }, [GIST_ID, GITHUB_TOKEN, lastGistUpdate]);
-
-  // Save to both localStorage AND GitHub Gist
-  const saveToGist = async (data) => {
-    if (!GIST_ID || !GITHUB_TOKEN) return;
-
-    try {
-      setIsSyncing(true);
-      const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
+    const channel = supabase
+      .channel('rugby_data_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'rugby_data',
+          filter: `id=eq.${rugbyDataId}`
         },
-        body: JSON.stringify({
-          files: {
-            'rugby-data.json': {
-              content: JSON.stringify(data, null, 2)
-            }
-          }
-        })
-      });
+        (payload) => {
+          console.log('Real-time update received:', payload);
+          const newData = payload.new.data;
 
-      if (response.ok) {
-        const gist = await response.json();
-        setLastGistUpdate(gist.updated_at);
-        localStorage.setItem('rugby_last_gist_update', gist.updated_at);
-      }
+          // Update state with new data
+          setPlaydays(newData.playdays || []);
+          setLineups(newData.lineups || {});
+          setRatings(newData.ratings || {});
+          setTraining(newData.training || {});
+          setFavoritePositions(newData.favoritePositions || {});
+          setAllocationRules(newData.allocationRules || allocationRules);
+          setLastSyncTime(new Date());
+        }
+      )
+      .subscribe();
 
-      setLastSyncTime(new Date());
-      setIsOutOfSync(false);
-    } catch (error) {
-      console.error('Error saving to Gist:', error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [rugbyDataId]);
 
-  // Refresh data from Gist
-  const refreshFromGist = async () => {
-    if (!GIST_ID || !GITHUB_TOKEN) return;
+  // Save to Supabase
+  const saveToSupabase = async (data) => {
+    if (!rugbyDataId) return;
 
     try {
       setIsSyncing(true);
-      const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      });
 
-      if (response.ok) {
-        const gist = await response.json();
-        const data = JSON.parse(gist.files['rugby-data.json'].content);
+      const { error } = await supabase
+        .from('rugby_data')
+        .update({ data: data })
+        .eq('id', rugbyDataId);
 
-        // Update state with fresh data
-        setPlaydays(data.playdays || []);
-        setLineups(data.lineups || {});
-        setRatings(data.ratings || {});
-        setTraining(data.training || {});
-        setFavoritePositions(data.favoritePositions || {});
-        setAllocationRules(data.allocationRules || allocationRules);
+      if (error) {
+        console.error('Error saving to Supabase:', error);
+      } else {
         setLastSyncTime(new Date());
-        setLastGistUpdate(gist.updated_at);
-        setIsOutOfSync(false);
-
-        // Update localStorage
-        localStorage.setItem('rugby_playdays', JSON.stringify(data.playdays || []));
-        localStorage.setItem('rugby_lineups', JSON.stringify(data.lineups || {}));
-        localStorage.setItem('rugby_ratings', JSON.stringify(data.ratings || {}));
-        localStorage.setItem('rugby_training', JSON.stringify(data.training || {}));
-        localStorage.setItem('rugby_favorites', JSON.stringify(data.favoritePositions || {}));
-        localStorage.setItem('rugby_rules', JSON.stringify(data.allocationRules || allocationRules));
-        localStorage.setItem('rugby_last_gist_update', gist.updated_at);
       }
     } catch (error) {
-      console.error('Error refreshing from Gist:', error);
+      console.error('Error saving to Supabase:', error);
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Save data whenever it changes (localStorage + Gist)
+  // Save data whenever it changes to Supabase
   useEffect(() => {
     if (!hasLoaded) return; // Don't save until initial data is loaded
-    localStorage.setItem('rugby_playdays', JSON.stringify(playdays));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToGist(data);
+    saveToSupabase(data);
   }, [playdays, hasLoaded]);
 
   useEffect(() => {
     if (!hasLoaded) return; // Don't save until initial data is loaded
-    localStorage.setItem('rugby_lineups', JSON.stringify(lineups));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToGist(data);
+    saveToSupabase(data);
   }, [lineups, hasLoaded]);
 
   useEffect(() => {
     if (!hasLoaded) return; // Don't save until initial data is loaded
-    localStorage.setItem('rugby_ratings', JSON.stringify(ratings));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToGist(data);
+    saveToSupabase(data);
   }, [ratings, hasLoaded]);
 
   useEffect(() => {
     if (!hasLoaded) return; // Don't save until initial data is loaded
-    localStorage.setItem('rugby_training', JSON.stringify(training));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToGist(data);
+    saveToSupabase(data);
   }, [training, hasLoaded]);
 
   useEffect(() => {
     if (!hasLoaded) return; // Don't save until initial data is loaded
-    localStorage.setItem('rugby_favorites', JSON.stringify(favoritePositions));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToGist(data);
+    saveToSupabase(data);
   }, [favoritePositions, hasLoaded]);
 
   useEffect(() => {
     if (!hasLoaded) return; // Don't save until initial data is loaded
-    localStorage.setItem('rugby_rules', JSON.stringify(allocationRules));
     const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToGist(data);
+    saveToSupabase(data);
   }, [allocationRules, hasLoaded]);
 
   const tabs = [
@@ -2604,29 +2529,18 @@ const [lineups, setLineups] = useState({});
             <img src={diokLogo} alt="DIOK" className="w-full h-full object-contain" />
           </div>
 
-          {GIST_ID && (
-            <div className="flex items-center gap-2">
-              {isOutOfSync && (
-                <button
-                  onClick={refreshFromGist}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
-                  title="New updates available from other trainers. Click to refresh."
-                >
-                  <span>⟳</span>
-                  <span>Update Available</span>
-                </button>
-              )}
-              {!isOutOfSync && (
-                <div className="flex items-center gap-1 text-xs">
-                  {isSyncing ? (
-                    <><span className="animate-spin">⟳</span><span className="text-gray-500">Syncing...</span></>
-                  ) : lastSyncTime ? (
-                    <><span className="text-green-500">✓</span><span className="text-gray-500">Synced</span></>
-                  ) : null}
-                </div>
-              )}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-xs">
+              {isSyncing ? (
+                <><span className="animate-spin">⟳</span><span className="text-gray-500">Syncing...</span></>
+              ) : lastSyncTime ? (
+                <>
+                  <span className="text-green-500">✓</span>
+                  <span className="text-gray-500">Real-time</span>
+                </>
+              ) : null}
             </div>
-          )}
+          </div>
         </div>
       </header>
 

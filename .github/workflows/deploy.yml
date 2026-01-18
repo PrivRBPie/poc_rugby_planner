@@ -28,8 +28,8 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          VITE_GIST_ID: b453bdb17b87d01d506e0ebbb62a5cd3
-          VITE_GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          VITE_SUPABASE_URL: https://mgxpsexuetejfhbqmjdx.supabase.co
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
