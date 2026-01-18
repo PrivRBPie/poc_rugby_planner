@@ -331,6 +331,8 @@ const [lineups, setLineups] = useState({});
   const [hasLoaded, setHasLoaded] = useState(false);
   const [rugbyDataId, setRugbyDataId] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [remoteUpdatedAt, setRemoteUpdatedAt] = useState(null);
+  const [hasRemoteChanges, setHasRemoteChanges] = useState(false);
 
   // Load data from Supabase on mount
   useEffect(() => {
@@ -398,6 +400,7 @@ const [lineups, setLineups] = useState({});
           setAllocationRules(rugbyData.allocationRules || allocationRules);
           setAvailability(rugbyData.availability || {});
           setRugbyDataId(data.id);
+          setRemoteUpdatedAt(data.updated_at);
           setLastSyncTime(new Date());
           setHasLoaded(true);
         }
@@ -555,6 +558,33 @@ const [lineups, setLineups] = useState({});
     };
   }, [sessionId]);
 
+  // Check for remote changes periodically
+  useEffect(() => {
+    if (!rugbyDataId || !remoteUpdatedAt) return;
+
+    const checkForRemoteChanges = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('rugby_data')
+          .select('updated_at')
+          .eq('id', rugbyDataId)
+          .single();
+
+        if (!error && data && data.updated_at !== remoteUpdatedAt) {
+          console.log('Remote changes detected!');
+          setHasRemoteChanges(true);
+        }
+      } catch (error) {
+        console.error('Error checking for remote changes:', error);
+      }
+    };
+
+    // Check every 10 seconds
+    const interval = setInterval(checkForRemoteChanges, 10000);
+
+    return () => clearInterval(interval);
+  }, [rugbyDataId, remoteUpdatedAt]);
+
   // Manual refresh from Supabase
   const refreshFromSupabase = async () => {
     if (!rugbyDataId) return;
@@ -581,8 +611,10 @@ const [lineups, setLineups] = useState({});
         setFavoritePositions(rugbyData.favoritePositions || {});
         setAllocationRules(rugbyData.allocationRules || allocationRules);
         setAvailability(rugbyData.availability || {});
+        setRemoteUpdatedAt(data.updated_at);
         setLastSyncTime(new Date());
         setHasUnsavedChanges(false);
+        setHasRemoteChanges(false);
       }
     } catch (error) {
       console.error('Error refreshing from Supabase:', error);
@@ -599,24 +631,41 @@ const [lineups, setLineups] = useState({});
       return;
     }
 
+    // Check for conflicts before saving
+    if (hasRemoteChanges) {
+      const confirmed = window.confirm(
+        '⚠️ Warning: Another coach has made changes!\n\n' +
+        'If you publish now, you will overwrite their changes.\n\n' +
+        'Click OK to overwrite their changes, or Cancel to refresh and see their changes first.'
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
     try {
       setIsSyncing(true);
       const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules, availability };
 
       console.log('Saving to Supabase...', { rugbyDataId, dataKeys: Object.keys(data) });
 
-      const { error } = await supabase
+      const { data: updatedData, error } = await supabase
         .from('rugby_data')
         .update({ data: data })
-        .eq('id', rugbyDataId);
+        .eq('id', rugbyDataId)
+        .select()
+        .single();
 
       if (error) {
         console.error('Error saving to Supabase:', error);
         alert('Error saving data: ' + error.message);
       } else {
         console.log('Save successful');
+        setRemoteUpdatedAt(updatedData.updated_at);
         setLastSyncTime(new Date());
         setHasUnsavedChanges(false);
+        setHasRemoteChanges(false);
       }
     } catch (error) {
       console.error('Error saving to Supabase:', error);
@@ -2691,27 +2740,40 @@ const [lineups, setLineups] = useState({});
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Refresh Button - only enabled when there are unpublished changes */}
+            {/* Refresh Button - highlighted when remote changes available */}
             <button
               onClick={refreshFromSupabase}
               disabled={isSyncing || hasUnsavedChanges}
-              className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50 ${
-                !hasUnsavedChanges ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-400'
+              className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors ${
+                hasRemoteChanges && !hasUnsavedChanges
+                  ? 'bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-300 animate-pulse'
+                  : hasUnsavedChanges
+                  ? 'bg-gray-400 opacity-50 cursor-not-allowed'
+                  : 'bg-blue-500 hover:bg-blue-600 opacity-50'
               }`}
-              title={hasUnsavedChanges ? "Publish your changes first" : "Refresh data from server"}
+              title={
+                hasUnsavedChanges
+                  ? "Publish your changes first"
+                  : hasRemoteChanges
+                  ? "New changes available from other coaches!"
+                  : "Check for updates from other coaches"
+              }
             >
               <span className={isSyncing ? "animate-spin" : ""}>⟳</span>
               <span>Refresh</span>
+              {hasRemoteChanges && !hasUnsavedChanges && <span className="text-yellow-300">●</span>}
             </button>
 
-            {/* Publish Button */}
+            {/* Publish Button - highlighted when local changes */}
             <button
               onClick={handleSave}
               disabled={isSyncing || !hasUnsavedChanges}
-              className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50 ${
-                hasUnsavedChanges ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-500'
+              className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors ${
+                hasUnsavedChanges
+                  ? 'bg-orange-500 hover:bg-orange-600 ring-2 ring-orange-300'
+                  : 'bg-green-500 opacity-50'
               }`}
-              title={hasUnsavedChanges ? "You have unpublished changes" : "All changes published"}
+              title={hasUnsavedChanges ? "Publish your changes" : "All changes published"}
             >
               {isSyncing ? (
                 <><span className="animate-spin">⟳</span><span>Publishing...</span></>
