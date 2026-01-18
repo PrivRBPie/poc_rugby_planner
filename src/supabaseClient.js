@@ -16,3 +16,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     }
   }
 });
+
+// Export URL and key for direct fetch operations
+export const supabaseConfig = {
+  url: supabaseUrl,
+  anonKey: supabaseAnonKey
+};

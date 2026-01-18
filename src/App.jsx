@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import bullsLogo from './assets/bulls.svg';
 import diokLogo from './assets/diok.svg';
-import { supabase } from './supabaseClient';
+import { supabase, supabaseConfig } from './supabaseClient';
 
 // Mini rugby positions (no 6,7,8)
 const positions = [
@@ -417,7 +417,15 @@ const [lineups, setLineups] = useState({});
 
     const registerPresence = async () => {
       try {
-        // Upsert user presence
+        // First, clean up any stale sessions for this username (from previous crashed tabs, etc.)
+        const fortySecondsAgo = new Date(Date.now() - 40 * 1000).toISOString();
+        await supabase
+          .from('active_users')
+          .delete()
+          .eq('username', currentUsername)
+          .lt('last_seen', fortySecondsAgo);
+
+        // Then register this session
         await supabase
           .from('active_users')
           .upsert({
@@ -443,36 +451,57 @@ const [lineups, setLineups] = useState({});
 
     const cleanupStaleUsers = async () => {
       try {
-        // Remove users inactive for more than 2 minutes
-        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        // Remove ALL users inactive for more than 45 seconds
+        const fortyFiveSecondsAgo = new Date(Date.now() - 45 * 1000).toISOString();
         await supabase
           .from('active_users')
           .delete()
-          .lt('last_seen', twoMinutesAgo);
+          .lt('last_seen', fortyFiveSecondsAgo);
       } catch (error) {
         console.error('Error cleaning up stale users:', error);
       }
     };
 
+    const removePresence = () => {
+      // Use fetch with keepalive for more reliable cleanup on page unload
+      const url = `${supabaseConfig.url}/rest/v1/active_users?session_id=eq.${sessionId}`;
+      const headers = {
+        'apikey': supabaseConfig.anonKey,
+        'Authorization': `Bearer ${supabaseConfig.anonKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      };
+
+      // Try to delete via fetch with keepalive
+      fetch(url, {
+        method: 'DELETE',
+        headers: headers,
+        keepalive: true
+      }).catch(() => {
+        // Fallback: just let it expire naturally via cleanup
+      });
+    };
+
     // Register immediately
     registerPresence();
 
-    // Send heartbeat every 30 seconds
+    // Send heartbeat every 20 seconds
     const heartbeatInterval = setInterval(() => {
       updateHeartbeat();
       cleanupStaleUsers();
-    }, 30000);
+    }, 20000);
+
+    // Handle page unload/refresh
+    const handleBeforeUnload = () => {
+      removePresence();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     // Cleanup on unmount
     return () => {
       clearInterval(heartbeatInterval);
-      // Remove presence on exit
-      supabase
-        .from('active_users')
-        .delete()
-        .eq('session_id', sessionId)
-        .then(() => console.log('Presence cleaned up'))
-        .catch(err => console.error('Error cleaning up presence:', err));
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      removePresence();
     };
   }, [currentUsername, sessionId]);
 
@@ -486,11 +515,11 @@ const [lineups, setLineups] = useState({});
           .order('last_seen', { ascending: false });
 
         if (!error && data) {
-          // Filter out current user and stale sessions
-          const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
+          // Filter out current user and stale sessions (45 seconds old)
+          const fortyFiveSecondsAgo = Date.now() - 45 * 1000;
           const active = data.filter(user =>
             user.session_id !== sessionId &&
-            new Date(user.last_seen).getTime() > twoMinutesAgo
+            new Date(user.last_seen).getTime() > fortyFiveSecondsAgo
           );
           setActiveUsers(active);
         }
