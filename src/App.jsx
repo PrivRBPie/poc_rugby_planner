@@ -582,11 +582,17 @@ const [lineups, setLineups] = useState({});
 
   // Manual save to Supabase
   const handleSave = async () => {
-    if (!rugbyDataId) return;
+    if (!rugbyDataId) {
+      console.error('Cannot save: rugbyDataId is not set');
+      alert('Error: Database ID not found. Please refresh the page.');
+      return;
+    }
 
     try {
       setIsSyncing(true);
       const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules, availability };
+
+      console.log('Saving to Supabase...', { rugbyDataId, dataKeys: Object.keys(data) });
 
       const { error } = await supabase
         .from('rugby_data')
@@ -595,14 +601,15 @@ const [lineups, setLineups] = useState({});
 
       if (error) {
         console.error('Error saving to Supabase:', error);
-        alert('Error saving data!');
+        alert('Error saving data: ' + error.message);
       } else {
+        console.log('Save successful');
         setLastSyncTime(new Date());
         setHasUnsavedChanges(false);
       }
     } catch (error) {
       console.error('Error saving to Supabase:', error);
-      alert('Error saving data!');
+      alert('Error saving data: ' + error.message);
     } finally {
       setIsSyncing(false);
     }
@@ -2624,22 +2631,22 @@ const [lineups, setLineups] = useState({});
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-gray-900">{settings.teamName}</h1>
-              {/* Active Users Indicator */}
-              {activeUsers.length > 0 && (
+              {/* Active Users Indicator - includes current user */}
+              {currentUsername && (
                 <div className="flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded-full">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                   <span className="text-[10px] font-medium text-green-700">
-                    {activeUsers.length} online
+                    {activeUsers.length + 1} online
                   </span>
                 </div>
               )}
             </div>
             <div className="flex items-center gap-2">
               <p className="text-xs text-gray-500">{settings.ageGroup} · {settings.coachName}</p>
-              {/* Show active usernames */}
-              {activeUsers.length > 0 && (
+              {/* Show active usernames including current user */}
+              {currentUsername && (
                 <span className="text-xs text-green-600">
-                  👥 {activeUsers.map(u => u.username).join(', ')}
+                  👥 {[currentUsername, ...activeUsers.map(u => u.username)].join(', ')}
                 </span>
               )}
             </div>
