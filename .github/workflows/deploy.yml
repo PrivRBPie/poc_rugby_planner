@@ -27,6 +27,9 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+        env:
+          VITE_GIST_ID: b453bdb17b87d01d506e0ebbb62a5cd3
+          VITE_GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
