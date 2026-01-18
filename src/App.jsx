@@ -324,7 +324,7 @@ const [lineups, setLineups] = useState({});
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [rugbyDataId, setRugbyDataId] = useState(null);
-  const [isReceivingUpdate, setIsReceivingUpdate] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Load data from Supabase on mount
   useEffect(() => {
@@ -393,53 +393,48 @@ const [lineups, setLineups] = useState({});
     loadFromSupabase();
   }, []);
 
-  // Subscribe to real-time updates from Supabase
-  useEffect(() => {
-    if (!rugbyDataId) return;
-
-    const channel = supabase
-      .channel('rugby_data_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'rugby_data',
-          filter: `id=eq.${rugbyDataId}`
-        },
-        (payload) => {
-          console.log('Real-time update received:', payload);
-          const newData = payload.new.data;
-
-          // Set flag to prevent save loop
-          setIsReceivingUpdate(true);
-
-          // Update state with new data
-          setPlaydays(newData.playdays || []);
-          setLineups(newData.lineups || {});
-          setRatings(newData.ratings || {});
-          setTraining(newData.training || {});
-          setFavoritePositions(newData.favoritePositions || {});
-          setAllocationRules(newData.allocationRules || allocationRules);
-          setLastSyncTime(new Date());
-
-          // Reset flag after state updates complete
-          setTimeout(() => setIsReceivingUpdate(false), 100);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [rugbyDataId]);
-
-  // Save to Supabase
-  const saveToSupabase = async (data) => {
+  // Manual refresh from Supabase
+  const refreshFromSupabase = async () => {
     if (!rugbyDataId) return;
 
     try {
       setIsSyncing(true);
+      const { data, error } = await supabase
+        .from('rugby_data')
+        .select('*')
+        .eq('id', rugbyDataId)
+        .single();
+
+      if (error) {
+        console.error('Error refreshing from Supabase:', error);
+        return;
+      }
+
+      if (data && data.data) {
+        const rugbyData = data.data;
+        setPlaydays(rugbyData.playdays || []);
+        setLineups(rugbyData.lineups || {});
+        setRatings(rugbyData.ratings || {});
+        setTraining(rugbyData.training || {});
+        setFavoritePositions(rugbyData.favoritePositions || {});
+        setAllocationRules(rugbyData.allocationRules || allocationRules);
+        setLastSyncTime(new Date());
+        setHasUnsavedChanges(false);
+      }
+    } catch (error) {
+      console.error('Error refreshing from Supabase:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Manual save to Supabase
+  const handleSave = async () => {
+    if (!rugbyDataId) return;
+
+    try {
+      setIsSyncing(true);
+      const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
 
       const { error } = await supabase
         .from('rugby_data')
@@ -448,52 +443,24 @@ const [lineups, setLineups] = useState({});
 
       if (error) {
         console.error('Error saving to Supabase:', error);
+        alert('Error saving data!');
       } else {
         setLastSyncTime(new Date());
+        setHasUnsavedChanges(false);
       }
     } catch (error) {
       console.error('Error saving to Supabase:', error);
+      alert('Error saving data!');
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Save data whenever it changes to Supabase
+  // Mark as changed when data changes
   useEffect(() => {
-    if (!hasLoaded || isReceivingUpdate) return; // Don't save until initial data is loaded OR during real-time update
-    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToSupabase(data);
-  }, [playdays, hasLoaded, isReceivingUpdate]);
-
-  useEffect(() => {
-    if (!hasLoaded || isReceivingUpdate) return;
-    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToSupabase(data);
-  }, [lineups, hasLoaded, isReceivingUpdate]);
-
-  useEffect(() => {
-    if (!hasLoaded || isReceivingUpdate) return;
-    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToSupabase(data);
-  }, [ratings, hasLoaded, isReceivingUpdate]);
-
-  useEffect(() => {
-    if (!hasLoaded || isReceivingUpdate) return;
-    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToSupabase(data);
-  }, [training, hasLoaded, isReceivingUpdate]);
-
-  useEffect(() => {
-    if (!hasLoaded || isReceivingUpdate) return;
-    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToSupabase(data);
-  }, [favoritePositions, hasLoaded, isReceivingUpdate]);
-
-  useEffect(() => {
-    if (!hasLoaded || isReceivingUpdate) return;
-    const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules };
-    saveToSupabase(data);
-  }, [allocationRules, hasLoaded, isReceivingUpdate]);
+    if (!hasLoaded) return;
+    setHasUnsavedChanges(true);
+  }, [playdays, lineups, ratings, training, favoritePositions, allocationRules, hasLoaded]);
 
   const tabs = [
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
@@ -2537,16 +2504,34 @@ const [lineups, setLineups] = useState({});
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-xs">
+            {/* Refresh Button */}
+            <button
+              onClick={refreshFromSupabase}
+              disabled={isSyncing}
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
+              title="Refresh data from server"
+            >
+              <span className={isSyncing ? "animate-spin" : ""}>⟳</span>
+              <span>Refresh</span>
+            </button>
+
+            {/* Save Button */}
+            <button
+              onClick={handleSave}
+              disabled={isSyncing || !hasUnsavedChanges}
+              className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50 ${
+                hasUnsavedChanges ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-500'
+              }`}
+              title={hasUnsavedChanges ? "You have unsaved changes" : "All changes saved"}
+            >
               {isSyncing ? (
-                <><span className="animate-spin">⟳</span><span className="text-gray-500">Syncing...</span></>
-              ) : lastSyncTime ? (
-                <>
-                  <span className="text-green-500">✓</span>
-                  <span className="text-gray-500">Real-time</span>
-                </>
-              ) : null}
-            </div>
+                <><span className="animate-spin">⟳</span><span>Saving...</span></>
+              ) : hasUnsavedChanges ? (
+                <><span>●</span><span>Save</span></>
+              ) : (
+                <><span>✓</span><span>Saved</span></>
+              )}
+            </button>
           </div>
         </div>
       </header>
