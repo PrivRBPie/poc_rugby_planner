@@ -634,9 +634,11 @@ const [lineups, setLineups] = useState({});
     // Check for conflicts before saving
     if (hasRemoteChanges) {
       const confirmed = window.confirm(
-        '⚠️ Warning: Another coach has made changes!\n\n' +
-        'If you publish now, you will overwrite their changes.\n\n' +
-        'Click OK to overwrite their changes, or Cancel to refresh and see their changes first.'
+        '⚠️  CONFLICT DETECTED\n\n' +
+        'Another coach has updated the data while you were making changes.\n\n' +
+        '• Click OK to OVERWRITE their changes with yours\n' +
+        '• Click Cancel to GET UPDATES first and review their changes\n\n' +
+        'Recommended: Cancel and review their changes first.'
       );
 
       if (!confirmed) {
@@ -2740,47 +2742,66 @@ const [lineups, setLineups] = useState({});
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Refresh Button - highlighted when remote changes available */}
+            {/* Get Updates Button */}
             <button
               onClick={refreshFromSupabase}
               disabled={isSyncing || hasUnsavedChanges}
-              className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors ${
+              className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg shadow-sm transition-all ${
                 hasRemoteChanges && !hasUnsavedChanges
-                  ? 'bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-300 animate-pulse'
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400 shadow-lg animate-pulse'
                   : hasUnsavedChanges
-                  ? 'bg-gray-400 opacity-50 cursor-not-allowed'
-                  : 'bg-blue-500 hover:bg-blue-600 opacity-50'
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-white text-blue-600 border-2 border-blue-200 hover:bg-blue-50'
               }`}
               title={
                 hasUnsavedChanges
-                  ? "Publish your changes first"
+                  ? "Save your changes first"
                   : hasRemoteChanges
-                  ? "New changes available from other coaches!"
+                  ? "Click to get latest changes from other coaches"
                   : "Check for updates from other coaches"
               }
             >
               <span className={isSyncing ? "animate-spin" : ""}>⟳</span>
-              <span>Refresh</span>
-              {hasRemoteChanges && !hasUnsavedChanges && <span className="text-yellow-300">●</span>}
+              <span>{hasRemoteChanges && !hasUnsavedChanges ? "Updates Ready" : "Get Updates"}</span>
+              {hasRemoteChanges && !hasUnsavedChanges && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 border-2 border-white rounded-full animate-pulse" />
+              )}
             </button>
 
-            {/* Publish Button - highlighted when local changes */}
+            {/* Save Changes Button */}
             <button
               onClick={handleSave}
               disabled={isSyncing || !hasUnsavedChanges}
-              className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors ${
+              className={`relative flex items-center gap-1.5 px-3 py-2 text-white text-xs font-semibold rounded-lg shadow-sm transition-all ${
                 hasUnsavedChanges
-                  ? 'bg-orange-500 hover:bg-orange-600 ring-2 ring-orange-300'
-                  : 'bg-green-500 opacity-50'
+                  ? hasRemoteChanges
+                    ? 'bg-orange-600 hover:bg-orange-700 ring-2 ring-orange-400 shadow-lg'
+                    : 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400 shadow-lg'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
-              title={hasUnsavedChanges ? "Publish your changes" : "All changes published"}
+              title={
+                hasUnsavedChanges && hasRemoteChanges
+                  ? "⚠️ Warning: Saving will overwrite others' changes"
+                  : hasUnsavedChanges
+                  ? "Click to save your changes"
+                  : "No changes to save"
+              }
             >
               {isSyncing ? (
-                <><span className="animate-spin">⟳</span><span>Publishing...</span></>
+                <><span className="animate-spin">⟳</span><span>Saving...</span></>
               ) : hasUnsavedChanges ? (
-                <><span>●</span><span>Publish</span></>
+                <>
+                  {hasRemoteChanges && <span>⚠️</span>}
+                  <span>{hasRemoteChanges ? "Save Anyway" : "Save Changes"}</span>
+                </>
               ) : (
-                <><span>✓</span><span>Published</span></>
+                <><span>✓</span><span>Saved</span></>
+              )}
+              {hasUnsavedChanges && !hasRemoteChanges && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 border-2 border-white rounded-full" />
+              )}
+              {hasUnsavedChanges && hasRemoteChanges && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-400 border-2 border-white rounded-full animate-pulse" />
               )}
             </button>
           </div>
