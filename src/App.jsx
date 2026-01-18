@@ -287,6 +287,12 @@ const [lineups, setLineups] = useState({});
   const [showWhySelected, setShowWhySelected] = useState(null); // Format: 'playdayId-matchId-half-posId'
   const [showSatisfactionExplanation, setShowSatisfactionExplanation] = useState(false);
 
+  // Presence tracking
+  const [currentUsername, setCurrentUsername] = useState(null);
+  const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  const [activeUsers, setActiveUsers] = useState([]);
+  const [showUsernamePrompt, setShowUsernamePrompt] = useState(false);
+
   // Allocation Rules Configuration
   const [allocationMode, setAllocationMode] = useState('game'); // 'game' or 'training'
   const [allocationRules, setAllocationRules] = useState({
@@ -394,6 +400,120 @@ const [lineups, setLineups] = useState({});
 
     loadFromSupabase();
   }, []);
+
+  // Initialize username from localStorage or prompt
+  useEffect(() => {
+    const storedUsername = localStorage.getItem('rugbyPlannerUsername');
+    if (storedUsername) {
+      setCurrentUsername(storedUsername);
+    } else {
+      setShowUsernamePrompt(true);
+    }
+  }, []);
+
+  // Presence system: register user and send heartbeats
+  useEffect(() => {
+    if (!currentUsername) return;
+
+    const registerPresence = async () => {
+      try {
+        // Upsert user presence
+        await supabase
+          .from('active_users')
+          .upsert({
+            session_id: sessionId,
+            username: currentUsername,
+            last_seen: new Date().toISOString()
+          }, { onConflict: 'session_id' });
+      } catch (error) {
+        console.error('Error registering presence:', error);
+      }
+    };
+
+    const updateHeartbeat = async () => {
+      try {
+        await supabase
+          .from('active_users')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('session_id', sessionId);
+      } catch (error) {
+        console.error('Error updating heartbeat:', error);
+      }
+    };
+
+    const cleanupStaleUsers = async () => {
+      try {
+        // Remove users inactive for more than 2 minutes
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        await supabase
+          .from('active_users')
+          .delete()
+          .lt('last_seen', twoMinutesAgo);
+      } catch (error) {
+        console.error('Error cleaning up stale users:', error);
+      }
+    };
+
+    // Register immediately
+    registerPresence();
+
+    // Send heartbeat every 30 seconds
+    const heartbeatInterval = setInterval(() => {
+      updateHeartbeat();
+      cleanupStaleUsers();
+    }, 30000);
+
+    // Cleanup on unmount
+    return () => {
+      clearInterval(heartbeatInterval);
+      // Remove presence on exit
+      supabase
+        .from('active_users')
+        .delete()
+        .eq('session_id', sessionId)
+        .then(() => console.log('Presence cleaned up'))
+        .catch(err => console.error('Error cleaning up presence:', err));
+    };
+  }, [currentUsername, sessionId]);
+
+  // Subscribe to active users updates
+  useEffect(() => {
+    const fetchActiveUsers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('active_users')
+          .select('*')
+          .order('last_seen', { ascending: false });
+
+        if (!error && data) {
+          // Filter out current user and stale sessions
+          const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
+          const active = data.filter(user =>
+            user.session_id !== sessionId &&
+            new Date(user.last_seen).getTime() > twoMinutesAgo
+          );
+          setActiveUsers(active);
+        }
+      } catch (error) {
+        console.error('Error fetching active users:', error);
+      }
+    };
+
+    fetchActiveUsers();
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('active_users_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'active_users' },
+        () => fetchActiveUsers()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [sessionId]);
 
   // Manual refresh from Supabase
   const refreshFromSupabase = async () => {
@@ -2475,8 +2595,25 @@ const [lineups, setLineups] = useState({});
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-gray-900">{settings.teamName}</h1>
+              {/* Active Users Indicator */}
+              {activeUsers.length > 0 && (
+                <div className="flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded-full">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-[10px] font-medium text-green-700">
+                    {activeUsers.length} online
+                  </span>
+                </div>
+              )}
             </div>
-            <p className="text-xs text-gray-500">{settings.ageGroup} · {settings.coachName}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-gray-500">{settings.ageGroup} · {settings.coachName}</p>
+              {/* Show active usernames */}
+              {activeUsers.length > 0 && (
+                <span className="text-xs text-green-600">
+                  👥 {activeUsers.map(u => u.username).join(', ')}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Date Selector for Lineup/Overview */}
@@ -2578,6 +2715,58 @@ const [lineups, setLineups] = useState({});
           <button onClick={addMatch} disabled={!newMatch.opponent.trim()} className={`w-full py-3 rounded-xl font-bold text-white ${newMatch.opponent.trim() ? '' : 'opacity-50'}`} style={{ backgroundColor: DIOK.blue }}>Add Match</button>
         </div>
       </BottomSheet>
+
+      {/* Username Prompt Modal */}
+      {showUsernamePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-md w-full mx-4">
+            <div className="text-center mb-6">
+              <div className="text-4xl mb-3">👋</div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Welcome to Rugby Planner!</h2>
+              <p className="text-sm text-gray-600">Enter your name to see who else is online</p>
+            </div>
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Your name (e.g., Coach John)"
+                autoFocus
+                className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && e.target.value.trim()) {
+                    const username = e.target.value.trim();
+                    localStorage.setItem('rugbyPlannerUsername', username);
+                    setCurrentUsername(username);
+                    setShowUsernamePrompt(false);
+                  }
+                }}
+                onChange={(e) => {
+                  // Store temp value for button click
+                  e.target.dataset.username = e.target.value;
+                }}
+              />
+              <button
+                onClick={(e) => {
+                  const input = e.target.parentElement.querySelector('input');
+                  const username = input.value.trim();
+                  if (username) {
+                    localStorage.setItem('rugbyPlannerUsername', username);
+                    setCurrentUsername(username);
+                    setShowUsernamePrompt(false);
+                  }
+                }}
+                className="w-full py-3 rounded-xl font-bold text-white"
+                style={{ backgroundColor: DIOK.blue }}
+              >
+                Continue
+              </button>
+              <p className="text-xs text-gray-500 text-center">
+                Your name is stored locally and can be changed anytime
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } } .animate-slideUp { animation: slideUp 0.3s ease-out; }`}</style>
     </div>
   );
