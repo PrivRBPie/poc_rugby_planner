@@ -2507,32 +2507,34 @@ const [lineups, setLineups] = useState({});
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Refresh Button */}
+            {/* Refresh Button - only enabled when there are unpublished changes */}
             <button
               onClick={refreshFromSupabase}
-              disabled={isSyncing}
-              className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50"
-              title="Refresh data from server"
+              disabled={isSyncing || hasUnsavedChanges}
+              className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50 ${
+                !hasUnsavedChanges ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-400'
+              }`}
+              title={hasUnsavedChanges ? "Publish your changes first" : "Refresh data from server"}
             >
               <span className={isSyncing ? "animate-spin" : ""}>⟳</span>
               <span>Refresh</span>
             </button>
 
-            {/* Save Button */}
+            {/* Publish Button */}
             <button
               onClick={handleSave}
               disabled={isSyncing || !hasUnsavedChanges}
               className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-50 ${
                 hasUnsavedChanges ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-500'
               }`}
-              title={hasUnsavedChanges ? "You have unsaved changes" : "All changes saved"}
+              title={hasUnsavedChanges ? "You have unpublished changes" : "All changes published"}
             >
               {isSyncing ? (
-                <><span className="animate-spin">⟳</span><span>Saving...</span></>
+                <><span className="animate-spin">⟳</span><span>Publishing...</span></>
               ) : hasUnsavedChanges ? (
-                <><span>●</span><span>Save</span></>
+                <><span>●</span><span>Publish</span></>
               ) : (
-                <><span>✓</span><span>Saved</span></>
+                <><span>✓</span><span>Published</span></>
               )}
             </button>
           </div>
