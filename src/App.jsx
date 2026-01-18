@@ -346,28 +346,10 @@ const [lineups, setLineups] = useState({});
           .limit(1)
           .single();
 
-        if (error) {
-          console.error('Error loading from Supabase:', error);
-          setHasLoaded(true);
-          return;
-        }
+        // If error is PGRST116 (no rows), create initial data
+        if (error && error.code === 'PGRST116') {
+          console.log('No data found, creating initial row...');
 
-        if (data && data.data) {
-          const rugbyData = data.data;
-
-          // Update state with data from Supabase
-          setPlaydays(rugbyData.playdays || []);
-          setLineups(rugbyData.lineups || {});
-          setRatings(rugbyData.ratings || {});
-          setTraining(rugbyData.training || {});
-          setFavoritePositions(rugbyData.favoritePositions || {});
-          setAllocationRules(rugbyData.allocationRules || allocationRules);
-          setAvailability(rugbyData.availability || {});
-          setRugbyDataId(data.id);
-          setLastSyncTime(new Date());
-          setHasLoaded(true);
-        } else {
-          // No data yet, create initial row
           const initialData = {
             playdays: [],
             lineups: {},
@@ -384,10 +366,39 @@ const [lineups, setLineups] = useState({});
             .select()
             .single();
 
-          if (!insertError && newData) {
+          if (insertError) {
+            console.error('Error creating initial data:', insertError);
+          } else if (newData) {
+            console.log('Initial data created with ID:', newData.id);
             setRugbyDataId(newData.id);
           }
 
+          setHasLoaded(true);
+          return;
+        }
+
+        // If other error, log and continue
+        if (error) {
+          console.error('Error loading from Supabase:', error);
+          setHasLoaded(true);
+          return;
+        }
+
+        // Data exists, load it
+        if (data && data.data) {
+          const rugbyData = data.data;
+          console.log('Loaded existing data with ID:', data.id);
+
+          // Update state with data from Supabase
+          setPlaydays(rugbyData.playdays || []);
+          setLineups(rugbyData.lineups || {});
+          setRatings(rugbyData.ratings || {});
+          setTraining(rugbyData.training || {});
+          setFavoritePositions(rugbyData.favoritePositions || {});
+          setAllocationRules(rugbyData.allocationRules || allocationRules);
+          setAvailability(rugbyData.availability || {});
+          setRugbyDataId(data.id);
+          setLastSyncTime(new Date());
           setHasLoaded(true);
         }
       } catch (error) {
