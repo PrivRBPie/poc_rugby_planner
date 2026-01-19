@@ -2713,13 +2713,33 @@ const [lineups, setLineups] = useState({});
                     const benchScore = totalBench <= 2 ? satisfactionWeights.benchFairness : Math.max(0, satisfactionWeights.benchFairness - (totalBench - 2) * 3);
                     const satisfaction = Math.min(100, fieldScore + funScore + learningScore + benchScore); // Cap at 100
 
+                    // Build detailed breakdown for tooltip
+                    const halfDetails = playdayHalves.map(h => {
+                      const assignment = getPlayerAssignment(player.id, h.matchId, h.half);
+                      if (!assignment) return null;
+
+                      if (assignment.type === 'bench') {
+                        return `Match ${h.matchId} H${h.half}: Bench`;
+                      } else {
+                        const posName = assignment.pos?.name || assignment.pos?.id || '?';
+                        const isFav = (favoritePositions[player.id] || []).includes(assignment.pos?.id);
+                        const ratingKey = `${player.id}-${assignment.pos?.id}`;
+                        const rating = ratings[ratingKey] || 1;
+                        const isLearning = rating <= 2;
+                        const favMarker = isFav ? ' ⭐' : '';
+                        const learningMarker = isLearning ? ' 📚' : '';
+                        return `Match ${h.matchId} H${h.half}: ${posName}${favMarker}${learningMarker}`;
+                      }
+                    }).filter(Boolean).join('\n');
+
                     return {
                       player,
                       totalField,
                       totalBench,
                       funCount,
                       learningCount,
-                      satisfaction
+                      satisfaction,
+                      halfDetails
                     };
                   }).sort((a, b) => a.satisfaction - b.satisfaction); // Sort by satisfaction ascending (lowest first)
 
@@ -2729,7 +2749,7 @@ const [lineups, setLineups] = useState({});
                   const variance = satisfactions.reduce((sum, val) => sum + Math.pow(val - meanSatisfaction, 2), 0) / satisfactions.length;
                   const stdDev = Math.sqrt(variance);
 
-                  return playerStats.map(({ player, totalField, totalBench, funCount, learningCount, satisfaction }) => {
+                  return playerStats.map(({ player, totalField, totalBench, funCount, learningCount, satisfaction, halfDetails }) => {
                     // Determine if outlier (more than 1 std dev from mean)
                     const isLowOutlier = satisfaction < (meanSatisfaction - stdDev);
                     const isHighOutlier = satisfaction > (meanSatisfaction + stdDev);
@@ -2764,7 +2784,10 @@ const [lineups, setLineups] = useState({});
                           </div>
                         </td>
                         <td className="text-center p-2">
-                          <div className={`inline-flex items-center justify-center px-2 py-1 rounded-lg border font-semibold ${satisfactionColor}`}>
+                          <div
+                            className={`inline-flex items-center justify-center px-2 py-1 rounded-lg border font-semibold ${satisfactionColor} cursor-help`}
+                            title={`${player.name} - Satisfaction: ${Math.round(satisfaction)}%\n\nAssignments:\n${halfDetails}\n\nSummary:\n- Field: ${totalField} halves\n- Bench: ${totalBench} halves\n- Favorite positions: ${funCount}/${totalField}\n- Learning opportunities: ${learningCount}/${totalField}`}
+                          >
                             {Math.round(satisfaction)}%
                             {isLowOutlier && <span className="ml-1 text-[10px]">⚠️</span>}
                             {isHighOutlier && <span className="ml-1 text-[10px]">⭐</span>}
