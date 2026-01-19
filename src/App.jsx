@@ -1320,6 +1320,9 @@ const [lineups, setLineups] = useState({});
     });
 
     // Phase 2: Assign bench (balance both field time AND bench fairness)
+    // Calculate actual bench size based on available players
+    const actualBenchSize = Math.max(0, availablePlayers.length - positions.length);
+
     // Get Fair PlayTime weight to determine prioritization
     const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
     const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
@@ -1355,7 +1358,7 @@ const [lineups, setLineups] = useState({});
           return aBenchTime - bBenchTime;
         }
       })
-      .slice(0, BENCH_SIZE);
+      .slice(0, actualBenchSize);
 
     benchCandidates.forEach(p => {
       newBench.push(p.id);
@@ -1397,10 +1400,13 @@ const [lineups, setLineups] = useState({});
     const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
     const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
 
+    // Calculate actual bench size based on available players
+    const actualBenchSize = Math.max(0, availablePlayers.length - positions.length);
+
     // PHASE 1: GLOBAL BENCH DISTRIBUTION
     // Pre-allocate bench slots across ALL halves to ensure fairness
     const totalHalves = allHalvesForDay.length;
-    const totalBenchSlots = totalHalves * BENCH_SIZE;
+    const totalBenchSlots = totalHalves * actualBenchSize;
     const idealBenchPerPlayer = totalBenchSlots / availablePlayers.length;
 
     // Calculate target bench times for each player (rounded to ensure we fill all slots)
@@ -1435,7 +1441,7 @@ const [lineups, setLineups] = useState({});
       const key = `${playdayId}-${matchId}-${half}`;
       benchAssignments[key] = [];
 
-      // Select BENCH_SIZE players who need bench time most
+      // Select actualBenchSize players who need bench time most
       const benchCandidates = [...availablePlayers]
         .filter(p => playerBenchCount[p.id] < playerBenchTargets[p.id])
         .sort((a, b) => {
@@ -1449,7 +1455,7 @@ const [lineups, setLineups] = useState({});
           const bBench = (benchHistory[b.id] || 0) + playerBenchCount[b.id];
           return aBench - bBench;
         })
-        .slice(0, BENCH_SIZE);
+        .slice(0, actualBenchSize);
 
       benchCandidates.forEach(p => {
         benchAssignments[key].push(p.id);
