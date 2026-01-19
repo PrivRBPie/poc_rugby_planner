@@ -1039,6 +1039,11 @@ const [lineups, setLineups] = useState({});
     }
   };
 
+  const clearLineup = (playdayId, matchId, half) => {
+    const key = `${playdayId}-${matchId}-${half}`;
+    setLineups(prev => ({ ...prev, [key]: { assignments: {}, bench: [] } }));
+  };
+
   const calculatePlayerPositionScore = (player, position, assigned, rules, mode = allocationMode) => {
     let score = 0;
     const explanations = [];
@@ -1139,14 +1144,24 @@ const [lineups, setLineups] = useState({});
       }
     });
 
-    // Phase 2: Assign bench (prioritize players with MOST field time - give them a rest)
+    // Phase 2: Assign bench (balance both field time AND bench fairness)
     const benchCandidates = availablePlayers
       .filter(p => !assigned.has(p.id))
       .sort((a, b) => {
-        // Players with more field time should go to bench first (to balance playtime)
         const aFieldTime = fieldHistory[a.id] || 0;
         const bFieldTime = fieldHistory[b.id] || 0;
-        return bFieldTime - aFieldTime; // Descending: most field time first
+        const aBenchTime = benchHistory[a.id] || 0;
+        const bBenchTime = benchHistory[b.id] || 0;
+
+        // Primary: Give rest to players with more field time
+        // Secondary: Among players with similar field time, prioritize those with LESS bench time
+        const fieldTimeDiff = bFieldTime - aFieldTime;
+        if (Math.abs(fieldTimeDiff) > 1) {
+          return fieldTimeDiff; // Significant field time difference, prioritize that
+        }
+
+        // If field time is similar, prioritize players with FEWER bench times
+        return aBenchTime - bBenchTime; // Ascending: least bench time first
       })
       .slice(0, BENCH_SIZE);
 
@@ -1979,6 +1994,10 @@ const [lineups, setLineups] = useState({});
                 <Icons.Wand /> 📚 Training
               </button>
             </div>
+            <button onClick={() => clearLineup(selectedPlayday.id, matchId, half)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 transition-colors">
+              <Icons.Trash /> Clear
+            </button>
             <div className="text-xs text-gray-500 flex items-center gap-1">
               💡 Drag & drop to swap positions
             </div>
