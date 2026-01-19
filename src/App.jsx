@@ -2071,6 +2071,28 @@ const [lineups, setLineups] = useState({});
                         <div className="flex flex-col items-end gap-0.5"><ScoreBadge scores={scores} /><span className="text-[9px] text-gray-400">{scores.filled}/12 + {scores.bench}B</span></div>
                       </div>
                     </div>
+                    {!isExpanded && (
+                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => proposeLineup(selectedPlayday.id, matchId, half, 'game')}
+                          className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+                          title="Auto-propose (Game mode)">
+                          <span className="text-xs">🏆</span>
+                        </button>
+                        <button
+                          onClick={() => proposeLineup(selectedPlayday.id, matchId, half, 'training')}
+                          className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+                          title="Auto-propose (Training mode)">
+                          <span className="text-xs">📚</span>
+                        </button>
+                        <button
+                          onClick={() => clearLineup(selectedPlayday.id, matchId, half)}
+                          className="p-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+                          title="Clear lineup">
+                          <Icons.Trash />
+                        </button>
+                      </div>
+                    )}
                     <div className={`transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}><Icons.ChevronDown /></div>
                   </div>
                   {!isExpanded && renderCollapsedView(matchId, half)}
@@ -2493,9 +2515,35 @@ const [lineups, setLineups] = useState({});
           <p className="text-sm text-gray-500">Login activity and system overview</p>
         </div>
 
+        {/* Database Setup Instructions */}
+        {loginHistory.length === 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+            <h3 className="text-sm font-bold text-yellow-800 mb-2">⚠️ Database Setup Required</h3>
+            <p className="text-xs text-yellow-700 mb-2">The login_history table needs to be created in Supabase:</p>
+            <pre className="bg-white p-2 rounded text-[10px] text-gray-800 overflow-x-auto">
+{`CREATE TABLE login_history (
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  logged_in_at TIMESTAMPTZ DEFAULT NOW()
+);`}
+            </pre>
+          </div>
+        )}
+
         {/* Currently Online */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm p-4">
-          <h3 className="text-lg font-bold text-gray-900 mb-3">Currently Online</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-3">Currently Online ({activeUsers.length + 1})</h3>
+          {/* Show current user */}
+          <div className="mb-2">
+            <div className="flex items-center gap-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+              <div className="flex-1">
+                <div className="font-semibold text-gray-900">{currentUsername || 'You'} <span className="text-xs text-blue-600">(you)</span></div>
+                <div className="text-xs text-gray-500">Current session</div>
+              </div>
+            </div>
+          </div>
           {activeUsers.length === 0 ? (
             <p className="text-sm text-gray-400">No other users online</p>
           ) : (
