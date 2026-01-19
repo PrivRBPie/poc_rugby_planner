@@ -1189,9 +1189,39 @@ const [lineups, setLineups] = useState({});
     });
   };
 
-  const calculatePlayerPositionScore = (player, position, assigned, rules, mode = allocationMode) => {
+  // Clear all lineups for the entire day
+  const clearFullDay = (playdayId) => {
+    if (!selectedPlayday) return;
+
+    const allHalvesForDay = selectedPlayday.matches.flatMap(m => [
+      { matchId: m.id, half: 1 },
+      { matchId: m.id, half: 2 },
+    ]);
+
+    const clearedLineups = {};
+    allHalvesForDay.forEach(({ matchId, half }) => {
+      const key = `${playdayId}-${matchId}-${half}`;
+      clearedLineups[key] = { assignments: {}, bench: [] };
+    });
+
+    setLineups(prev => ({ ...prev, ...clearedLineups }));
+
+    // Log the action
+    const playday = playdays.find(pd => pd.id === playdayId);
+    logAction('clear_full_day', {
+      playday: playday?.name,
+      halvesCount: allHalvesForDay.length,
+      matchesCount: selectedPlayday.matches.length
+    });
+  };
+
+  const calculatePlayerPositionScore = (player, position, assigned, rules, mode = allocationMode, customFieldHistory = null, customBenchHistory = null) => {
     let score = 0;
     const explanations = [];
+
+    // Use custom history if provided, otherwise use component state
+    const effectiveFieldHistory = customFieldHistory || fieldHistory;
+    const effectiveBenchHistory = customBenchHistory || benchHistory;
 
     // HARD constraint: No duplicate assignments
     if (assigned.has(player.id)) return { score: -Infinity, explanations: ['Already assigned in this half'] };
@@ -1204,9 +1234,9 @@ const [lineups, setLineups] = useState({});
     for (const rule of rules.filter(r => r.enabled && r.type === 'SOFT')) {
       switch(rule.id) {
         case 2: // Fair PlayTime (0-100 scale: fewer halves played = higher score)
-          const maxField = Math.max(...Object.values(fieldHistory), 1);
-          const minField = Math.min(...Object.values(fieldHistory), 0);
-          const playerField = fieldHistory[player.id] || 0;
+          const maxField = Math.max(...Object.values(effectiveFieldHistory), 1);
+          const minField = Math.min(...Object.values(effectiveFieldHistory), 0);
+          const playerField = effectiveFieldHistory[player.id] || 0;
           // Inverse: players with fewer halves get higher scores
           const fairnessNormalized = maxField > minField ? ((maxField - playerField) / (maxField - minField)) * 100 : 100;
           const fairnessScore = (fairnessNormalized / 100) * rule.weight * 10;
@@ -1396,10 +1426,7 @@ const [lineups, setLineups] = useState({});
           .filter(p => !assigned.has(p.id))
           .map(p => {
             // Use updated history for scoring
-            const tempFieldHistory = currentFieldHistory;
-            const tempBenchHistory = currentBenchHistory;
-
-            const { score, explanations } = calculatePlayerPositionScore(p, pos, assigned, activeRules, mode);
+            const { score, explanations } = calculatePlayerPositionScore(p, pos, assigned, activeRules, mode, currentFieldHistory, currentBenchHistory);
             return { player: p, score, explanations };
           })
           .filter(c => c.score > -Infinity)
@@ -2351,20 +2378,24 @@ const [lineups, setLineups] = useState({});
               <div className="text-sm font-semibold text-purple-900 mb-0.5">⚡ Auto-Propose Full Day</div>
               <p className="text-xs text-purple-700">Optimize all {selectedPlayday.matches.length} matches ({allHalves.length} halves) at once for better overall balance</p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => proposeFullDay(selectedPlayday.id, 'game')}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm shadow-md transition-colors"
+                className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
                 title="Auto-propose all halves (Game mode)">
-                <span>🏆</span>
-                <span>Game Mode</span>
+                <span className="text-xs">🏆</span>
               </button>
               <button
                 onClick={() => proposeFullDay(selectedPlayday.id, 'training')}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md transition-colors"
+                className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
                 title="Auto-propose all halves (Training mode)">
-                <span>📚</span>
-                <span>Training Mode</span>
+                <span className="text-xs">📚</span>
+              </button>
+              <button
+                onClick={() => clearFullDay(selectedPlayday.id)}
+                className="p-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+                title="Clear all lineups for this day">
+                <Icons.Trash />
               </button>
             </div>
           </div>
