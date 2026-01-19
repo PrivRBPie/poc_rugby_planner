@@ -283,14 +283,17 @@ const [lineups, setLineups] = useState({});
   const [expandedPlayer, setExpandedPlayer] = useState(null);
   const [expandedHalf, setExpandedHalf] = useState(null);
   const [editingPlayday, setEditingPlayday] = useState(null);
+  const [editingPlaydayDate, setEditingPlaydayDate] = useState(null);
   const [editingMatch, setEditingMatch] = useState(null);
   const [showWhySelected, setShowWhySelected] = useState(null); // Format: 'playdayId-matchId-half-posId'
+  const [showPlayerInfo, setShowPlayerInfo] = useState(null); // Format: 'playdayId-matchId-half-posId'
   const [showSatisfactionExplanation, setShowSatisfactionExplanation] = useState(false);
 
   // Presence tracking
   const [currentUsername, setCurrentUsername] = useState(null);
   const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const [activeUsers, setActiveUsers] = useState([]);
+  const [loginHistory, setLoginHistory] = useState([]);
   const [showUsernamePrompt, setShowUsernamePrompt] = useState(false);
 
   // Allocation Rules Configuration
@@ -468,6 +471,15 @@ const [lineups, setLineups] = useState({});
             username: currentUsername,
             last_seen: new Date().toISOString()
           }, { onConflict: 'session_id' });
+
+        // Log the login activity
+        await supabase
+          .from('login_history')
+          .insert({
+            username: currentUsername,
+            session_id: sessionId,
+            logged_in_at: new Date().toISOString()
+          });
       } catch (error) {
         console.error('Error registering presence:', error);
       }
@@ -578,6 +590,32 @@ const [lineups, setLineups] = useState({});
       supabase.removeChannel(channel);
     };
   }, [sessionId]);
+
+  // Fetch login history for admin view
+  useEffect(() => {
+    const fetchLoginHistory = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('login_history')
+          .select('*')
+          .order('logged_in_at', { ascending: false })
+          .limit(100);
+
+        if (!error && data) {
+          setLoginHistory(data);
+        }
+      } catch (error) {
+        console.error('Error fetching login history:', error);
+      }
+    };
+
+    fetchLoginHistory();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchLoginHistory, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Track if we've done initial remote check
   const hasCheckedRemoteRef = useRef(false);
@@ -796,6 +834,7 @@ const [lineups, setLineups] = useState({});
     { id: 'lineup', label: 'Lineup', icon: <Icons.Grid /> },
     { id: 'overview', label: 'Overview', icon: <Icons.Eye /> },
     { id: 'rules', label: 'Rules', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg> },
+    { id: 'admin', label: 'Admin', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> },
   ];
 
   const BENCH_SIZE = 8;
@@ -972,11 +1011,14 @@ const [lineups, setLineups] = useState({});
   };
 
   const splitCandidates = (candidates, forBench) => {
-    if (forBench) return { best: candidates, alternatives: [] };
-    const trained = candidates.filter(c => c.trained && !c.isAssignedElsewhereInHalf);
+    if (forBench) return { best: candidates, alternatives: [], untrained: [] };
+    const available = candidates.filter(c => !c.isAssignedElsewhereInHalf);
+    const trained = available.filter(c => c.trained);
+    const untrained = available.filter(c => !c.trained);
     return {
       best: trained.filter(c => c.rating > learningPlayerConfig.maxStars || c.timesAtPosition > learningPlayerConfig.maxGames),
       alternatives: trained.filter(c => c.rating <= learningPlayerConfig.maxStars && c.timesAtPosition <= learningPlayerConfig.maxGames),
+      untrained: untrained,
     };
   };
 
@@ -1318,6 +1360,11 @@ const [lineups, setLineups] = useState({});
     setSelectedPlaydayId(id);
   };
 
+  const updatePlaydayDate = (playdayId, newDate) => {
+    const updated = playdays.map(p => p.id === playdayId ? { ...p, date: newDate } : p);
+    setPlaydays(updated);
+  };
+
   const getPositionHistoryText = (playerId) => {
     const counts = playerPositionCounts[playerId];
     if (!counts || Object.keys(counts).length === 0) return 'No match history';
@@ -1389,7 +1436,35 @@ const [lineups, setLineups] = useState({});
                     ) : (
                       <div className="font-semibold text-gray-900 hover:text-blue-600 cursor-text" onClick={(e) => { e.stopPropagation(); setEditingPlayday(playday.id); }}>{playday.name}</div>
                     )}
-                    <div className="text-sm text-gray-500">{playday.date} · {playday.matches.length} match{playday.matches.length !== 1 ? 'es' : ''}</div>
+                    <div className="text-sm text-gray-500 flex items-center gap-2">
+                      {editingPlaydayDate === playday.id ? (
+                        <input
+                          type="date"
+                          defaultValue={playday.date}
+                          autoFocus
+                          onBlur={(e) => {
+                            if (e.target.value) updatePlaydayDate(playday.id, e.target.value);
+                            setEditingPlaydayDate(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              if (e.target.value) updatePlaydayDate(playday.id, e.target.value);
+                              setEditingPlaydayDate(null);
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-sm text-gray-700 bg-white border border-blue-300 rounded px-2 py-1"
+                        />
+                      ) : (
+                        <span
+                          className="hover:text-blue-600 cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); setEditingPlaydayDate(playday.id); }}
+                        >
+                          {playday.date}
+                        </span>
+                      )}
+                      <span>· {playday.matches.length} match{playday.matches.length !== 1 ? 'es' : ''}</span>
+                    </div>
                     <div className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1 ${filledHalves === totalHalves && totalHalves > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{filledHalves}/{totalHalves} halves ready</div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1586,13 +1661,28 @@ const [lineups, setLineups] = useState({});
       const halfIndex = allHalves.findIndex(h => h.matchId === matchId && h.half === half);
       const candidates = selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half
         ? getCandidates(selectedPlayday.id, matchId, half, selectedPosition.posId, selectedPosition.isBench) : [];
-      const { best, alternatives } = splitCandidates(candidates, selectedPosition?.isBench);
+      const { best, alternatives, untrained } = splitCandidates(candidates, selectedPosition?.isBench);
 
       const PosButton = ({ pos }) => {
         const assignedPlayer = players.find(p => p.id === lineup.assignments[pos.id]);
         const isSelected = selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half && selectedPosition?.posId === pos.id && !selectedPosition?.isBench;
         const rating = assignedPlayer ? (ratings[`${assignedPlayer.id}-${pos.id}`] || 0) : 0;
         const isPreferred = assignedPlayer ? isFavoritePosition(assignedPlayer.id, pos.id) : false;
+
+        // Calculate playtime for this player in current playday
+        let playdayPlaytime = 0;
+        if (assignedPlayer) {
+          selectedPlayday.matches.forEach(m => {
+            [1, 2].forEach(h => {
+              const lineupKey = `${selectedPlayday.id}-${m.id}-${h}`;
+              const matchLineup = lineups[lineupKey] || { assignments: {}, bench: [] };
+              // Check if player is assigned to any field position (not on bench)
+              if (Object.values(matchLineup.assignments).includes(assignedPlayer.id)) {
+                playdayPlaytime++;
+              }
+            });
+          });
+        }
 
         const handleDragStart = (e) => {
           if (!assignedPlayer) return;
@@ -1646,11 +1736,12 @@ const [lineups, setLineups] = useState({});
         };
 
         const handleClick = (e) => {
-          // If player is assigned, show why selected on right-click or long press
+          // If player is assigned, toggle player info on right-click
           if (assignedPlayer && e.type === 'contextmenu') {
             e.preventDefault();
-            const whyKey = `${selectedPlayday.id}-${matchId}-${half}-${pos.id}`;
-            setShowWhySelected(showWhySelected === whyKey ? null : whyKey);
+            const infoKey = `${selectedPlayday.id}-${matchId}-${half}-${pos.id}`;
+            setShowPlayerInfo(showPlayerInfo === infoKey ? null : infoKey);
+            setShowWhySelected(null); // Close why selected if open
             return;
           }
           setSelectedPosition(isSelected ? null : { playdayId: selectedPlayday.id, matchId, half, posId: pos.id, isBench: false });
@@ -1707,6 +1798,45 @@ const [lineups, setLineups] = useState({});
               <button
                 onClick={() => setShowWhySelected(null)}
                 className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center bg-blue-200 hover:bg-blue-300 rounded text-blue-800 text-[10px] font-bold"
+              >×</button>
+            </div>
+          )}
+
+          {/* Player Info Popup (on right-click) */}
+          {showPlayerInfo === whyKey && assignedPlayer && (
+            <div className="absolute z-50 top-full left-0 mt-1 w-52 p-2 bg-emerald-50 border-2 border-emerald-300 rounded-lg shadow-lg">
+              <div className="text-[10px] font-bold text-emerald-800 mb-1">{assignedPlayer.name}</div>
+              <div className="space-y-1 text-[9px] text-emerald-700">
+                <div className="flex justify-between">
+                  <span>Rating at #{pos.code}:</span>
+                  <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={s <= rating ? 'text-yellow-500' : 'text-gray-300'}>★</span>)}</div>
+                </div>
+                <div className="flex justify-between">
+                  <span>Times at #{pos.code}:</span>
+                  <span className="font-semibold">{playerPositionCounts[assignedPlayer.id]?.[pos.id] || 0}×</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Playtime today:</span>
+                  <span className="font-semibold">{playdayPlaytime} / {selectedPlayday.matches.length * 2} halves</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total playtime:</span>
+                  <span className="font-semibold">{fieldHistory[assignedPlayer.id] || 0} halves</span>
+                </div>
+                {isPreferred && (
+                  <div className="text-[8px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <span>★</span><span>Favorite position</span>
+                  </div>
+                )}
+                {!isTrainedForPosition && (
+                  <div className="text-[8px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <span>⚠️</span><span>Not trained for this position</span>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setShowPlayerInfo(null)}
+                className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center bg-emerald-200 hover:bg-emerald-300 rounded text-emerald-800 text-[10px] font-bold"
               >×</button>
             </div>
           )}
@@ -1806,21 +1936,29 @@ const [lineups, setLineups] = useState({});
         );
       };
 
-      const PlayerRow = ({ p, onClick, isAlt, forBench }) => (
+      const PlayerRow = ({ p, onClick, isAlt, forBench, isUntrained, gameMode }) => (
         <button onClick={onClick} disabled={p.isAssignedElsewhereInHalf}
-          className={`w-full text-left p-1.5 rounded-lg transition-all border text-xs ${p.isCurrentlyHere ? 'bg-blue-50 border-blue-300' : p.isAssignedElsewhereInHalf ? 'bg-gray-100 border-gray-200 opacity-40 cursor-not-allowed' : isAlt ? 'bg-amber-50 border-amber-200 hover:bg-amber-100' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+          className={`w-full text-left p-1.5 rounded-lg transition-all border text-xs ${
+            p.isCurrentlyHere ? 'bg-blue-50 border-blue-300' :
+            p.isAssignedElsewhereInHalf ? 'bg-gray-100 border-gray-200 opacity-40 cursor-not-allowed' :
+            isUntrained ? (gameMode ? 'bg-red-50 border-red-300 hover:bg-red-100' : 'bg-orange-50 border-orange-200 hover:bg-orange-100') :
+            isAlt ? 'bg-amber-50 border-amber-200 hover:bg-amber-100' :
+            'bg-white border-gray-200 hover:bg-gray-50'
+          }`}>
           <div className="flex items-center gap-1.5">
             <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: DIOK.blue }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
                 <span className="font-medium text-gray-900 truncate">{p.name.split(' ')[0]}</span>
-                {p.isPreferred && !forBench && <span className="text-yellow-500">★</span>}
+                {isUntrained && <span className="text-red-500 text-[10px]">⚠️</span>}
+                {p.isPreferred && !forBench && !isUntrained && <span className="text-yellow-500">★</span>}
                 {!forBench && p.timesAtPosition > 0 && <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-1 rounded">{p.timesAtPosition}×</span>}
               </div>
-              {forBench ? <BenchIndicator count={p.playdayBenchCount || 0} /> : <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}</div>}
+              {forBench ? <BenchIndicator count={p.playdayBenchCount || 0} /> : isUntrained ? <div className="text-[9px] text-red-600 font-medium">Not trained</div> : <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}</div>}
             </div>
           </div>
           {p.isAssignedElsewhereInHalf && <div className="text-[9px] text-red-500 flex items-center gap-0.5 mt-0.5"><Icons.AlertTriangle /> Already assigned</div>}
+          {isUntrained && gameMode && <div className="text-[9px] text-red-600 flex items-center gap-0.5 mt-0.5 font-medium"><Icons.AlertTriangle /> Warning: Game mode requires training</div>}
         </button>
       );
 
@@ -1881,9 +2019,10 @@ const [lineups, setLineups] = useState({});
 
                   <div className="flex-1 overflow-auto">
                     {!selectedPosition.isBench && best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1" title={`Players with >${learningPlayerConfig.maxStars} stars or >${learningPlayerConfig.maxGames} games at this position`}>✓ Skilled Players</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
-                    {!selectedPosition.isBench && alternatives.length > 0 && <div><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title={`Players with ≤${learningPlayerConfig.maxStars} stars and ≤${learningPlayerConfig.maxGames} games at this position`}>◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
+                    {!selectedPosition.isBench && alternatives.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title={`Players with ≤${learningPlayerConfig.maxStars} stars and ≤${learningPlayerConfig.maxGames} games at this position`}>◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
+                    {!selectedPosition.isBench && untrained.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-red-600 mb-1 px-1 flex items-center gap-1" title="Players not trained for this position"><span>⚠️</span><span>Untrained Players</span>{selectedPlayday.type === 'game' && <span className="text-[9px] bg-red-100 px-1 rounded">(Game)</span>}</div><div className="space-y-1">{untrained.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isUntrained gameMode={selectedPlayday.type === 'game'} />)}</div></div>}
                     {selectedPosition.isBench && candidates.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="mb-1"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1" title="Dots show how many times on bench this game day">Available Players</div><div className="space-y-1">{candidates.filter(p => !p.isAssignedElsewhereInHalf).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div></div>}
-                    {!selectedPosition.isBench && best.length === 0 && alternatives.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No trained players</div>}
+                    {!selectedPosition.isBench && best.length === 0 && alternatives.length === 0 && untrained.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No available players</div>}
                   </div>
                 </>
               ) : <div className="flex-1 flex items-center justify-center text-xs text-gray-400 text-center p-2">← Tap position</div>}
@@ -2319,6 +2458,75 @@ const [lineups, setLineups] = useState({});
   };
 
   // ==================== RULES VIEW ====================
+  // ==================== ADMIN VIEW ====================
+  const AdminView = () => {
+    const groupedHistory = loginHistory.reduce((acc, log) => {
+      const date = new Date(log.logged_in_at).toLocaleDateString();
+      if (!acc[date]) acc[date] = [];
+      acc[date].push(log);
+      return acc;
+    }, {});
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Admin Dashboard</h2>
+          <p className="text-sm text-gray-500">Login activity and system overview</p>
+        </div>
+
+        {/* Currently Online */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm p-4">
+          <h3 className="text-lg font-bold text-gray-900 mb-3">Currently Online</h3>
+          {activeUsers.length === 0 ? (
+            <p className="text-sm text-gray-400">No other users online</p>
+          ) : (
+            <div className="space-y-2">
+              {activeUsers.map(user => (
+                <div key={user.session_id} className="flex items-center gap-3 p-2 bg-emerald-50 rounded-lg">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900">{user.username}</div>
+                    <div className="text-xs text-gray-500">Last seen: {new Date(user.last_seen).toLocaleTimeString()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Login History */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="text-lg font-bold text-gray-900">Login History</h3>
+            <p className="text-xs text-gray-500">Last 100 logins</p>
+          </div>
+          <div className="max-h-96 overflow-y-auto">
+            {Object.keys(groupedHistory).length === 0 ? (
+              <p className="text-sm text-gray-400 p-4">No login history yet</p>
+            ) : (
+              Object.entries(groupedHistory).map(([date, logs]) => (
+                <div key={date} className="border-b border-gray-100 last:border-0">
+                  <div className="bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-700">{date}</div>
+                  <div className="divide-y divide-gray-100">
+                    {logs.map((log, idx) => (
+                      <div key={idx} className="px-4 py-2 flex items-center justify-between hover:bg-gray-50">
+                        <div>
+                          <div className="font-semibold text-sm text-gray-900">{log.username}</div>
+                          <div className="text-xs text-gray-500">Session: {log.session_id.slice(0, 20)}...</div>
+                        </div>
+                        <div className="text-xs text-gray-500">{new Date(log.logged_in_at).toLocaleTimeString()}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const RulesView = () => {
     const activeRules = allocationRules[allocationMode];
 
@@ -2922,6 +3130,7 @@ const [lineups, setLineups] = useState({});
         {activeTab === 'lineup' && <LineupView />}
         {activeTab === 'overview' && <OverviewView />}
         {activeTab === 'rules' && <RulesView />}
+        {activeTab === 'admin' && <AdminView />}
       </main>
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 shadow-lg">
         <div className="max-w-3xl mx-auto flex gap-1">
