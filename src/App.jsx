@@ -1384,7 +1384,10 @@ const [lineups, setLineups] = useState({});
 
   // Auto-propose all halves for the entire game day - GLOBAL OPTIMIZATION APPROACH
   const proposeFullDay = (playdayId, mode = allocationMode) => {
-    if (!selectedPlayday) return;
+    if (!selectedPlayday) {
+      console.log('proposeFullDay: no selectedPlayday');
+      return;
+    }
 
     const allHalvesForDay = selectedPlayday.matches.flatMap(m => [
       { matchId: m.id, half: 1 },
@@ -1396,12 +1399,20 @@ const [lineups, setLineups] = useState({});
       return !avail || avail === 'available';
     });
 
+    console.log('proposeFullDay: total players=', players.length, 'available=', availablePlayers.length);
+
+    if (availablePlayers.length === 0) {
+      console.log('proposeFullDay: NO AVAILABLE PLAYERS!');
+      return;
+    }
+
     const activeRules = allocationRules[mode];
     const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
     const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
 
     // Calculate actual bench size based on available players
     const actualBenchSize = Math.max(0, availablePlayers.length - positions.length);
+    console.log('proposeFullDay: actualBenchSize=', actualBenchSize, '(', availablePlayers.length, '-', positions.length, ')');
 
     // PHASE 1: GLOBAL BENCH DISTRIBUTION
     // Pre-allocate bench slots across ALL halves to ensure fairness
@@ -1437,7 +1448,7 @@ const [lineups, setLineups] = useState({});
     const playerBenchCount = {}; // Track how many times each player has been assigned bench
     availablePlayers.forEach(p => playerBenchCount[p.id] = 0);
 
-    allHalvesForDay.forEach(({ matchId, half }) => {
+    allHalvesForDay.forEach(({ matchId, half }, index) => {
       const key = `${playdayId}-${matchId}-${half}`;
       benchAssignments[key] = [];
 
@@ -1456,6 +1467,10 @@ const [lineups, setLineups] = useState({});
           return aBench - bBench;
         })
         .slice(0, actualBenchSize);
+
+      if (index === 0) {
+        console.log('proposeFullDay: first half bench candidates:', benchCandidates.length, 'actualBenchSize:', actualBenchSize);
+      }
 
       benchCandidates.forEach(p => {
         benchAssignments[key].push(p.id);
