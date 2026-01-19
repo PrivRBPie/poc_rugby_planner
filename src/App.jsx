@@ -2625,40 +2625,6 @@ const [lineups, setLineups] = useState({});
           <p className="text-sm text-gray-500">Login activity and system overview</p>
         </div>
 
-        {/* Database Setup Instructions */}
-        {(loginHistory.length === 0 || actionLog.length === 0) && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-            <h3 className="text-sm font-bold text-yellow-800 mb-2">⚠️ Database Setup Required</h3>
-            {loginHistory.length === 0 && (
-              <>
-                <p className="text-xs text-yellow-700 mb-2">The login_history table needs to be created in Supabase:</p>
-                <pre className="bg-white p-2 rounded text-[10px] text-gray-800 overflow-x-auto mb-3">
-{`CREATE TABLE login_history (
-  id BIGSERIAL PRIMARY KEY,
-  username TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  logged_in_at TIMESTAMPTZ DEFAULT NOW()
-);`}
-                </pre>
-              </>
-            )}
-            {actionLog.length === 0 && (
-              <>
-                <p className="text-xs text-yellow-700 mb-2">The action_log table needs to be created in Supabase:</p>
-                <pre className="bg-white p-2 rounded text-[10px] text-gray-800 overflow-x-auto">
-{`CREATE TABLE action_log (
-  id BIGSERIAL PRIMARY KEY,
-  username TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  action_type TEXT NOT NULL,
-  details JSONB DEFAULT '{}',
-  timestamp TIMESTAMPTZ DEFAULT NOW()
-);`}
-                </pre>
-              </>
-            )}
-          </div>
-        )}
 
         {/* Currently Online */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm p-4">
@@ -3275,11 +3241,11 @@ const [lineups, setLineups] = useState({});
                 </div>
               )}
             </div>
-            <div className="flex flex-col items-end gap-0.5">
+            <div className="flex items-center gap-2">
               <p className="text-xs text-gray-500">
-                {settings.ageGroup} · Coach {currentUsername || 'Coach'}
+                {settings.ageGroup} · Coach <span className="text-green-600">{currentUsername || 'Coach'}</span>
               </p>
-              {/* Show other active coaches */}
+              {/* Show other active coaches on same line */}
               {activeUsers.length > 0 && (
                 <span className="text-xs text-green-600">
                   👥 {activeUsers.map(u => u.username).join(', ')}
