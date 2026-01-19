@@ -1575,16 +1575,26 @@ const [lineups, setLineups] = useState({});
         }
       });
 
+      // Add any remaining unassigned players to the bench
+      const finalBench = [...benchAssignments[key]];
+      availablePlayers.forEach(p => {
+        const isOnField = Object.values(newAssignments).includes(p.id);
+        const isOnBench = finalBench.includes(p.id);
+        if (!isOnField && !isOnBench) {
+          finalBench.push(p.id);
+        }
+      });
+
       // Update history for next half
       Object.values(newAssignments).forEach(playerId => {
         if (playerId) currentFieldHistory[playerId] = (currentFieldHistory[playerId] || 0) + 1;
       });
-      benchAssignments[key].forEach(playerId => {
+      finalBench.forEach(playerId => {
         if (playerId) currentBenchHistory[playerId] = (currentBenchHistory[playerId] || 0) + 1;
       });
 
       // Store lineup
-      newLineupsForDay[key] = { assignments: newAssignments, bench: benchAssignments[key] };
+      newLineupsForDay[key] = { assignments: newAssignments, bench: finalBench };
       newExplanationsForDay[key] = explanationsMap;
     });
 
