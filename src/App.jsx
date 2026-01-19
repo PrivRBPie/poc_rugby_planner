@@ -1256,14 +1256,15 @@ const [lineups, setLineups] = useState({});
         // Calculate total playtime difference (field + bench)
         const totalTimeDiff = aTotalTime - bTotalTime;
 
-        // If Fair PlayTime weight is high (>0.7), prioritize bench balance more aggressively
+        // If Fair PlayTime weight is high (>0.7), prioritize bench fairness
         if (fairPlayWeight > 0.7) {
-          // Primary: Players with less total playtime get priority
-          if (totalTimeDiff !== 0) {
-            return totalTimeDiff; // Ascending: less total time = higher priority for bench
+          // Primary: Assign bench to players with FEWER bench times (to balance bench distribution)
+          const benchDiff = aBenchTime - bBenchTime;
+          if (benchDiff !== 0) {
+            return benchDiff; // Ascending: fewer bench times = higher priority for bench
           }
-          // Secondary: Among equal total time, prioritize those with FEWER bench times
-          return aBenchTime - bBenchTime;
+          // Secondary: Among equal bench time, assign to those with MORE field time (they need rest)
+          return bFieldTime - aFieldTime; // Descending: more field time = higher priority for bench
         } else {
           // Original logic: prioritize field time rest
           const fieldTimeDiff = bFieldTime - aFieldTime;
