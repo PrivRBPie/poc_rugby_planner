@@ -1306,6 +1306,121 @@ const [lineups, setLineups] = useState({});
     });
   };
 
+  // Auto-propose all halves for the entire game day
+  const proposeFullDay = (playdayId, mode = allocationMode) => {
+    if (!selectedPlayday) return;
+
+    // Get all halves in order
+    const allHalvesForDay = selectedPlayday.matches.flatMap(m => [
+      { matchId: m.id, half: 1 },
+      { matchId: m.id, half: 2 },
+    ]);
+
+    // Process each half sequentially, so each one sees the updated history from previous halves
+    const newLineupsForDay = {};
+    const newExplanationsForDay = {};
+
+    allHalvesForDay.forEach(({ matchId, half }) => {
+      // Calculate current history including lineups we've just created
+      const currentFieldHistory = { ...fieldHistory };
+      const currentBenchHistory = { ...benchHistory };
+
+      // Update history with newly created lineups in this batch
+      Object.entries(newLineupsForDay).forEach(([key, lineup]) => {
+        Object.values(lineup.assignments || {}).forEach(playerId => {
+          if (playerId) currentFieldHistory[playerId] = (currentFieldHistory[playerId] || 0) + 1;
+        });
+        (lineup.bench || []).forEach(playerId => {
+          if (playerId) currentBenchHistory[playerId] = (currentBenchHistory[playerId] || 0) + 1;
+        });
+      });
+
+      // Now run the standard allocation algorithm with updated history
+      const assigned = new Set();
+      const newAssignments = {};
+      const explanationsMap = {};
+      const activeRules = allocationRules[mode];
+
+      // Get available players for this half
+      const availablePlayersForHalf = players.filter(p => {
+        const avail = availability[p.id];
+        return !avail || avail === 'available';
+      });
+
+      // Phase 1: Assign field positions
+      positions.forEach(pos => {
+        const candidateScores = availablePlayersForHalf
+          .filter(p => !assigned.has(p.id))
+          .map(p => {
+            // Use updated history for scoring
+            const tempFieldHistory = currentFieldHistory;
+            const tempBenchHistory = currentBenchHistory;
+
+            const { score, explanations } = calculatePlayerPositionScore(p, pos, assigned, activeRules, mode);
+            return { player: p, score, explanations };
+          })
+          .filter(c => c.score > -Infinity)
+          .sort((a, b) => b.score - a.score);
+
+        if (candidateScores.length > 0) {
+          const best = candidateScores[0];
+          newAssignments[pos.id] = best.player.id;
+          assigned.add(best.player.id);
+          explanationsMap[`${pos.id}-${best.player.id}`] = {
+            position: pos,
+            player: best.player,
+            score: best.score,
+            explanations: best.explanations,
+          };
+        }
+      });
+
+      // Phase 2: Assign bench with updated history
+      const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
+      const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
+
+      const benchCandidates = availablePlayersForHalf
+        .filter(p => !assigned.has(p.id))
+        .sort((a, b) => {
+          const aFieldTime = currentFieldHistory[a.id] || 0;
+          const bFieldTime = currentFieldHistory[b.id] || 0;
+          const aBenchTime = currentBenchHistory[a.id] || 0;
+          const bBenchTime = currentBenchHistory[b.id] || 0;
+
+          if (fairPlayWeight > 0.7) {
+            const benchDiff = aBenchTime - bBenchTime;
+            if (benchDiff !== 0) return benchDiff;
+            return bFieldTime - aFieldTime;
+          } else {
+            const fieldTimeDiff = bFieldTime - aFieldTime;
+            if (Math.abs(fieldTimeDiff) > 1) return fieldTimeDiff;
+            return aBenchTime - bBenchTime;
+          }
+        })
+        .slice(0, BENCH_SIZE);
+
+      const newBench = benchCandidates.map(p => p.id);
+
+      // Store the lineup for this half
+      const key = `${playdayId}-${matchId}-${half}`;
+      newLineupsForDay[key] = { assignments: newAssignments, bench: newBench };
+      newExplanationsForDay[key] = explanationsMap;
+    });
+
+    // Apply all lineups at once
+    setLineups(prev => ({ ...prev, ...newLineupsForDay }));
+    setAllocationExplanations(prev => ({ ...prev, ...newExplanationsForDay }));
+
+    // Log the action
+    const playday = playdays.find(pd => pd.id === playdayId);
+    logAction('auto_propose_full_day', {
+      playday: playday?.name,
+      mode: mode,
+      halvesCount: allHalvesForDay.length,
+      matchesCount: selectedPlayday.matches.length
+    });
+  };
+
   const handleAssignPlayer = (playerId) => {
     if (!selectedPosition) return;
     const { playdayId, matchId, half, posId, isBench } = selectedPosition;
@@ -2185,6 +2300,33 @@ const [lineups, setLineups] = useState({});
     return (
       <div className="space-y-3">
         <div><h2 className="text-lg font-bold text-gray-900">{selectedPlayday.name}</h2><p className="text-xs text-gray-500">{selectedPlayday.date} · {selectedPlayday.matches.length} matches</p></div>
+
+        {/* Full Day Auto-Propose Buttons */}
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-purple-900 mb-0.5">⚡ Auto-Propose Full Day</div>
+              <p className="text-xs text-purple-700">Optimize all {selectedPlayday.matches.length} matches ({allHalves.length} halves) at once for better overall balance</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => proposeFullDay(selectedPlayday.id, 'game')}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm shadow-md transition-colors"
+                title="Auto-propose all halves (Game mode)">
+                <span>🏆</span>
+                <span>Game Mode</span>
+              </button>
+              <button
+                onClick={() => proposeFullDay(selectedPlayday.id, 'training')}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md transition-colors"
+                title="Auto-propose all halves (Training mode)">
+                <span>📚</span>
+                <span>Training Mode</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-2">
           {allHalves.map(({ matchId, half, opponent, number, key }) => {
             const isExpanded = expandedHalf === key;
@@ -2727,6 +2869,7 @@ const [lineups, setLineups] = useState({});
                     'save_data': '💾',
                     'get_updates': '⟳',
                     'auto_propose_lineup': '🏆',
+                    'auto_propose_full_day': '⚡',
                     'clear_lineup': '🗑️',
                   }[action.action_type] || '📝';
 
@@ -2734,6 +2877,7 @@ const [lineups, setLineups] = useState({});
                     'save_data': 'Saved changes',
                     'get_updates': 'Got updates',
                     'auto_propose_lineup': 'Auto-proposed lineup',
+                    'auto_propose_full_day': 'Auto-proposed full day',
                     'clear_lineup': 'Cleared lineup',
                   }[action.action_type] || action.action_type;
 
