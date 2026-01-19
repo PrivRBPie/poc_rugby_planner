@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import bullsLogo from './assets/bulls.svg';
 import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
@@ -333,6 +333,7 @@ const [lineups, setLineups] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [remoteUpdatedAt, setRemoteUpdatedAt] = useState(null);
   const [hasRemoteChanges, setHasRemoteChanges] = useState(false);
+  const [initialState, setInitialState] = useState(null);
 
   // Load data from Supabase on mount
   useEffect(() => {
@@ -392,16 +393,36 @@ const [lineups, setLineups] = useState({});
           console.log('Loaded existing data with ID:', data.id);
 
           // Update state with data from Supabase
-          setPlaydays(rugbyData.playdays || []);
-          setLineups(rugbyData.lineups || {});
-          setRatings(rugbyData.ratings || {});
-          setTraining(rugbyData.training || {});
-          setFavoritePositions(rugbyData.favoritePositions || {});
-          setAllocationRules(rugbyData.allocationRules || allocationRules);
-          setAvailability(rugbyData.availability || {});
+          const loadedPlaydays = rugbyData.playdays || [];
+          const loadedLineups = rugbyData.lineups || {};
+          const loadedRatings = rugbyData.ratings || {};
+          const loadedTraining = rugbyData.training || {};
+          const loadedFavoritePositions = rugbyData.favoritePositions || {};
+          const loadedAllocationRules = rugbyData.allocationRules || allocationRules;
+          const loadedAvailability = rugbyData.availability || {};
+
+          setPlaydays(loadedPlaydays);
+          setLineups(loadedLineups);
+          setRatings(loadedRatings);
+          setTraining(loadedTraining);
+          setFavoritePositions(loadedFavoritePositions);
+          setAllocationRules(loadedAllocationRules);
+          setAvailability(loadedAvailability);
           setRugbyDataId(data.id);
           setRemoteUpdatedAt(data.updated_at);
           setLastSyncTime(new Date());
+
+          // Set initial state immediately after loading
+          setInitialState({
+            playdays: JSON.stringify(loadedPlaydays),
+            lineups: JSON.stringify(loadedLineups),
+            ratings: JSON.stringify(loadedRatings),
+            training: JSON.stringify(loadedTraining),
+            favoritePositions: JSON.stringify(loadedFavoritePositions),
+            allocationRules: JSON.stringify(loadedAllocationRules),
+            availability: JSON.stringify(loadedAvailability),
+          });
+
           setHasLoaded(true);
         }
       } catch (error) {
@@ -558,6 +579,9 @@ const [lineups, setLineups] = useState({});
     };
   }, [sessionId]);
 
+  // Track if we've done initial remote check
+  const hasCheckedRemoteRef = useRef(false);
+
   // Check for remote changes periodically
   useEffect(() => {
     if (!rugbyDataId || !remoteUpdatedAt) return;
@@ -570,16 +594,33 @@ const [lineups, setLineups] = useState({});
           .eq('id', rugbyDataId)
           .single();
 
-        if (!error && data && data.updated_at !== remoteUpdatedAt) {
-          console.log('Remote changes detected!');
-          setHasRemoteChanges(true);
+        if (!error && data) {
+          console.log('Remote check:', {
+            remote: data.updated_at,
+            local: remoteUpdatedAt,
+            hasChanges: data.updated_at !== remoteUpdatedAt
+          });
+
+          if (data.updated_at !== remoteUpdatedAt) {
+            console.log('Remote changes detected!');
+            setHasRemoteChanges(true);
+          } else {
+            // Reset if remote is now in sync
+            setHasRemoteChanges(false);
+          }
         }
       } catch (error) {
         console.error('Error checking for remote changes:', error);
       }
     };
 
-    // Check every 10 seconds
+    // Only check immediately on first mount, not every time remoteUpdatedAt changes
+    if (!hasCheckedRemoteRef.current) {
+      hasCheckedRemoteRef.current = true;
+      checkForRemoteChanges();
+    }
+
+    // Then check every 10 seconds
     const interval = setInterval(checkForRemoteChanges, 10000);
 
     return () => clearInterval(interval);
@@ -588,6 +629,16 @@ const [lineups, setLineups] = useState({});
   // Manual refresh from Supabase
   const refreshFromSupabase = async () => {
     if (!rugbyDataId) return;
+
+    // Warn user if they have unsaved changes
+    if (hasUnsavedChanges) {
+      const confirmed = window.confirm(
+        '⚠️ Warning: You have unsaved changes!\n\n' +
+        'Getting updates will discard your current changes.\n\n' +
+        'Are you sure you want to continue?'
+      );
+      if (!confirmed) return;
+    }
 
     try {
       setIsSyncing(true);
@@ -604,17 +655,36 @@ const [lineups, setLineups] = useState({});
 
       if (data && data.data) {
         const rugbyData = data.data;
-        setPlaydays(rugbyData.playdays || []);
-        setLineups(rugbyData.lineups || {});
-        setRatings(rugbyData.ratings || {});
-        setTraining(rugbyData.training || {});
-        setFavoritePositions(rugbyData.favoritePositions || {});
-        setAllocationRules(rugbyData.allocationRules || allocationRules);
-        setAvailability(rugbyData.availability || {});
+        const newPlaydays = rugbyData.playdays || [];
+        const newLineups = rugbyData.lineups || {};
+        const newRatings = rugbyData.ratings || {};
+        const newTraining = rugbyData.training || {};
+        const newFavoritePositions = rugbyData.favoritePositions || {};
+        const newAllocationRules = rugbyData.allocationRules || allocationRules;
+        const newAvailability = rugbyData.availability || {};
+
+        setPlaydays(newPlaydays);
+        setLineups(newLineups);
+        setRatings(newRatings);
+        setTraining(newTraining);
+        setFavoritePositions(newFavoritePositions);
+        setAllocationRules(newAllocationRules);
+        setAvailability(newAvailability);
         setRemoteUpdatedAt(data.updated_at);
         setLastSyncTime(new Date());
         setHasUnsavedChanges(false);
         setHasRemoteChanges(false);
+
+        // Reset initial state to new data
+        setInitialState({
+          playdays: JSON.stringify(newPlaydays),
+          lineups: JSON.stringify(newLineups),
+          ratings: JSON.stringify(newRatings),
+          training: JSON.stringify(newTraining),
+          favoritePositions: JSON.stringify(newFavoritePositions),
+          allocationRules: JSON.stringify(newAllocationRules),
+          availability: JSON.stringify(newAvailability),
+        });
       }
     } catch (error) {
       console.error('Error refreshing from Supabase:', error);
@@ -668,6 +738,17 @@ const [lineups, setLineups] = useState({});
         setLastSyncTime(new Date());
         setHasUnsavedChanges(false);
         setHasRemoteChanges(false);
+
+        // Reset initial state to current data after successful save
+        setInitialState({
+          playdays: JSON.stringify(playdays),
+          lineups: JSON.stringify(lineups),
+          ratings: JSON.stringify(ratings),
+          training: JSON.stringify(training),
+          favoritePositions: JSON.stringify(favoritePositions),
+          allocationRules: JSON.stringify(allocationRules),
+          availability: JSON.stringify(availability),
+        });
       }
     } catch (error) {
       console.error('Error saving to Supabase:', error);
@@ -677,11 +758,37 @@ const [lineups, setLineups] = useState({});
     }
   };
 
-  // Mark as changed when data changes
+  // Mark as changed only when data actually differs from initial state
   useEffect(() => {
-    if (!hasLoaded) return;
-    setHasUnsavedChanges(true);
-  }, [playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, hasLoaded]);
+    if (!hasLoaded) {
+      console.log('Change detection skipped: not loaded yet');
+      return;
+    }
+
+    if (!initialState) {
+      console.log('Change detection skipped: no initial state yet');
+      // Set to false explicitly when we don't have initial state yet
+      setHasUnsavedChanges(false);
+      return;
+    }
+
+    const currentState = {
+      playdays: JSON.stringify(playdays),
+      lineups: JSON.stringify(lineups),
+      ratings: JSON.stringify(ratings),
+      training: JSON.stringify(training),
+      favoritePositions: JSON.stringify(favoritePositions),
+      allocationRules: JSON.stringify(allocationRules),
+      availability: JSON.stringify(availability),
+    };
+
+    const hasChanges = Object.keys(currentState).some(key => currentState[key] !== initialState[key]);
+    console.log('Change detection:', {
+      hasChanges,
+      changedKeys: Object.keys(currentState).filter(key => currentState[key] !== initialState[key])
+    });
+    setHasUnsavedChanges(hasChanges);
+  }, [playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, hasLoaded, initialState]);
 
   const tabs = [
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
@@ -2745,25 +2852,26 @@ const [lineups, setLineups] = useState({});
             {/* Get Updates Button */}
             <button
               onClick={refreshFromSupabase}
-              disabled={isSyncing || hasUnsavedChanges}
+              disabled={isSyncing || !hasRemoteChanges}
               className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg shadow-sm transition-all ${
                 hasRemoteChanges && !hasUnsavedChanges
                   ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400 shadow-lg animate-pulse'
-                  : hasUnsavedChanges
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-white text-blue-600 border-2 border-blue-200 hover:bg-blue-50'
+                  : hasRemoteChanges && hasUnsavedChanges
+                  ? 'bg-yellow-500 hover:bg-yellow-600 text-white ring-2 ring-yellow-300 shadow-lg'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
               }`}
               title={
-                hasUnsavedChanges
-                  ? "Save your changes first"
+                hasRemoteChanges && hasUnsavedChanges
+                  ? "⚠️ Warning: Getting updates will discard your unsaved changes! (Click to confirm)"
                   : hasRemoteChanges
                   ? "Click to get latest changes from other coaches"
-                  : "Check for updates from other coaches"
+                  : "No updates available"
               }
             >
+              {hasRemoteChanges && hasUnsavedChanges && <span>⚠️</span>}
               <span className={isSyncing ? "animate-spin" : ""}>⟳</span>
-              <span>{hasRemoteChanges && !hasUnsavedChanges ? "Updates Ready" : "Get Updates"}</span>
-              {hasRemoteChanges && !hasUnsavedChanges && (
+              <span>{hasRemoteChanges ? "Get Updates" : "Get Updates"}</span>
+              {hasRemoteChanges && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 border-2 border-white rounded-full animate-pulse" />
               )}
             </button>
