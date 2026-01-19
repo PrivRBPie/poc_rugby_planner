@@ -501,12 +501,12 @@ const [lineups, setLineups] = useState({});
 
     const cleanupStaleUsers = async () => {
       try {
-        // Remove ALL users inactive for more than 45 seconds
-        const fortyFiveSecondsAgo = new Date(Date.now() - 45 * 1000).toISOString();
+        // Remove ALL users inactive for more than 60 seconds (3x heartbeat interval for buffer)
+        const sixtySecondsAgo = new Date(Date.now() - 60 * 1000).toISOString();
         await supabase
           .from('active_users')
           .delete()
-          .lt('last_seen', fortyFiveSecondsAgo);
+          .lt('last_seen', sixtySecondsAgo);
       } catch (error) {
         console.error('Error cleaning up stale users:', error);
       }
@@ -565,11 +565,11 @@ const [lineups, setLineups] = useState({});
           .order('last_seen', { ascending: false });
 
         if (!error && data) {
-          // Filter out current user and stale sessions (45 seconds old)
-          const fortyFiveSecondsAgo = Date.now() - 45 * 1000;
+          // Filter out current user and stale sessions (60 seconds old)
+          const sixtySecondsAgo = Date.now() - 60 * 1000;
           const active = data.filter(user =>
             user.session_id !== sessionId &&
-            new Date(user.last_seen).getTime() > fortyFiveSecondsAgo
+            new Date(user.last_seen).getTime() > sixtySecondsAgo
           );
           setActiveUsers(active);
           console.log('Active users updated:', active.length, 'other users (excluding self)');
@@ -742,12 +742,41 @@ const [lineups, setLineups] = useState({});
   const refreshFromSupabase = async () => {
     if (!rugbyDataId) return;
 
-    // Warn user if they have unsaved changes
-    if (hasUnsavedChanges) {
+    // Warn user if they have unsaved changes with detailed list
+    if (hasUnsavedChanges && initialState) {
+      const currentState = {
+        playdays: JSON.stringify(playdays),
+        lineups: JSON.stringify(lineups),
+        ratings: JSON.stringify(ratings),
+        training: JSON.stringify(training),
+        favoritePositions: JSON.stringify(favoritePositions),
+        allocationRules: JSON.stringify(allocationRules),
+        availability: JSON.stringify(availability),
+        learningPlayerConfig: JSON.stringify(learningPlayerConfig),
+        satisfactionWeights: JSON.stringify(satisfactionWeights),
+      };
+
+      const changedFields = Object.keys(currentState).filter(key => currentState[key] !== initialState[key]);
+
+      const fieldLabels = {
+        playdays: '📅 Schedule (game days/matches)',
+        lineups: '👥 Lineups (player assignments)',
+        ratings: '⭐ Player ratings',
+        training: '📚 Training records',
+        favoritePositions: '❤️ Favorite positions',
+        allocationRules: '⚙️ Allocation rules',
+        availability: '✓ Player availability',
+        learningPlayerConfig: '🎓 Learning player definition',
+        satisfactionWeights: '😊 Satisfaction formula weights',
+      };
+
+      const changesList = changedFields.map(field => `• ${fieldLabels[field] || field}`).join('\n');
+
       const confirmed = window.confirm(
-        '⚠️ Warning: You have unsaved changes!\n\n' +
-        'Getting updates will discard your current changes.\n\n' +
-        'Are you sure you want to continue?'
+        '⚠️ WARNING: You have unsaved changes!\n\n' +
+        'Getting updates will discard the following changes:\n\n' +
+        changesList + '\n\n' +
+        'Are you sure you want to discard your changes and get updates?'
       );
       if (!confirmed) return;
     }
@@ -1104,14 +1133,28 @@ const [lineups, setLineups] = useState({});
   };
 
   const splitCandidates = (candidates, forBench) => {
-    if (forBench) return { best: candidates, alternatives: [], untrained: [] };
+    if (forBench) return { skilled: candidates, learning: [], untrained: [] };
+
     const available = candidates.filter(c => !c.isAssignedElsewhereInHalf);
     const trained = available.filter(c => c.trained);
     const untrained = available.filter(c => !c.trained);
+
+    // Split trained players into skilled and learning based on config
+    const skilled = trained
+      .filter(c => c.rating > learningPlayerConfig.maxStars || c.timesAtPosition > learningPlayerConfig.maxGames)
+      .sort((a, b) => b.rating - a.rating); // Sort by rating descending
+
+    const learning = trained
+      .filter(c => c.rating <= learningPlayerConfig.maxStars && c.timesAtPosition <= learningPlayerConfig.maxGames)
+      .sort((a, b) => b.rating - a.rating); // Sort by rating descending
+
+    // Sort untrained by rating descending as well
+    const untrainedSorted = untrained.sort((a, b) => b.rating - a.rating);
+
     return {
-      best: trained.filter(c => c.rating > learningPlayerConfig.maxStars || c.timesAtPosition > learningPlayerConfig.maxGames),
-      alternatives: trained.filter(c => c.rating <= learningPlayerConfig.maxStars && c.timesAtPosition <= learningPlayerConfig.maxGames),
-      untrained: untrained,
+      skilled,
+      learning,
+      untrained: untrainedSorted,
     };
   };
 
@@ -1922,7 +1965,7 @@ const [lineups, setLineups] = useState({});
       const halfIndex = allHalves.findIndex(h => h.matchId === matchId && h.half === half);
       const candidates = selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half
         ? getCandidates(selectedPlayday.id, matchId, half, selectedPosition.posId, selectedPosition.isBench) : [];
-      const { best, alternatives, untrained } = splitCandidates(candidates, selectedPosition?.isBench);
+      const { skilled, learning, untrained } = splitCandidates(candidates, selectedPosition?.isBench);
 
       const PosButton = ({ pos }) => {
         const assignedPlayer = players.find(p => p.id === lineup.assignments[pos.id]);
@@ -2283,11 +2326,11 @@ const [lineups, setLineups] = useState({});
                   )}
 
                   <div className="flex-1 overflow-auto">
-                    {!selectedPosition.isBench && best.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1" title={`Players with >${learningPlayerConfig.maxStars} stars or >${learningPlayerConfig.maxGames} games at this position`}>✓ Skilled Players</div><div className="space-y-1">{best.slice(0, 5).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
-                    {!selectedPosition.isBench && alternatives.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title={`Players with ≤${learningPlayerConfig.maxStars} stars and ≤${learningPlayerConfig.maxGames} games at this position`}>◐ Learning Players</div><div className="space-y-1">{alternatives.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
-                    {!selectedPosition.isBench && untrained.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-red-600 mb-1 px-1 flex items-center gap-1" title="Players not trained for this position"><span>⚠️</span><span>Untrained Players</span>{selectedPlayday.type === 'game' && <span className="text-[9px] bg-red-100 px-1 rounded">(Game)</span>}</div><div className="space-y-1">{untrained.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isUntrained gameMode={selectedPlayday.type === 'game'} />)}</div></div>}
+                    {!selectedPosition.isBench && skilled.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1" title={`Players with >${learningPlayerConfig.maxStars} stars or >${learningPlayerConfig.maxGames} games at this position`}>✓ Skilled Players</div><div className="space-y-1">{skilled.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
+                    {!selectedPosition.isBench && learning.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title={`Players with ≤${learningPlayerConfig.maxStars} stars and ≤${learningPlayerConfig.maxGames} games at this position`}>◐ Learning Players</div><div className="space-y-1">{learning.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
+                    {!selectedPosition.isBench && untrained.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1 flex items-center gap-1" title="Players not trained for this position"><span>📝</span><span>Untrained Players</span></div><div className="space-y-1">{untrained.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isUntrained gameMode={selectedPlayday.type === 'game'} />)}</div></div>}
                     {selectedPosition.isBench && candidates.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="mb-1"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1" title="Dots show how many times on bench this game day">Available Players</div><div className="space-y-1">{candidates.filter(p => !p.isAssignedElsewhereInHalf).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div></div>}
-                    {!selectedPosition.isBench && best.length === 0 && alternatives.length === 0 && untrained.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No available players</div>}
+                    {!selectedPosition.isBench && skilled.length === 0 && learning.length === 0 && untrained.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No available players</div>}
                   </div>
                 </>
               ) : <div className="flex-1 flex items-center justify-center text-xs text-gray-400 text-center p-2">← Tap position</div>}

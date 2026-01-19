@@ -17,7 +17,8 @@
       "Bash(git stash pop:*)",
       "Bash(gh run list:*)",
       "Bash(npm install:*)",
-      "Bash(timeout /t 30)"
+      "Bash(timeout /t 30)",
+      "Bash(echo:*)"
     ]
   }
 }
