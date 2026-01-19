@@ -1457,30 +1457,25 @@ const [lineups, setLineups] = useState({});
     const actualBenchSize = Math.max(0, availablePlayers.length - positions.length);
 
     // PHASE 1: GLOBAL BENCH DISTRIBUTION
-    // Pre-allocate bench slots across ALL halves to ensure fairness
+    // Pre-allocate bench slots across ALL halves to ensure fairness WITHIN THIS GAME DAY
     const totalHalves = allHalvesForDay.length;
     const totalBenchSlots = totalHalves * actualBenchSize;
     const idealBenchPerPlayer = totalBenchSlots / availablePlayers.length;
 
-    // Calculate target bench times for each player (rounded to ensure we fill all slots)
+    // Calculate target bench times for each player FOR THIS GAME DAY ONLY
+    // Do NOT consider historical bench data - we want fairness within this game day
     const playerBenchTargets = {};
     availablePlayers.forEach(p => {
-      const currentBench = benchHistory[p.id] || 0;
-      playerBenchTargets[p.id] = Math.round(idealBenchPerPlayer) - currentBench;
+      playerBenchTargets[p.id] = Math.round(idealBenchPerPlayer);
     });
 
     // Adjust targets to ensure sum equals total slots needed
     const targetSum = Object.values(playerBenchTargets).reduce((a, b) => a + b, 0);
     const adjustment = totalBenchSlots - targetSum;
     if (adjustment !== 0) {
-      // Distribute adjustment to players who need it most
-      const sortedPlayers = [...availablePlayers].sort((a, b) => {
-        const aBench = benchHistory[a.id] || 0;
-        const bBench = benchHistory[b.id] || 0;
-        return aBench - bBench; // Ascending: fewer benched = higher priority
-      });
+      // Distribute adjustment evenly using round-robin
       for (let i = 0; i < Math.abs(adjustment); i++) {
-        const player = sortedPlayers[i % sortedPlayers.length];
+        const player = availablePlayers[i % availablePlayers.length];
         playerBenchTargets[player.id] += Math.sign(adjustment);
       }
     }
@@ -1494,19 +1489,17 @@ const [lineups, setLineups] = useState({});
       const key = `${playdayId}-${matchId}-${half}`;
       benchAssignments[key] = [];
 
-      // Select actualBenchSize players who need bench time most
+      // Select actualBenchSize players who need bench time most FOR THIS GAME DAY
       const benchCandidates = [...availablePlayers]
         .filter(p => playerBenchCount[p.id] < playerBenchTargets[p.id])
         .sort((a, b) => {
-          // Priority: how far below target they are
+          // Priority: how far below target they are FOR THIS GAME DAY
           const aNeeded = playerBenchTargets[a.id] - playerBenchCount[a.id];
           const bNeeded = playerBenchTargets[b.id] - playerBenchCount[b.id];
           if (aNeeded !== bNeeded) return bNeeded - aNeeded; // More needed = higher priority
 
-          // Tie-breaker: current total bench time (less = higher priority)
-          const aBench = (benchHistory[a.id] || 0) + playerBenchCount[a.id];
-          const bBench = (benchHistory[b.id] || 0) + playerBenchCount[b.id];
-          return aBench - bBench;
+          // Tie-breaker: bench count within THIS GAME DAY (less = higher priority)
+          return playerBenchCount[a.id] - playerBenchCount[b.id];
         })
         .slice(0, actualBenchSize);
 
