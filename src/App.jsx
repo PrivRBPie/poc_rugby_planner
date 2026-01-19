@@ -1537,6 +1537,13 @@ const [lineups, setLineups] = useState({});
       newExplanationsForDay[key] = explanationsMap;
     });
 
+    // Log what we're about to save
+    console.log('proposeFullDay: Generated lineups for', Object.keys(newLineupsForDay).length, 'halves');
+    const firstKey = Object.keys(newLineupsForDay)[0];
+    if (firstKey) {
+      console.log('proposeFullDay: First lineup sample:', firstKey, newLineupsForDay[firstKey]);
+    }
+
     // Apply all lineups at once
     setLineups(prev => ({ ...prev, ...newLineupsForDay }));
     setAllocationExplanations(prev => ({ ...prev, ...newExplanationsForDay }));
