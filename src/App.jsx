@@ -294,6 +294,7 @@ const [lineups, setLineups] = useState({});
   const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const [activeUsers, setActiveUsers] = useState([]);
   const [loginHistory, setLoginHistory] = useState([]);
+  const [actionLog, setActionLog] = useState([]);
   const [showUsernamePrompt, setShowUsernamePrompt] = useState(false);
 
   // Allocation Rules Configuration
@@ -569,6 +570,7 @@ const [lineups, setLineups] = useState({});
             new Date(user.last_seen).getTime() > fortyFiveSecondsAgo
           );
           setActiveUsers(active);
+          console.log('Active users updated:', active.length, 'other users (excluding self)');
         }
       } catch (error) {
         console.error('Error fetching active users:', error);
@@ -582,12 +584,19 @@ const [lineups, setLineups] = useState({});
       .channel('active_users_changes')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'active_users' },
-        () => fetchActiveUsers()
+        () => {
+          console.log('Active users change detected, refreshing...');
+          fetchActiveUsers();
+        }
       )
       .subscribe();
 
+    // Also poll every 10 seconds to ensure consistency
+    const pollInterval = setInterval(fetchActiveUsers, 10000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [sessionId]);
 
@@ -615,6 +624,69 @@ const [lineups, setLineups] = useState({});
     const interval = setInterval(fetchLoginHistory, 30000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  // Helper function to log user actions
+  const logAction = async (actionType, details = {}) => {
+    if (!currentUsername) return;
+
+    try {
+      const actionEntry = {
+        username: currentUsername,
+        session_id: sessionId,
+        action_type: actionType,
+        details: details,
+        timestamp: new Date().toISOString()
+      };
+
+      // Add to Supabase
+      await supabase
+        .from('action_log')
+        .insert(actionEntry);
+
+      // Also update local state for immediate UI feedback
+      setActionLog(prev => [actionEntry, ...prev].slice(0, 100)); // Keep last 100 actions
+    } catch (error) {
+      console.error('Error logging action:', error);
+    }
+  };
+
+  // Fetch action log for admin view
+  useEffect(() => {
+    const fetchActionLog = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('action_log')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(100);
+
+        if (!error && data) {
+          setActionLog(data);
+        }
+      } catch (error) {
+        console.error('Error fetching action log:', error);
+      }
+    };
+
+    fetchActionLog();
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('action_log_changes')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'action_log' },
+        () => fetchActionLog()
+      )
+      .subscribe();
+
+    // Refresh every 30 seconds as fallback
+    const interval = setInterval(fetchActionLog, 30000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   // Track if we've done initial remote check
@@ -713,6 +785,12 @@ const [lineups, setLineups] = useState({});
         setHasUnsavedChanges(false);
         setHasRemoteChanges(false);
 
+        // Log the refresh action
+        logAction('get_updates', {
+          playdaysCount: newPlaydays.length,
+          lineupsCount: Object.keys(newLineups).length
+        });
+
         // Reset initial state to new data
         setInitialState({
           playdays: JSON.stringify(newPlaydays),
@@ -776,6 +854,13 @@ const [lineups, setLineups] = useState({});
         setLastSyncTime(new Date());
         setHasUnsavedChanges(false);
         setHasRemoteChanges(false);
+
+        // Log the save action
+        logAction('save_data', {
+          hasConflict: hasRemoteChanges,
+          playdaysCount: playdays.length,
+          lineupsCount: Object.keys(lineups).length
+        });
 
         // Reset initial state to current data after successful save
         setInitialState({
@@ -1042,6 +1127,15 @@ const [lineups, setLineups] = useState({});
   const clearLineup = (playdayId, matchId, half) => {
     const key = `${playdayId}-${matchId}-${half}`;
     setLineups(prev => ({ ...prev, [key]: { assignments: {}, bench: [] } }));
+
+    // Log the clear action
+    const playday = playdays.find(pd => pd.id === playdayId);
+    const match = playday?.matches.find(m => m.id === matchId);
+    logAction('clear_lineup', {
+      playday: playday?.name,
+      match: match?.opponent || 'Training',
+      half: half
+    });
   };
 
   const calculatePlayerPositionScore = (player, position, assigned, rules, mode = allocationMode) => {
@@ -1173,6 +1267,18 @@ const [lineups, setLineups] = useState({});
     const key = `${playdayId}-${matchId}-${half}`;
     setLineups(prev => ({ ...prev, [key]: { assignments: newAssignments, bench: newBench } }));
     setAllocationExplanations(prev => ({ ...prev, [key]: explanationsMap }));
+
+    // Log the auto-propose action
+    const playday = playdays.find(pd => pd.id === playdayId);
+    const match = playday?.matches.find(m => m.id === matchId);
+    logAction('auto_propose_lineup', {
+      playday: playday?.name,
+      match: match?.opponent || 'Training',
+      half: half,
+      mode: mode,
+      assignedCount: Object.keys(newAssignments).length,
+      benchCount: newBench.length
+    });
   };
 
   const handleAssignPlayer = (playerId) => {
@@ -2071,8 +2177,14 @@ const [lineups, setLineups] = useState({});
                         <div className="flex flex-col items-end gap-0.5"><ScoreBadge scores={scores} /><span className="text-[9px] text-gray-400">{scores.filled}/12 + {scores.bench}B</span></div>
                       </div>
                     </div>
-                    {!isExpanded && (
-                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className={`transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}><Icons.ChevronDown /></div>
+                  </div>
+                  {!isExpanded && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        {renderCollapsedView(matchId, half)}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => proposeLineup(selectedPlayday.id, matchId, half, 'game')}
                           className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
@@ -2092,10 +2204,8 @@ const [lineups, setLineups] = useState({});
                           <Icons.Trash />
                         </button>
                       </div>
-                    )}
-                    <div className={`transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}><Icons.ChevronDown /></div>
-                  </div>
-                  {!isExpanded && renderCollapsedView(matchId, half)}
+                    </div>
+                  )}
                 </div>
                 {isExpanded && <div className="px-3 pb-3 border-t border-gray-100">{renderExpandedView(matchId, half)}</div>}
               </div>
@@ -2516,18 +2626,37 @@ const [lineups, setLineups] = useState({});
         </div>
 
         {/* Database Setup Instructions */}
-        {loginHistory.length === 0 && (
+        {(loginHistory.length === 0 || actionLog.length === 0) && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
             <h3 className="text-sm font-bold text-yellow-800 mb-2">⚠️ Database Setup Required</h3>
-            <p className="text-xs text-yellow-700 mb-2">The login_history table needs to be created in Supabase:</p>
-            <pre className="bg-white p-2 rounded text-[10px] text-gray-800 overflow-x-auto">
+            {loginHistory.length === 0 && (
+              <>
+                <p className="text-xs text-yellow-700 mb-2">The login_history table needs to be created in Supabase:</p>
+                <pre className="bg-white p-2 rounded text-[10px] text-gray-800 overflow-x-auto mb-3">
 {`CREATE TABLE login_history (
   id BIGSERIAL PRIMARY KEY,
   username TEXT NOT NULL,
   session_id TEXT NOT NULL,
   logged_in_at TIMESTAMPTZ DEFAULT NOW()
 );`}
-            </pre>
+                </pre>
+              </>
+            )}
+            {actionLog.length === 0 && (
+              <>
+                <p className="text-xs text-yellow-700 mb-2">The action_log table needs to be created in Supabase:</p>
+                <pre className="bg-white p-2 rounded text-[10px] text-gray-800 overflow-x-auto">
+{`CREATE TABLE action_log (
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  details JSONB DEFAULT '{}',
+  timestamp TIMESTAMPTZ DEFAULT NOW()
+);`}
+                </pre>
+              </>
+            )}
           </div>
         )}
 
@@ -2587,6 +2716,67 @@ const [lineups, setLineups] = useState({});
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        </div>
+
+        {/* Action Log */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="text-lg font-bold text-gray-900">Action Log</h3>
+            <p className="text-xs text-gray-500">Recent user activities (last 100 actions)</p>
+          </div>
+          <div className="max-h-96 overflow-y-auto">
+            {actionLog.length === 0 ? (
+              <p className="text-sm text-gray-400 p-4">No actions logged yet</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {actionLog.map((action, idx) => {
+                  const actionIcon = {
+                    'save_data': '💾',
+                    'get_updates': '⟳',
+                    'auto_propose_lineup': '🏆',
+                    'clear_lineup': '🗑️',
+                  }[action.action_type] || '📝';
+
+                  const actionLabel = {
+                    'save_data': 'Saved changes',
+                    'get_updates': 'Got updates',
+                    'auto_propose_lineup': 'Auto-proposed lineup',
+                    'clear_lineup': 'Cleared lineup',
+                  }[action.action_type] || action.action_type;
+
+                  return (
+                    <div key={idx} className="px-4 py-3 hover:bg-gray-50">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2 flex-1">
+                          <span className="text-lg">{actionIcon}</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-semibold text-sm text-gray-900">{action.username}</span>
+                              <span className="text-xs text-gray-500">·</span>
+                              <span className="text-xs text-gray-600">{actionLabel}</span>
+                            </div>
+                            {action.details && Object.keys(action.details).length > 0 && (
+                              <div className="text-xs text-gray-500 space-y-0.5">
+                                {action.details.playday && (
+                                  <div>📅 {action.details.playday} {action.details.match && `vs ${action.details.match}`}</div>
+                                )}
+                                {action.details.half && <div>🕐 {action.details.half}</div>}
+                                {action.details.mode && <div>⚙️ Mode: {action.details.mode}</div>}
+                                {action.details.hasConflict && <div>⚠️ Overwrote remote changes</div>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-500 whitespace-nowrap">
+                          {new Date(action.timestamp).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
@@ -3085,12 +3275,14 @@ const [lineups, setLineups] = useState({});
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-gray-500">{settings.ageGroup} · {settings.coachName}</p>
-              {/* Show active usernames including current user */}
-              {currentUsername && (
+            <div className="flex flex-col items-end gap-0.5">
+              <p className="text-xs text-gray-500">
+                {settings.ageGroup} · Coach {currentUsername || 'Coach'}
+              </p>
+              {/* Show other active coaches */}
+              {activeUsers.length > 0 && (
                 <span className="text-xs text-green-600">
-                  👥 {[currentUsername, ...activeUsers.map(u => u.username)].join(', ')}
+                  👥 {activeUsers.map(u => u.username).join(', ')}
                 </span>
               )}
             </div>
