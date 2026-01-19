@@ -1302,6 +1302,7 @@ const [lineups, setLineups] = useState({});
     const activeRules = allocationRules[mode];
 
     // Phase 1: Assign field positions
+    const unfilledPositions = [];
     positions.forEach(pos => {
       const candidateScores = availablePlayers
         .filter(p => !assigned.has(p.id))
@@ -1322,6 +1323,8 @@ const [lineups, setLineups] = useState({});
           score: best.score,
           explanations: best.explanations,
         };
+      } else {
+        unfilledPositions.push(pos);
       }
     });
 
@@ -1371,6 +1374,37 @@ const [lineups, setLineups] = useState({});
       assigned.add(p.id);
     });
 
+    // Phase 3: Try to fill any unfilled positions by swapping with bench players
+    if (unfilledPositions.length > 0 && newBench.length > 0) {
+      unfilledPositions.forEach(pos => {
+        const benchScores = newBench
+          .map(benchPlayerId => {
+            const player = players.find(p => p.id === benchPlayerId);
+            if (!player) return null;
+            const { score, explanations } = calculatePlayerPositionScore(player, pos, new Set(), activeRules, mode);
+            return { player, score, explanations };
+          })
+          .filter(c => c && c.score > -Infinity)
+          .sort((a, b) => b.score - a.score);
+
+        if (benchScores.length > 0) {
+          const best = benchScores[0];
+          newAssignments[pos.id] = best.player.id;
+          // Remove from bench
+          const benchIndex = newBench.indexOf(best.player.id);
+          if (benchIndex > -1) {
+            newBench.splice(benchIndex, 1);
+          }
+          explanationsMap[`${pos.id}-${best.player.id}`] = {
+            position: pos,
+            player: best.player,
+            score: best.score,
+            explanations: best.explanations,
+          };
+        }
+      });
+    }
+
     const key = `${playdayId}-${matchId}-${half}`;
     setLineups(prev => ({ ...prev, [key]: { assignments: newAssignments, bench: newBench } }));
     setAllocationExplanations(prev => ({ ...prev, [key]: explanationsMap }));
@@ -1391,7 +1425,6 @@ const [lineups, setLineups] = useState({});
   // Auto-propose all halves for the entire game day - GLOBAL OPTIMIZATION APPROACH
   const proposeFullDay = (playdayId, mode = allocationMode) => {
     if (!selectedPlayday) {
-      console.log('proposeFullDay: no selectedPlayday');
       return;
     }
 
@@ -1405,10 +1438,7 @@ const [lineups, setLineups] = useState({});
       return !avail || avail === 'available';
     });
 
-    console.log('proposeFullDay: total players=', players.length, 'available=', availablePlayers.length);
-
     if (availablePlayers.length === 0) {
-      console.log('proposeFullDay: NO AVAILABLE PLAYERS!');
       return;
     }
 
@@ -1418,7 +1448,6 @@ const [lineups, setLineups] = useState({});
 
     // Calculate actual bench size based on available players
     const actualBenchSize = Math.max(0, availablePlayers.length - positions.length);
-    console.log('proposeFullDay: actualBenchSize=', actualBenchSize, '(', availablePlayers.length, '-', positions.length, ')');
 
     // PHASE 1: GLOBAL BENCH DISTRIBUTION
     // Pre-allocate bench slots across ALL halves to ensure fairness
@@ -1474,10 +1503,6 @@ const [lineups, setLineups] = useState({});
         })
         .slice(0, actualBenchSize);
 
-      if (index === 0) {
-        console.log('proposeFullDay: first half bench candidates:', benchCandidates.length, 'actualBenchSize:', actualBenchSize);
-      }
-
       benchCandidates.forEach(p => {
         benchAssignments[key].push(p.id);
         playerBenchCount[p.id]++;
@@ -1521,6 +1546,32 @@ const [lineups, setLineups] = useState({});
             score: best.score,
             explanations: best.explanations,
           };
+        } else {
+          // No valid candidates - try swapping a benched player if possible
+          const benchedPlayers = benchAssignments[key].map(pid => availablePlayers.find(p => p.id === pid)).filter(p => p);
+          const benchScores = benchedPlayers
+            .map(p => {
+              const { score, explanations } = calculatePlayerPositionScore(
+                p, pos, new Set(), activeRules, mode, currentFieldHistory, currentBenchHistory
+              );
+              return { player: p, score, explanations };
+            })
+            .filter(c => c.score > -Infinity)
+            .sort((a, b) => b.score - a.score);
+
+          if (benchScores.length > 0) {
+            const best = benchScores[0];
+            newAssignments[pos.id] = best.player.id;
+            // Remove from bench and add to assigned
+            benchAssignments[key] = benchAssignments[key].filter(pid => pid !== best.player.id);
+            assigned.add(best.player.id);
+            explanationsMap[`${pos.id}-${best.player.id}`] = {
+              position: pos,
+              player: best.player,
+              score: best.score,
+              explanations: best.explanations,
+            };
+          }
         }
       });
 
@@ -1536,13 +1587,6 @@ const [lineups, setLineups] = useState({});
       newLineupsForDay[key] = { assignments: newAssignments, bench: benchAssignments[key] };
       newExplanationsForDay[key] = explanationsMap;
     });
-
-    // Log what we're about to save
-    console.log('proposeFullDay: Generated lineups for', Object.keys(newLineupsForDay).length, 'halves');
-    const firstKey = Object.keys(newLineupsForDay)[0];
-    if (firstKey) {
-      console.log('proposeFullDay: First lineup sample:', firstKey, newLineupsForDay[firstKey]);
-    }
 
     // Apply all lineups at once
     setLineups(prev => ({ ...prev, ...newLineupsForDay }));
@@ -1565,10 +1609,22 @@ const [lineups, setLineups] = useState({});
     const key = `${playdayId}-${matchId}-${half}`;
     const lineup = lineups[key] || { assignments: {}, bench: [] };
     const isCurrentlyHere = isBench ? lineup.bench?.includes(playerId) : lineup.assignments[posId] === playerId;
-    
-    if (assignedInHalf.has(playerId) && !isCurrentlyHere) {
-      alert('⚠️ This player is already assigned in this half!');
-      return;
+
+    // If clicking a field position, only block if player is on a DIFFERENT field position (bench is OK)
+    // If clicking bench, block if player is anywhere else
+    if (!isBench) {
+      // Clicking field position - check if assigned to another field position
+      const isOnDifferentFieldPosition = Object.entries(lineup.assignments).some(([pid, pId]) => pid !== posId && pId === playerId);
+      if (isOnDifferentFieldPosition) {
+        alert('⚠️ This player is already assigned to another field position in this half!');
+        return;
+      }
+    } else {
+      // Clicking bench - check if assigned anywhere else
+      if (assignedInHalf.has(playerId) && !isCurrentlyHere) {
+        alert('⚠️ This player is already assigned in this half!');
+        return;
+      }
     }
     
     updateLineup(playdayId, matchId, half, (prev) => {
@@ -2358,7 +2414,6 @@ const [lineups, setLineups] = useState({});
             </div>
           </div>
           {p.isAssignedElsewhereInHalf && <div className="text-[9px] text-red-500 flex items-center gap-0.5 mt-0.5"><Icons.AlertTriangle /> Already assigned</div>}
-          {isUntrained && gameMode && <div className="text-[9px] text-red-600 flex items-center gap-0.5 mt-0.5 font-medium"><Icons.AlertTriangle /> Warning: Game mode requires training</div>}
         </button>
       );
 
@@ -2666,8 +2721,13 @@ const [lineups, setLineups] = useState({});
               </thead>
               <tbody>
                 {(() => {
-                  // Calculate player stats
-                  const playerStats = players.map(player => {
+                  // Calculate player stats - only for available players
+                  const availablePlayers = players.filter(p => {
+                    const avail = availability[p.id];
+                    return !avail || avail === 'available';
+                  });
+
+                  const playerStats = availablePlayers.map(player => {
                     let totalField = 0, totalBench = 0, funCount = 0, learningCount = 0;
 
                     playdayHalves.forEach(h => {
