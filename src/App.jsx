@@ -425,6 +425,8 @@ const [lineups, setLineups] = useState({});
             favoritePositions: JSON.stringify(loadedFavoritePositions),
             allocationRules: JSON.stringify(loadedAllocationRules),
             availability: JSON.stringify(loadedAvailability),
+            learningPlayerConfig: JSON.stringify(learningPlayerConfig),
+            satisfactionWeights: JSON.stringify(satisfactionWeights),
           });
 
           setHasLoaded(true);
@@ -800,6 +802,8 @@ const [lineups, setLineups] = useState({});
           favoritePositions: JSON.stringify(newFavoritePositions),
           allocationRules: JSON.stringify(newAllocationRules),
           availability: JSON.stringify(newAvailability),
+          learningPlayerConfig: JSON.stringify(learningPlayerConfig),
+          satisfactionWeights: JSON.stringify(satisfactionWeights),
         });
       }
     } catch (error) {
@@ -871,6 +875,8 @@ const [lineups, setLineups] = useState({});
           favoritePositions: JSON.stringify(favoritePositions),
           allocationRules: JSON.stringify(allocationRules),
           availability: JSON.stringify(availability),
+          learningPlayerConfig: JSON.stringify(learningPlayerConfig),
+          satisfactionWeights: JSON.stringify(satisfactionWeights),
         });
       }
     } catch (error) {
@@ -903,6 +909,8 @@ const [lineups, setLineups] = useState({});
       favoritePositions: JSON.stringify(favoritePositions),
       allocationRules: JSON.stringify(allocationRules),
       availability: JSON.stringify(availability),
+      learningPlayerConfig: JSON.stringify(learningPlayerConfig),
+      satisfactionWeights: JSON.stringify(satisfactionWeights),
     };
 
     const hasChanges = Object.keys(currentState).some(key => currentState[key] !== initialState[key]);
@@ -911,7 +919,7 @@ const [lineups, setLineups] = useState({});
       changedKeys: Object.keys(currentState).filter(key => currentState[key] !== initialState[key])
     });
     setHasUnsavedChanges(hasChanges);
-  }, [playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, hasLoaded, initialState]);
+  }, [playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, hasLoaded, initialState]);
 
   const tabs = [
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
@@ -3196,9 +3204,20 @@ const [lineups, setLineups] = useState({});
               <div className="font-semibold text-purple-900">Phase 2: Bench Assignment</div>
               <div className="text-purple-800 space-y-1.5">
                 <div><strong>1. Filter remaining players:</strong> Only those not assigned to field positions</div>
-                <div><strong>2. Sort by field time:</strong> Players with MOST field time go to bench first (gives them rest)</div>
-                <div className="ml-4 text-[11px] italic">Descending sort: highest fieldHistory[playerId] first</div>
-                <div><strong>3. Take top 8:</strong> Fill all {BENCH_SIZE} bench slots</div>
+                <div><strong>2. Sort strategy</strong> (depends on Fair PlayTime weight):</div>
+                <div className="ml-4 space-y-1">
+                  <div><strong>When Fair PlayTime &gt; 70%:</strong></div>
+                  <div className="ml-4 text-[11px]">
+                    • <strong>Primary:</strong> Players with FEWER bench appearances go first (balances bench time)<br/>
+                    • <strong>Secondary:</strong> Among equal bench history, prioritize MORE field time (gives rest)
+                  </div>
+                  <div><strong>When Fair PlayTime ≤ 70%:</strong></div>
+                  <div className="ml-4 text-[11px]">
+                    • <strong>Primary:</strong> Players with MORE field time go first (prioritizes rest)<br/>
+                    • <strong>Secondary:</strong> Among similar field time, assign fewer bench appearances
+                  </div>
+                </div>
+                <div><strong>3. Take top 8:</strong> Fill all bench slots with sorted candidates</div>
               </div>
             </div>
 
