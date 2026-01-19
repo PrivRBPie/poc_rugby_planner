@@ -1429,7 +1429,7 @@ const [lineups, setLineups] = useState({});
     });
   };
 
-  // Auto-propose all halves for the entire game day - GLOBAL OPTIMIZATION APPROACH
+  // Auto-propose all halves for the entire game day - FAIRNESS-FIRST APPROACH V2
   const proposeFullDay = (playdayId, mode = allocationMode) => {
     if (!selectedPlayday) {
       return;
@@ -1453,144 +1453,94 @@ const [lineups, setLineups] = useState({});
     const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
     const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
 
-    // Calculate actual bench size based on available players
-    const actualBenchSize = Math.max(0, availablePlayers.length - positions.length);
-
-    // PHASE 1: GLOBAL BENCH DISTRIBUTION
-    // Pre-allocate bench slots across ALL halves to ensure fairness WITHIN THIS GAME DAY
+    // Calculate ideal field time per player
     const totalHalves = allHalvesForDay.length;
-    const totalBenchSlots = totalHalves * actualBenchSize;
-    const idealBenchPerPlayer = totalBenchSlots / availablePlayers.length;
+    const totalFieldSlots = totalHalves * positions.length;
+    const idealFieldTimePerPlayer = totalFieldSlots / availablePlayers.length;
 
-    // Calculate target bench times for each player FOR THIS GAME DAY ONLY
-    // Do NOT consider historical bench data - we want fairness within this game day
-    const playerBenchTargets = {};
-    availablePlayers.forEach(p => {
-      playerBenchTargets[p.id] = Math.round(idealBenchPerPlayer);
-    });
+    // Track field counts for each player during allocation
+    const fieldCounts = {};
+    availablePlayers.forEach(p => fieldCounts[p.id] = 0);
 
-    // Adjust targets to ensure sum equals total slots needed
-    const targetSum = Object.values(playerBenchTargets).reduce((a, b) => a + b, 0);
-    const adjustment = totalBenchSlots - targetSum;
-    if (adjustment !== 0) {
-      // Distribute adjustment evenly using round-robin
-      for (let i = 0; i < Math.abs(adjustment); i++) {
-        const player = availablePlayers[i % availablePlayers.length];
-        playerBenchTargets[player.id] += Math.sign(adjustment);
-      }
-    }
-
-    // Pre-assign bench slots for each half using round-robin with priority
-    const benchAssignments = {}; // key: half-key, value: array of player IDs
-    const playerBenchCount = {}; // Track how many times each player has been assigned bench
-    availablePlayers.forEach(p => playerBenchCount[p.id] = 0);
-
-    allHalvesForDay.forEach(({ matchId, half }, index) => {
-      const key = `${playdayId}-${matchId}-${half}`;
-      benchAssignments[key] = [];
-
-      // Select actualBenchSize players who need bench time most FOR THIS GAME DAY
-      const benchCandidates = [...availablePlayers]
-        .filter(p => playerBenchCount[p.id] < playerBenchTargets[p.id])
-        .sort((a, b) => {
-          // Priority: how far below target they are FOR THIS GAME DAY
-          const aNeeded = playerBenchTargets[a.id] - playerBenchCount[a.id];
-          const bNeeded = playerBenchTargets[b.id] - playerBenchCount[b.id];
-          if (aNeeded !== bNeeded) return bNeeded - aNeeded; // More needed = higher priority
-
-          // Tie-breaker: bench count within THIS GAME DAY (less = higher priority)
-          return playerBenchCount[a.id] - playerBenchCount[b.id];
-        })
-        .slice(0, actualBenchSize);
-
-      benchCandidates.forEach(p => {
-        benchAssignments[key].push(p.id);
-        playerBenchCount[p.id]++;
-      });
-    });
-
-    // PHASE 2: POSITION ASSIGNMENTS
-    // Now assign positions for each half, respecting pre-determined bench assignments
+    // Allocate halves iteratively, maintaining fairness at each step
     const newLineupsForDay = {};
     const newExplanationsForDay = {};
-    const currentFieldHistory = { ...fieldHistory };
-    const currentBenchHistory = { ...benchHistory };
 
-    allHalvesForDay.forEach(({ matchId, half }) => {
+    allHalvesForDay.forEach(({ matchId, half }, halfIdx) => {
       const key = `${playdayId}-${matchId}-${half}`;
-      const preBenchedPlayers = new Set(benchAssignments[key]);
-      const assigned = new Set(preBenchedPlayers); // Bench players are already "assigned"
+
+      // Calculate fairness scores for this half (how much each player needs field time)
+      const fairnessScores = {};
+      availablePlayers.forEach(p => {
+        const currentRatio = fieldCounts[p.id] / (halfIdx + 1);
+        const targetRatio = idealFieldTimePerPlayer / totalHalves;
+        fairnessScores[p.id] = targetRatio - currentRatio; // Positive = needs more field time
+      });
+
+      // Build candidate assignments for all position-player combinations
+      const candidateAssignments = [];
+
+      positions.forEach(pos => {
+        availablePlayers.forEach(player => {
+          // Calculate score for this player-position pair
+          const { score: baseScore, explanations } = calculatePlayerPositionScore(
+            player, pos, new Set(), activeRules, mode, {}, {}
+          );
+
+          // Skip if not trained (score will be -Infinity)
+          if (baseScore === -Infinity) {
+            return;
+          }
+
+          // Add fairness component (scaled significantly to prioritize fairness)
+          const fairnessComponent = fairnessScores[player.id] * fairPlayWeight * 50;
+          const totalScore = baseScore + fairnessComponent;
+
+          candidateAssignments.push({
+            player: player,
+            playerId: player.id,
+            pos: pos,
+            posId: pos.id,
+            score: totalScore,
+            baseScore: baseScore,
+            fairnessComponent: fairnessComponent,
+            explanations: explanations
+          });
+        });
+      });
+
+      // Sort by total score (descending)
+      candidateAssignments.sort((a, b) => b.score - a.score);
+
+      // Greedy assignment: pick best pairs without conflicts
       const newAssignments = {};
       const explanationsMap = {};
+      const assignedPlayers = new Set();
+      const assignedPositions = new Set();
 
-      // Assign field positions (excluding pre-benched players)
-      positions.forEach(pos => {
-        const candidateScores = availablePlayers
-          .filter(p => !assigned.has(p.id))
-          .map(p => {
-            const { score, explanations } = calculatePlayerPositionScore(
-              p, pos, assigned, activeRules, mode, currentFieldHistory, currentBenchHistory
-            );
-            return { player: p, score, explanations };
-          })
-          .filter(c => c.score > -Infinity)
-          .sort((a, b) => b.score - a.score);
-
-        if (candidateScores.length > 0) {
-          const best = candidateScores[0];
-          newAssignments[pos.id] = best.player.id;
-          assigned.add(best.player.id);
-          explanationsMap[`${pos.id}-${best.player.id}`] = {
-            position: pos,
-            player: best.player,
-            score: best.score,
-            explanations: best.explanations,
+      candidateAssignments.forEach(candidate => {
+        if (!assignedPlayers.has(candidate.playerId) && !assignedPositions.has(candidate.posId)) {
+          newAssignments[candidate.posId] = candidate.playerId;
+          assignedPlayers.add(candidate.playerId);
+          assignedPositions.add(candidate.posId);
+          explanationsMap[`${candidate.posId}-${candidate.playerId}`] = {
+            position: candidate.pos,
+            player: candidate.player,
+            score: candidate.baseScore,
+            explanations: candidate.explanations
           };
-        } else {
-          // No valid candidates - try swapping a benched player if possible
-          const benchedPlayers = benchAssignments[key].map(pid => availablePlayers.find(p => p.id === pid)).filter(p => p);
-          const benchScores = benchedPlayers
-            .map(p => {
-              const { score, explanations } = calculatePlayerPositionScore(
-                p, pos, new Set(), activeRules, mode, currentFieldHistory, currentBenchHistory
-              );
-              return { player: p, score, explanations };
-            })
-            .filter(c => c.score > -Infinity)
-            .sort((a, b) => b.score - a.score);
 
-          if (benchScores.length > 0) {
-            const best = benchScores[0];
-            newAssignments[pos.id] = best.player.id;
-            // Remove from bench and add to assigned
-            benchAssignments[key] = benchAssignments[key].filter(pid => pid !== best.player.id);
-            assigned.add(best.player.id);
-            explanationsMap[`${pos.id}-${best.player.id}`] = {
-              position: pos,
-              player: best.player,
-              score: best.score,
-              explanations: best.explanations,
-            };
-          }
+          // Update field count for this player
+          fieldCounts[candidate.playerId]++;
         }
       });
 
-      // Add any remaining unassigned players to the bench
-      const finalBench = [...benchAssignments[key]];
+      // Add unassigned players to bench
+      const finalBench = [];
       availablePlayers.forEach(p => {
-        const isOnField = Object.values(newAssignments).includes(p.id);
-        const isOnBench = finalBench.includes(p.id);
-        if (!isOnField && !isOnBench) {
+        if (!assignedPlayers.has(p.id)) {
           finalBench.push(p.id);
         }
-      });
-
-      // Update history for next half
-      Object.values(newAssignments).forEach(playerId => {
-        if (playerId) currentFieldHistory[playerId] = (currentFieldHistory[playerId] || 0) + 1;
-      });
-      finalBench.forEach(playerId => {
-        if (playerId) currentBenchHistory[playerId] = (currentBenchHistory[playerId] || 0) + 1;
       });
 
       // Store lineup

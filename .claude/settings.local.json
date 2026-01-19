@@ -18,7 +18,9 @@
       "Bash(gh run list:*)",
       "Bash(npm install:*)",
       "Bash(timeout /t 30)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(node test-allocation.js:*)",
+      "Bash(node:*)"
     ]
   }
 }
