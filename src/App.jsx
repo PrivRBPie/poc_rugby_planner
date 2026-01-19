@@ -1379,54 +1379,106 @@ const [lineups, setLineups] = useState({});
     });
   };
 
-  // Auto-propose all halves for the entire game day
+  // Auto-propose all halves for the entire game day - GLOBAL OPTIMIZATION APPROACH
   const proposeFullDay = (playdayId, mode = allocationMode) => {
     if (!selectedPlayday) return;
 
-    // Get all halves in order
     const allHalvesForDay = selectedPlayday.matches.flatMap(m => [
       { matchId: m.id, half: 1 },
       { matchId: m.id, half: 2 },
     ]);
 
-    // Process each half sequentially, so each one sees the updated history from previous halves
-    const newLineupsForDay = {};
-    const newExplanationsForDay = {};
+    const availablePlayers = players.filter(p => {
+      const avail = availability[p.id];
+      return !avail || avail === 'available';
+    });
+
+    const activeRules = allocationRules[mode];
+    const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
+    const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
+
+    // PHASE 1: GLOBAL BENCH DISTRIBUTION
+    // Pre-allocate bench slots across ALL halves to ensure fairness
+    const totalHalves = allHalvesForDay.length;
+    const totalBenchSlots = totalHalves * BENCH_SIZE;
+    const idealBenchPerPlayer = totalBenchSlots / availablePlayers.length;
+
+    // Calculate target bench times for each player (rounded to ensure we fill all slots)
+    const playerBenchTargets = {};
+    availablePlayers.forEach(p => {
+      const currentBench = benchHistory[p.id] || 0;
+      playerBenchTargets[p.id] = Math.round(idealBenchPerPlayer) - currentBench;
+    });
+
+    // Adjust targets to ensure sum equals total slots needed
+    const targetSum = Object.values(playerBenchTargets).reduce((a, b) => a + b, 0);
+    const adjustment = totalBenchSlots - targetSum;
+    if (adjustment !== 0) {
+      // Distribute adjustment to players who need it most
+      const sortedPlayers = [...availablePlayers].sort((a, b) => {
+        const aBench = benchHistory[a.id] || 0;
+        const bBench = benchHistory[b.id] || 0;
+        return aBench - bBench; // Ascending: fewer benched = higher priority
+      });
+      for (let i = 0; i < Math.abs(adjustment); i++) {
+        const player = sortedPlayers[i % sortedPlayers.length];
+        playerBenchTargets[player.id] += Math.sign(adjustment);
+      }
+    }
+
+    // Pre-assign bench slots for each half using round-robin with priority
+    const benchAssignments = {}; // key: half-key, value: array of player IDs
+    const playerBenchCount = {}; // Track how many times each player has been assigned bench
+    availablePlayers.forEach(p => playerBenchCount[p.id] = 0);
 
     allHalvesForDay.forEach(({ matchId, half }) => {
-      // Calculate current history including lineups we've just created
-      const currentFieldHistory = { ...fieldHistory };
-      const currentBenchHistory = { ...benchHistory };
+      const key = `${playdayId}-${matchId}-${half}`;
+      benchAssignments[key] = [];
 
-      // Update history with newly created lineups in this batch
-      Object.entries(newLineupsForDay).forEach(([key, lineup]) => {
-        Object.values(lineup.assignments || {}).forEach(playerId => {
-          if (playerId) currentFieldHistory[playerId] = (currentFieldHistory[playerId] || 0) + 1;
-        });
-        (lineup.bench || []).forEach(playerId => {
-          if (playerId) currentBenchHistory[playerId] = (currentBenchHistory[playerId] || 0) + 1;
-        });
+      // Select BENCH_SIZE players who need bench time most
+      const benchCandidates = [...availablePlayers]
+        .filter(p => playerBenchCount[p.id] < playerBenchTargets[p.id])
+        .sort((a, b) => {
+          // Priority: how far below target they are
+          const aNeeded = playerBenchTargets[a.id] - playerBenchCount[a.id];
+          const bNeeded = playerBenchTargets[b.id] - playerBenchCount[b.id];
+          if (aNeeded !== bNeeded) return bNeeded - aNeeded; // More needed = higher priority
+
+          // Tie-breaker: current total bench time (less = higher priority)
+          const aBench = (benchHistory[a.id] || 0) + playerBenchCount[a.id];
+          const bBench = (benchHistory[b.id] || 0) + playerBenchCount[b.id];
+          return aBench - bBench;
+        })
+        .slice(0, BENCH_SIZE);
+
+      benchCandidates.forEach(p => {
+        benchAssignments[key].push(p.id);
+        playerBenchCount[p.id]++;
       });
+    });
 
-      // Now run the standard allocation algorithm with updated history
-      const assigned = new Set();
+    // PHASE 2: POSITION ASSIGNMENTS
+    // Now assign positions for each half, respecting pre-determined bench assignments
+    const newLineupsForDay = {};
+    const newExplanationsForDay = {};
+    const currentFieldHistory = { ...fieldHistory };
+    const currentBenchHistory = { ...benchHistory };
+
+    allHalvesForDay.forEach(({ matchId, half }) => {
+      const key = `${playdayId}-${matchId}-${half}`;
+      const preBenchedPlayers = new Set(benchAssignments[key]);
+      const assigned = new Set(preBenchedPlayers); // Bench players are already "assigned"
       const newAssignments = {};
       const explanationsMap = {};
-      const activeRules = allocationRules[mode];
 
-      // Get available players for this half
-      const availablePlayersForHalf = players.filter(p => {
-        const avail = availability[p.id];
-        return !avail || avail === 'available';
-      });
-
-      // Phase 1: Assign field positions
+      // Assign field positions (excluding pre-benched players)
       positions.forEach(pos => {
-        const candidateScores = availablePlayersForHalf
+        const candidateScores = availablePlayers
           .filter(p => !assigned.has(p.id))
           .map(p => {
-            // Use updated history for scoring
-            const { score, explanations } = calculatePlayerPositionScore(p, pos, assigned, activeRules, mode, currentFieldHistory, currentBenchHistory);
+            const { score, explanations } = calculatePlayerPositionScore(
+              p, pos, assigned, activeRules, mode, currentFieldHistory, currentBenchHistory
+            );
             return { player: p, score, explanations };
           })
           .filter(c => c.score > -Infinity)
@@ -1445,35 +1497,16 @@ const [lineups, setLineups] = useState({});
         }
       });
 
-      // Phase 2: Assign bench with updated history
-      const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
-      const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
+      // Update history for next half
+      Object.values(newAssignments).forEach(playerId => {
+        if (playerId) currentFieldHistory[playerId] = (currentFieldHistory[playerId] || 0) + 1;
+      });
+      benchAssignments[key].forEach(playerId => {
+        if (playerId) currentBenchHistory[playerId] = (currentBenchHistory[playerId] || 0) + 1;
+      });
 
-      const benchCandidates = availablePlayersForHalf
-        .filter(p => !assigned.has(p.id))
-        .sort((a, b) => {
-          const aFieldTime = currentFieldHistory[a.id] || 0;
-          const bFieldTime = currentFieldHistory[b.id] || 0;
-          const aBenchTime = currentBenchHistory[a.id] || 0;
-          const bBenchTime = currentBenchHistory[b.id] || 0;
-
-          if (fairPlayWeight > 0.7) {
-            const benchDiff = aBenchTime - bBenchTime;
-            if (benchDiff !== 0) return benchDiff;
-            return bFieldTime - aFieldTime;
-          } else {
-            const fieldTimeDiff = bFieldTime - aFieldTime;
-            if (Math.abs(fieldTimeDiff) > 1) return fieldTimeDiff;
-            return aBenchTime - bBenchTime;
-          }
-        })
-        .slice(0, BENCH_SIZE);
-
-      const newBench = benchCandidates.map(p => p.id);
-
-      // Store the lineup for this half
-      const key = `${playdayId}-${matchId}-${half}`;
-      newLineupsForDay[key] = { assignments: newAssignments, bench: newBench };
+      // Store lineup
+      newLineupsForDay[key] = { assignments: newAssignments, bench: benchAssignments[key] };
       newExplanationsForDay[key] = explanationsMap;
     });
 
