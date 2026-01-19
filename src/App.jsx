@@ -1115,15 +1115,21 @@ const [lineups, setLineups] = useState({});
       const playdayBenchCount = playdayBenchCounts[p.id] || 0; // Bench count for this playday only
       const fieldCount = fieldHistory[p.id] || 0;
       const timesAtPosition = playerPositionCounts[p.id]?.[positionId] || 0;
-      const isAssignedElsewhereInHalf = assignedInHalf.has(p.id) &&
-        (forBench ? !lineup.bench?.includes(p.id) : lineup.assignments[positionId] !== p.id);
+      // Check if player is assigned elsewhere in this half
+      // For field positions: only exclude if assigned to a DIFFERENT field position (bench players are OK to show)
+      // For bench: exclude if on bench elsewhere or on field
+      const isAssignedElsewhereInHalf = forBench
+        ? (assignedInHalf.has(p.id) && !lineup.bench?.includes(p.id))
+        : (lineup.assignments[positionId] !== p.id && Object.values(lineup.assignments).includes(p.id));
+
       const isCurrentlyHere = forBench ? lineup.bench?.includes(p.id) : lineup.assignments[positionId] === p.id;
+      const isOnBench = lineup.bench?.includes(p.id);
       
       let score = 1000;
       if (forBench) score = benchCount * 100 - fieldCount * 10;
       else if (trained) score = 100 - (rating * 10) - (isPreferred ? 50 : 0);
 
-      return { ...p, trained, rating, isPreferred, benchCount, playdayBenchCount, fieldCount, timesAtPosition, isAssignedElsewhereInHalf, isCurrentlyHere, score };
+      return { ...p, trained, rating, isPreferred, benchCount, playdayBenchCount, fieldCount, timesAtPosition, isAssignedElsewhereInHalf, isCurrentlyHere, isOnBench, score };
     }).sort((a, b) => {
       if (a.isCurrentlyHere !== b.isCurrentlyHere) return a.isCurrentlyHere ? -1 : 1;
       if (a.isAssignedElsewhereInHalf !== b.isAssignedElsewhereInHalf) return a.isAssignedElsewhereInHalf ? 1 : -1;
@@ -2326,11 +2332,13 @@ const [lineups, setLineups] = useState({});
           className={`w-full text-left p-1.5 rounded-lg transition-all border text-xs ${
             p.isCurrentlyHere ? 'bg-blue-50 border-blue-300' :
             p.isAssignedElsewhereInHalf ? 'bg-gray-100 border-gray-200 opacity-40 cursor-not-allowed' :
+            p.isOnBench && !forBench ? 'bg-purple-50 border-purple-200 hover:bg-purple-100' :
             isUntrained ? (gameMode ? 'bg-red-50 border-red-300 hover:bg-red-100' : 'bg-orange-50 border-orange-200 hover:bg-orange-100') :
             isAlt ? 'bg-amber-50 border-amber-200 hover:bg-amber-100' :
             'bg-white border-gray-200 hover:bg-gray-50'
           }`}>
           <div className="flex items-center gap-1.5">
+            {p.isOnBench && !forBench && <span className="text-[9px] font-semibold text-purple-600 bg-purple-100 px-1 rounded">BENCH</span>}
             <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: DIOK.blue }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
@@ -3575,11 +3583,19 @@ const [lineups, setLineups] = useState({});
                 }}
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {[...playdays].sort((a, b) => new Date(b.date) - new Date(a.date)).map(pd => (
-                  <option key={pd.id} value={pd.id.toString()}>
-                    {pd.name} ({pd.type === 'game' ? '🏆' : '📚'})
-                  </option>
-                ))}
+                {[...playdays].sort((a, b) => new Date(b.date) - new Date(a.date)).map(pd => {
+                  // Format date as DD/MM
+                  const date = new Date(pd.date);
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const dateStr = `${day}/${month}`;
+
+                  return (
+                    <option key={pd.id} value={pd.id.toString()}>
+                      {pd.name} ({pd.type === 'game' ? '🏆' : '📚'}) - {dateStr}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
