@@ -1239,6 +1239,10 @@ const [lineups, setLineups] = useState({});
     });
 
     // Phase 2: Assign bench (balance both field time AND bench fairness)
+    // Get Fair PlayTime weight to determine prioritization
+    const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
+    const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
+
     const benchCandidates = availablePlayers
       .filter(p => !assigned.has(p.id))
       .sort((a, b) => {
@@ -1246,16 +1250,28 @@ const [lineups, setLineups] = useState({});
         const bFieldTime = fieldHistory[b.id] || 0;
         const aBenchTime = benchHistory[a.id] || 0;
         const bBenchTime = benchHistory[b.id] || 0;
+        const aTotalTime = aFieldTime + aBenchTime;
+        const bTotalTime = bFieldTime + bBenchTime;
 
-        // Primary: Give rest to players with more field time
-        // Secondary: Among players with similar field time, prioritize those with LESS bench time
-        const fieldTimeDiff = bFieldTime - aFieldTime;
-        if (Math.abs(fieldTimeDiff) > 1) {
-          return fieldTimeDiff; // Significant field time difference, prioritize that
+        // Calculate total playtime difference (field + bench)
+        const totalTimeDiff = aTotalTime - bTotalTime;
+
+        // If Fair PlayTime weight is high (>0.7), prioritize bench balance more aggressively
+        if (fairPlayWeight > 0.7) {
+          // Primary: Players with less total playtime get priority
+          if (totalTimeDiff !== 0) {
+            return totalTimeDiff; // Ascending: less total time = higher priority for bench
+          }
+          // Secondary: Among equal total time, prioritize those with FEWER bench times
+          return aBenchTime - bBenchTime;
+        } else {
+          // Original logic: prioritize field time rest
+          const fieldTimeDiff = bFieldTime - aFieldTime;
+          if (Math.abs(fieldTimeDiff) > 1) {
+            return fieldTimeDiff;
+          }
+          return aBenchTime - bBenchTime;
         }
-
-        // If field time is similar, prioritize players with FEWER bench times
-        return aBenchTime - bBenchTime; // Ascending: least bench time first
       })
       .slice(0, BENCH_SIZE);
 
