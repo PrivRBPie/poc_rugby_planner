@@ -322,7 +322,7 @@ const [lineups, setLineups] = useState({});
   const [allocationExplanations, setAllocationExplanations] = useState({});
   const [learningPlayerConfig, setLearningPlayerConfig] = useState({
     maxStars: 2,  // Players with ≤ this many stars are considered learning
-    maxGames: 0,  // Players with ≤ this many games at position are considered learning
+    maxGames: 5,  // Players with ≤ this many games at position are considered learning
   });
   const [satisfactionWeights, setSatisfactionWeights] = useState({
     fieldTime: 40,      // Weight for field time (default 40%)
@@ -1404,6 +1404,13 @@ const [lineups, setLineups] = useState({});
         }
       });
     }
+
+    // Phase 4: Add any remaining unassigned players to bench
+    const assignedPlayerIds = new Set([...Object.values(newAssignments), ...newBench]);
+    const remainingPlayers = availablePlayers.filter(p => !assignedPlayerIds.has(p.id));
+    remainingPlayers.forEach(p => {
+      newBench.push(p.id);
+    });
 
     const key = `${playdayId}-${matchId}-${half}`;
     setLineups(prev => ({ ...prev, [key]: { assignments: newAssignments, bench: newBench } }));
