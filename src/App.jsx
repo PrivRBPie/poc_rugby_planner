@@ -1182,7 +1182,7 @@ const [lineups, setLineups] = useState({});
     });
   };
 
-  const removePlayer = (playerId) => {
+  const removePlayer = async (playerId) => {
     const player = players.find(p => p.id === playerId);
     if (!player) return;
 
@@ -1190,48 +1190,69 @@ const [lineups, setLineups] = useState({});
 
     if (!window.confirm(confirmMsg)) return;
 
-    // Remove player from squad
-    setPlayers(prev => prev.filter(p => p.id !== playerId));
+    try {
+      // Remove from team_players junction table in database
+      const { error } = await supabase
+        .from('team_players')
+        .delete()
+        .eq('team_id', currentTeamId)
+        .eq('player_id', playerId);
 
-    // Remove from lineups
-    setLineups(prev => {
-      const updated = {};
-      Object.keys(prev).forEach(key => {
-        const lineup = prev[key];
-        updated[key] = {
-          assignments: Object.fromEntries(
-            Object.entries(lineup.assignments || {}).filter(([_, pid]) => pid !== playerId)
-          ),
-          bench: (lineup.bench || []).filter(pid => pid !== playerId)
-        };
+      if (error) {
+        console.error('Error removing player from database:', error);
+        alert(`Failed to remove player: ${error.message}`);
+        return;
+      }
+
+      // Remove player from squad
+      setPlayers(prev => prev.filter(p => p.id !== playerId));
+
+      // Remove from lineups
+      setLineups(prev => {
+        const updated = {};
+        Object.keys(prev).forEach(key => {
+          const lineup = prev[key];
+          updated[key] = {
+            assignments: Object.fromEntries(
+              Object.entries(lineup.assignments || {}).filter(([_, pid]) => pid !== playerId)
+            ),
+            bench: (lineup.bench || []).filter(pid => pid !== playerId)
+          };
+        });
+        return updated;
       });
-      return updated;
-    });
 
-    // Remove ratings
-    setRatings(prev => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach(key => {
-        if (key.startsWith(`${playerId}-`)) delete updated[key];
+      // Remove ratings
+      setRatings(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(key => {
+          if (key.startsWith(`${playerId}-`)) delete updated[key];
+        });
+        return updated;
       });
-      return updated;
-    });
 
-    // Remove training
-    setTraining(prev => {
-      const updated = { ...prev };
-      Object.keys(updated).forEach(key => {
-        if (key.startsWith(`${playerId}-`)) delete updated[key];
+      // Remove training
+      setTraining(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(key => {
+          if (key.startsWith(`${playerId}-`)) delete updated[key];
+        });
+        return updated;
       });
-      return updated;
-    });
 
-    // Remove favorite positions
-    setFavoritePositions(prev => {
-      const updated = { ...prev };
-      delete updated[playerId];
-      return updated;
-    });
+      // Remove favorite positions
+      setFavoritePositions(prev => {
+        const updated = { ...prev };
+        delete updated[playerId];
+        return updated;
+      });
+
+      // Log the action
+      logAction('remove_player', { player_name: player.name, player_id: playerId });
+    } catch (err) {
+      console.error('Error removing player:', err);
+      alert(`Error removing player: ${err.message}`);
+    }
 
     // Remove availability
     setAvailability(prev => {
