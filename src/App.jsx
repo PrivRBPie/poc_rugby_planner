@@ -110,6 +110,7 @@ const DIOK = { blue: '#1e3a5f', blueLight: '#2d5a87', gray: '#f8fafc' };
 export default function RugbyLineupPlanner() {
   const [activeTab, setActiveTab] = useState('squad');
   const [players, setPlayers] = useState(initialPlayers);
+  const [allPlayers, setAllPlayers] = useState([]); // Global player library
   
   const [playdays, setPlaydays] = useState([
     { id: 1, date: '2025-12-03', name: 'Training Week 1', type: 'training', matches: [
@@ -1047,7 +1048,28 @@ const [lineups, setLineups] = useState({});
       } else if (!error) {
         // Load existing data into state
         setRugbyDataId(rugbyData.id);
-        setPlayers(rugbyData.data.players || []);
+
+        // Load players from team_players junction table
+        const { data: teamPlayers, error: playersError } = await supabase
+          .from('team_players')
+          .select(`
+            player_id,
+            players (id, name, mini_year)
+          `)
+          .eq('team_id', teamId);
+
+        if (!playersError && teamPlayers) {
+          const loadedPlayers = teamPlayers.map(tp => ({
+            id: tp.players.id,
+            name: tp.players.name,
+            miniYear: tp.players.mini_year
+          }));
+          setPlayers(loadedPlayers);
+        } else {
+          // Fallback to rugby_data.players if junction table not available
+          setPlayers(rugbyData.data.players || []);
+        }
+
         setPlaydays(rugbyData.data.playdays || []);
         setLineups(rugbyData.data.lineups || {});
         setRatings(rugbyData.data.ratings || {});
@@ -1225,6 +1247,109 @@ const [lineups, setLineups] = useState({});
 
     logAction('remove_player', { player_name: player.name, player_id: playerId });
   };
+
+  // Load all players from global library
+  const loadAllPlayers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('players')
+        .select('*')
+        .order('name');
+
+      if (!error) {
+        setAllPlayers(data || []);
+      }
+    } catch (err) {
+      console.error('Error loading players library:', err);
+    }
+  };
+
+  // Add existing player to current team
+  const addExistingPlayerToTeam = async (playerId) => {
+    try {
+      // Check if player is already in team
+      if (players.find(p => p.id === playerId)) {
+        alert('This player is already in your team!');
+        return;
+      }
+
+      // Add to team_players junction table
+      const { error: linkError } = await supabase
+        .from('team_players')
+        .insert({
+          team_id: currentTeamId,
+          player_id: playerId,
+          added_by: currentUsername || 'anonymous'
+        });
+
+      if (linkError) {
+        if (linkError.code === '23505') { // Unique constraint violation
+          alert('This player is already in your team!');
+        } else {
+          throw linkError;
+        }
+        return;
+      }
+
+      // Find player in allPlayers and add to current team
+      const player = allPlayers.find(p => p.id === playerId);
+      if (player) {
+        setPlayers(prev => [...prev, { id: player.id, name: player.name, miniYear: player.mini_year }]);
+        logAction('add_existing_player', { player_name: player.name, player_id: playerId });
+      }
+
+      setShowAddPlayer(false);
+    } catch (err) {
+      console.error('Error adding player to team:', err);
+      alert(`Error adding player: ${err.message}`);
+    }
+  };
+
+  // Create new player and add to current team
+  const createAndAddPlayer = async (name, miniYear) => {
+    try {
+      // Create new player in global library
+      const { data: newPlayer, error: createError } = await supabase
+        .from('players')
+        .insert({
+          name: name,
+          mini_year: miniYear,
+          created_by: currentUsername || 'anonymous'
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+
+      // Add to team_players junction table
+      const { error: linkError } = await supabase
+        .from('team_players')
+        .insert({
+          team_id: currentTeamId,
+          player_id: newPlayer.id,
+          added_by: currentUsername || 'anonymous'
+        });
+
+      if (linkError) throw linkError;
+
+      // Add to current team's players
+      setPlayers(prev => [...prev, { id: newPlayer.id, name: newPlayer.name, miniYear: newPlayer.mini_year }]);
+
+      // Refresh all players library
+      await loadAllPlayers();
+
+      logAction('create_and_add_player', { player_name: newPlayer.name, player_id: newPlayer.id });
+      setShowAddPlayer(false);
+    } catch (err) {
+      console.error('Error creating player:', err);
+      alert(`Error creating player: ${err.message}`);
+    }
+  };
+
+  // Load all players when component mounts
+  useEffect(() => {
+    loadAllPlayers();
+  }, []);
 
   const benchHistory = useMemo(() => {
     const counts = {};
@@ -4068,11 +4193,78 @@ const [lineups, setLineups] = useState({});
           ))}
         </div>
       </nav>
-      <BottomSheet isOpen={showAddPlayer} onClose={() => setShowAddPlayer(false)} title="Add Player">
-        <div className="space-y-4">
-          <input type="text" value={newPlayer.name} onChange={(e) => setNewPlayer({...newPlayer, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900" placeholder="Player name" autoFocus />
-          <div className="flex gap-2">{['1st year', '2nd year'].map(year => <button key={year} onClick={() => setNewPlayer({...newPlayer, miniYear: year})} className={`flex-1 py-3 rounded-xl font-semibold border ${newPlayer.miniYear === year ? 'text-white border-transparent' : 'bg-gray-50 text-gray-600 border-gray-200'}`} style={{ backgroundColor: newPlayer.miniYear === year ? DIOK.blue : undefined }}>{year}</button>)}</div>
-          <button onClick={() => setShowAddPlayer(false)} disabled={!newPlayer.name.trim()} className={`w-full py-3 rounded-xl font-bold text-white ${newPlayer.name.trim() ? '' : 'opacity-50'}`} style={{ backgroundColor: DIOK.blue }}>Add Player</button>
+      <BottomSheet isOpen={showAddPlayer} onClose={() => setShowAddPlayer(false)} title="Add Player to Team">
+        <div className="grid grid-cols-2 gap-4">
+          {/* Left: Existing Players */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700">Existing Players</h3>
+              <span className="text-xs text-gray-500">{allPlayers.filter(p => !players.find(tp => tp.id === p.id)).length} available</span>
+            </div>
+            <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
+              {allPlayers
+                .filter(p => !players.find(tp => tp.id === p.id)) // Exclude already added players
+                .map(player => (
+                  <button
+                    key={player.id}
+                    onClick={() => addExistingPlayerToTeam(player.id)}
+                    className="w-full text-left px-3 py-2 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg transition-colors"
+                  >
+                    <div className="font-medium text-gray-900 text-sm">{player.name}</div>
+                    <div className="text-xs text-gray-500">{player.mini_year}</div>
+                  </button>
+                ))}
+              {allPlayers.filter(p => !players.find(tp => tp.id === p.id)).length === 0 && (
+                <div className="text-center py-8 text-gray-400 text-sm">
+                  All players are already in your team
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Create New Player */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">Create New Player</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Player Name</label>
+                <input
+                  type="text"
+                  value={newPlayer.name}
+                  onChange={(e) => setNewPlayer({...newPlayer, name: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-900 text-sm"
+                  placeholder="Enter name"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Year</label>
+                <div className="flex gap-2">
+                  {['1st year', '2nd year'].map(year => (
+                    <button
+                      key={year}
+                      onClick={() => setNewPlayer({...newPlayer, miniYear: year})}
+                      className={`flex-1 py-2 rounded-lg font-semibold text-xs border ${
+                        newPlayer.miniYear === year ? 'text-white border-transparent' : 'bg-gray-50 text-gray-600 border-gray-200'
+                      }`}
+                      style={{ backgroundColor: newPlayer.miniYear === year ? DIOK.blue : undefined }}
+                    >
+                      {year}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => createAndAddPlayer(newPlayer.name, newPlayer.miniYear)}
+                disabled={!newPlayer.name.trim()}
+                className={`w-full py-2.5 rounded-lg font-bold text-white text-sm ${
+                  newPlayer.name.trim() ? '' : 'opacity-50 cursor-not-allowed'
+                }`}
+                style={{ backgroundColor: DIOK.blue }}
+              >
+                Create & Add to Team
+              </button>
+            </div>
+          </div>
         </div>
       </BottomSheet>
       <BottomSheet isOpen={showAddPlayday} onClose={() => setShowAddPlayday(false)} title="Add Playday">
