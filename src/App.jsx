@@ -327,10 +327,9 @@ const [lineups, setLineups] = useState({});
     maxGames: 5,  // Players with ≤ this many games at position are considered learning
   });
   const [satisfactionWeights, setSatisfactionWeights] = useState({
-    fieldTime: 40,      // Weight for field time (default 40%)
+    playingTime: 50,    // Weight for playing time (field + bench fairness combined, default 50%)
     fun: 30,            // Weight for favorite positions (default 30%)
     learning: 20,       // Weight for learning opportunities (default 20%)
-    benchFairness: 10,  // Weight for bench fairness (default 10%)
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
@@ -3109,11 +3108,14 @@ const [lineups, setLineups] = useState({});
                     });
 
                     // Calculate satisfaction score (0-100) using configured weights
-                    const fieldScore = (totalField / playdayHalves.length) * satisfactionWeights.fieldTime;
+                    // Playing Time: Combined field time percentage + bench fairness penalty
+                    const fieldTimeRatio = totalField / playdayHalves.length; // 0-1
+                    const benchPenalty = totalBench > 2 ? (totalBench - 2) * 0.1 : 0; // -0.1 per extra bench
+                    const playingTimeScore = Math.max(0, (fieldTimeRatio - benchPenalty)) * satisfactionWeights.playingTime;
+
                     const funScore = totalField > 0 ? (funCount / totalField) * satisfactionWeights.fun : 0;
                     const learningScore = totalField > 0 ? Math.min((learningCount / totalField) * satisfactionWeights.learning, satisfactionWeights.learning) : 0;
-                    const benchScore = totalBench <= 2 ? satisfactionWeights.benchFairness : Math.max(0, satisfactionWeights.benchFairness - (totalBench - 2) * 3);
-                    const satisfaction = Math.min(100, fieldScore + funScore + learningScore + benchScore); // Cap at 100
+                    const satisfaction = Math.min(100, playingTimeScore + funScore + learningScore); // Cap at 100
 
                     // Build detailed breakdown for tooltip
                     const halfDetails = playdayHalves.map(h => {
@@ -3767,36 +3769,40 @@ const [lineups, setLineups] = useState({});
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
             <div className="text-xs font-semibold text-blue-800 mb-2">😊 Satisfaction Score Components</div>
             <p className="text-xs text-blue-700 mb-2">
-              Configure how player satisfaction is calculated in the Overview screen. Satisfaction score measures how well each player's experience balances playing time, enjoyment, development, and fairness.
+              Configure how player satisfaction is calculated in the Overview screen. Satisfaction score measures how well each player's experience balances playing time, enjoyment, and development.
             </p>
-            <div className="text-xs text-blue-700 font-mono bg-white/50 p-2 rounded">
-              Satisfaction = (Field Time × {satisfactionWeights.fieldTime}%) + (Fun × {satisfactionWeights.fun}%) + (Learning × {satisfactionWeights.learning}%) + (Bench Fairness × {satisfactionWeights.benchFairness}%)
+            <div className="text-xs text-blue-700 font-mono bg-white/50 p-2 rounded mb-2">
+              Satisfaction = (Playing Time × {satisfactionWeights.playingTime}%) + (Fun × {satisfactionWeights.fun}%) + (Learning × {satisfactionWeights.learning}%)
+            </div>
+            <div className="text-xs text-blue-600 bg-white/70 p-2 rounded">
+              <strong>Playing Time</strong> = Field Time Ratio - Bench Penalty<br/>
+              <span className="text-[11px]">• Bench Penalty: -10% for each bench appearance beyond 2</span>
             </div>
             <div className="text-xs text-blue-700 mt-2">
-              <strong>Total must equal 100%:</strong> Current = {satisfactionWeights.fieldTime + satisfactionWeights.fun + satisfactionWeights.learning + satisfactionWeights.benchFairness}%
+              <strong>Total must equal 100%:</strong> Current = {satisfactionWeights.playingTime + satisfactionWeights.fun + satisfactionWeights.learning}%
             </div>
           </div>
 
           {/* White controls box */}
           <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
             <div className="space-y-4">
-              {/* Field Time Weight */}
+              {/* Playing Time Weight */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-gray-700">⚽ Field Time Weight</label>
-                  <span className="text-sm font-bold" style={{ color: DIOK.blue }}>{satisfactionWeights.fieldTime}%</span>
+                  <label className="text-xs font-semibold text-gray-700">⚽ Playing Time Weight</label>
+                  <span className="text-sm font-bold" style={{ color: DIOK.blue }}>{satisfactionWeights.playingTime}%</span>
                 </div>
                 <input
                   type="range"
                   min="0"
                   max="100"
-                  value={satisfactionWeights.fieldTime}
-                  onChange={(e) => setSatisfactionWeights(prev => ({ ...prev, fieldTime: parseInt(e.target.value) }))}
+                  value={satisfactionWeights.playingTime}
+                  onChange={(e) => setSatisfactionWeights(prev => ({ ...prev, playingTime: parseInt(e.target.value) }))}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   style={{ accentColor: DIOK.blue }}
                 />
                 <p className="text-xs text-gray-600 mt-1">
-                  How much actual playing time affects satisfaction
+                  Field time ratio with bench fairness penalty
                 </p>
               </div>
 
@@ -3837,26 +3843,6 @@ const [lineups, setLineups] = useState({});
                 />
                 <p className="text-xs text-gray-600 mt-1">
                   Development through challenging positions affects satisfaction
-                </p>
-              </div>
-
-              {/* Bench Fairness Weight */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-gray-700">🪑 Bench Fairness Weight</label>
-                  <span className="text-sm font-bold" style={{ color: DIOK.blue }}>{satisfactionWeights.benchFairness}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={satisfactionWeights.benchFairness}
-                  onChange={(e) => setSatisfactionWeights(prev => ({ ...prev, benchFairness: parseInt(e.target.value) }))}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  style={{ accentColor: DIOK.blue }}
-                />
-                <p className="text-xs text-gray-600 mt-1">
-                  Fair distribution of bench time affects satisfaction
                 </p>
               </div>
             </div>
@@ -4090,7 +4076,31 @@ const [lineups, setLineups] = useState({});
           {/* Spacer */}
           <div className="flex-1" />
 
+          {/* Active Users Badge */}
+          {currentUsername && (
+            <div className="flex items-center gap-1 px-2 py-1.5 bg-green-50 border border-green-200 rounded-lg" title={`You + ${activeUsers.map(u => u.username).join(', ')}`}>
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-xs font-medium text-green-700">
+                {activeUsers.length + 1} 👥
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
+            {/* Get Updates Button - Only show when updates available */}
+            {hasRemoteChanges && (
+              <button
+                onClick={refreshFromSupabase}
+                disabled={isSyncing}
+                className="relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg shadow-sm transition-all bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400 shadow-lg animate-pulse"
+                title="New updates available from other coaches"
+              >
+                <span className={isSyncing ? "animate-spin" : ""}>⟳</span>
+                <span>Updates</span>
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 border-2 border-white rounded-full animate-pulse" />
+              </button>
+            )}
+
             {/* Compact Save Button */}
             <button
               onClick={handleSave}
