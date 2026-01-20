@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import bullsLogo from './assets/bulls.svg';
+import sharksLogo from './assets/sharks.svg';
 import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
 
@@ -963,6 +964,13 @@ const [lineups, setLineups] = useState({});
   // Helper function to get current team
   const getCurrentTeam = () => {
     return teams.find(t => t.id === currentTeamId);
+  };
+
+  // Helper function to get team logo image
+  const getTeamLogo = (teamName) => {
+    if (teamName?.includes('Bulls')) return bullsLogo;
+    if (teamName?.includes('Sharks')) return sharksLogo;
+    return null; // Return null for emoji display
   };
 
   // Team management functions
@@ -3845,9 +3853,9 @@ const [lineups, setLineups] = useState({});
                 onClick={() => setShowTeamManager(!showTeamManager)}
                 className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-xl hover:border-blue-500 transition-colors"
               >
-                {getCurrentTeam()?.name?.includes('Bulls') ? (
+                {getTeamLogo(getCurrentTeam()?.name) ? (
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-blue-600">
-                    <img src={bullsLogo} alt="Bulls" className="w-full h-full object-cover" />
+                    <img src={getTeamLogo(getCurrentTeam()?.name)} alt={getCurrentTeam()?.name} className="w-full h-full object-cover" />
                   </div>
                 ) : (
                   <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
@@ -3872,9 +3880,9 @@ const [lineups, setLineups] = useState({});
                         team.id === currentTeamId ? 'bg-blue-100' : ''
                       }`}
                     >
-                      {team.name?.includes('Bulls') ? (
+                      {getTeamLogo(team.name) ? (
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-blue-600">
-                          <img src={bullsLogo} alt="Bulls" className="w-full h-full object-cover" />
+                          <img src={getTeamLogo(team.name)} alt={team.name} className="w-full h-full object-cover" />
                         </div>
                       ) : (
                         <span className="text-2xl">{team.logo}</span>
