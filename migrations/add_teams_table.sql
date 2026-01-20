@@ -40,20 +40,23 @@ VALUES (
     "training": {},
     "favoritePositions": {},
     "allocationRules": {
-      "game": {
-        "enabled": true,
-        "minFieldTime": 3,
-        "maxFieldTime": 4,
-        "strictBenchFairness": true,
-        "enableLearning": true
-      },
-      "training": {
-        "enabled": false,
-        "minFieldTime": 2,
-        "maxFieldTime": 3,
-        "strictBenchFairness": false,
-        "enableLearning": false
-      }
+      "game": [
+        {"id": 1, "name": "No Duplicate Assignments", "type": "HARD", "enabled": true, "locked": true, "weight": 1.0, "description": "A player can only play ONE position per half"},
+        {"id": 7, "name": "Must Be Trained", "type": "HARD", "enabled": true, "locked": true, "weight": 1.0, "description": "Player must have trained for this position (game mode only)"},
+        {"id": 2, "name": "Fair PlayTime", "type": "SOFT", "enabled": true, "locked": false, "weight": 0.80, "description": "Each player should play the same amount of time within limits"},
+        {"id": 3, "name": "Learning Opportunities", "type": "SOFT", "enabled": true, "locked": false, "weight": 0.30, "description": "Prefer less experienced players for growth opportunities", "limit": 6},
+        {"id": 4, "name": "Player Skill", "type": "SOFT", "enabled": true, "locked": false, "weight": 0.60, "description": "Prefer higher-rated players in each position"},
+        {"id": 5, "name": "Position Variety", "type": "SOFT", "enabled": false, "locked": false, "weight": 0.40, "description": "Encourage players to try different positions over time"},
+        {"id": 6, "name": "Player Fun", "type": "SOFT", "enabled": true, "locked": false, "weight": 0.70, "description": "Assign players to their favorite positions"}
+      ],
+      "training": [
+        {"id": 1, "name": "No Duplicate Assignments", "type": "HARD", "enabled": true, "locked": true, "weight": 1.0, "description": "A player can only play ONE position per half"},
+        {"id": 2, "name": "Fair PlayTime", "type": "SOFT", "enabled": true, "locked": false, "weight": 0.90, "description": "Each player should play the same amount of time within limits"},
+        {"id": 3, "name": "Learning Opportunities", "type": "SOFT", "enabled": true, "locked": false, "weight": 0.70, "description": "Prefer less experienced players for growth opportunities", "limit": 12},
+        {"id": 4, "name": "Player Skill", "type": "SOFT", "enabled": false, "locked": false, "weight": 0.30, "description": "Prefer higher-rated players in each position"},
+        {"id": 5, "name": "Position Variety", "type": "SOFT", "enabled": true, "locked": false, "weight": 0.80, "description": "Encourage players to try different positions over time"},
+        {"id": 6, "name": "Player Fun", "type": "SOFT", "enabled": true, "locked": false, "weight": 0.50, "description": "Assign players to their favorite positions"}
+      ]
     },
     "availability": {}
   }'::jsonb
