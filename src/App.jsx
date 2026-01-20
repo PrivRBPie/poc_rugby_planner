@@ -3993,21 +3993,18 @@ const [lineups, setLineups] = useState({});
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           {/* Team Logo/Selector */}
           {teams.length > 0 ? (
-            // Multi-team mode: Show team selector
+            // Multi-team mode: Show team selector (icon only)
             <div className="relative">
               <button
                 onClick={() => setShowTeamManager(!showTeamManager)}
-                className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-xl hover:border-blue-500 transition-colors"
+                className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-white border-2 border-gray-300 hover:border-blue-500 transition-colors"
+                title={getCurrentTeam()?.name || 'Select Team'}
               >
                 {getTeamLogo(getCurrentTeam()?.name) ? (
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-blue-600">
-                    <img src={getTeamLogo(getCurrentTeam()?.name)} alt={getCurrentTeam()?.name} className="w-full h-full object-cover" />
-                  </div>
+                  <img src={getTeamLogo(getCurrentTeam()?.name)} alt={getCurrentTeam()?.name} className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
                 )}
-                <span className="font-bold text-gray-900 text-sm">{getCurrentTeam()?.name || 'Select Team'}</span>
-                <span className="text-gray-400 text-xs">▼</span>
               </button>
 
             {/* Team Dropdown */}
@@ -4055,43 +4052,14 @@ const [lineups, setLineups] = useState({});
             </div>
           ) : (
             // Single-team mode (migration not run): Show Bulls logo image
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden bg-blue-600">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-blue-600">
               <img src={bullsLogo} alt="Bulls" className="w-full h-full object-cover" />
             </div>
           )}
 
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              {/* Show team name in single-team mode */}
-              {teams.length === 0 && (
-                <h1 className="font-bold text-gray-900">{settings.teamName}</h1>
-              )}
-              {/* Active Users Indicator - includes current user */}
-              {currentUsername && (
-                <div className="flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded-full">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-[10px] font-medium text-green-700">
-                    {activeUsers.length + 1} online
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-gray-500">
-                {settings.ageGroup} · Coach <span className="text-green-600">{currentUsername || 'Coach'}</span>
-              </p>
-              {/* Show other active coaches on same line */}
-              {activeUsers.length > 0 && (
-                <span className="text-xs text-green-600">
-                  👥 {activeUsers.map(u => u.username).join(', ')}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Date Selector for Lineup/Overview */}
+          {/* Date Selector for Lineup/Overview - Takes available space */}
           {(activeTab === 'lineup' || activeTab === 'overview') && playdays.length > 0 && (
-            <div className="flex-shrink-0" style={{ minWidth: '220px' }}>
+            <div className="flex-1 max-w-md mx-auto">
               <select
                 value={selectedPlaydayId?.toString() || ''}
                 onChange={(e) => {
@@ -4119,35 +4087,11 @@ const [lineups, setLineups] = useState({});
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            {/* Get Updates Button */}
-            <button
-              onClick={refreshFromSupabase}
-              disabled={isSyncing || !hasRemoteChanges}
-              className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg shadow-sm transition-all ${
-                hasRemoteChanges && !hasUnsavedChanges
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400 shadow-lg animate-pulse'
-                  : hasRemoteChanges && hasUnsavedChanges
-                  ? 'bg-yellow-500 hover:bg-yellow-600 text-white ring-2 ring-yellow-300 shadow-lg'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }`}
-              title={
-                hasRemoteChanges && hasUnsavedChanges
-                  ? "⚠️ Warning: Getting updates will discard your unsaved changes! (Click to confirm)"
-                  : hasRemoteChanges
-                  ? "Click to get latest changes from other coaches"
-                  : "No updates available"
-              }
-            >
-              {hasRemoteChanges && hasUnsavedChanges && <span>⚠️</span>}
-              <span className={isSyncing ? "animate-spin" : ""}>⟳</span>
-              <span>{hasRemoteChanges ? "Get Updates" : "Get Updates"}</span>
-              {hasRemoteChanges && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 border-2 border-white rounded-full animate-pulse" />
-              )}
-            </button>
+          {/* Spacer */}
+          <div className="flex-1" />
 
-            {/* Save Changes Button */}
+          <div className="flex items-center gap-2">
+            {/* Compact Save Button */}
             <button
               onClick={handleSave}
               disabled={isSyncing || !hasUnsavedChanges}
@@ -4167,14 +4111,14 @@ const [lineups, setLineups] = useState({});
               }
             >
               {isSyncing ? (
-                <><span className="animate-spin">⟳</span><span>Saving...</span></>
+                <><span className="animate-spin">💾</span></>
               ) : hasUnsavedChanges ? (
                 <>
                   {hasRemoteChanges && <span>⚠️</span>}
-                  <span>{hasRemoteChanges ? "Save Anyway" : "Save Changes"}</span>
+                  <span>💾 Save</span>
                 </>
               ) : (
-                <><span>✓</span><span>Saved</span></>
+                <><span>✓ Saved</span></>
               )}
               {hasUnsavedChanges && !hasRemoteChanges && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 border-2 border-white rounded-full" />
