@@ -339,98 +339,51 @@ const [lineups, setLineups] = useState({});
   const [hasRemoteChanges, setHasRemoteChanges] = useState(false);
   const [initialState, setInitialState] = useState(null);
 
-  // Load data from Supabase on mount
+  // Multi-team support state
+  const [teams, setTeams] = useState([]);
+  const [currentTeamId, setCurrentTeamId] = useState(null);
+  const [showTeamManager, setShowTeamManager] = useState(false);
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamLogo, setNewTeamLogo] = useState('🐂');
+
+  // Load teams and data from Supabase on mount
   useEffect(() => {
     const loadFromSupabase = async () => {
       try {
         setIsSyncing(true);
 
-        // Fetch the latest rugby data
-        const { data, error } = await supabase
-          .from('rugby_data')
+        // Load all teams
+        const { data: teamsData, error: teamsError } = await supabase
+          .from('teams')
           .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .single();
+          .order('created_at');
 
-        // If error is PGRST116 (no rows), create initial data
-        if (error && error.code === 'PGRST116') {
-          console.log('No data found, creating initial row...');
-
-          const initialData = {
-            playdays: [],
-            lineups: {},
-            ratings: {},
-            training: {},
-            favoritePositions: {},
-            allocationRules: allocationRules,
-            availability: {}
-          };
-
-          const { data: newData, error: insertError } = await supabase
-            .from('rugby_data')
-            .insert([{ team_name: 'Bulls Mini\'s', data: initialData }])
-            .select()
-            .single();
-
-          if (insertError) {
-            console.error('Error creating initial data:', insertError);
-          } else if (newData) {
-            console.log('Initial data created with ID:', newData.id);
-            setRugbyDataId(newData.id);
-          }
-
+        if (teamsError) {
+          console.error('Error loading teams:', teamsError);
           setHasLoaded(true);
           return;
         }
 
-        // If other error, log and continue
-        if (error) {
-          console.error('Error loading from Supabase:', error);
+        setTeams(teamsData || []);
+
+        // Get last selected team from localStorage or default to first team
+        const lastTeamId = localStorage.getItem('rugbyPlannerLastTeamId');
+        const defaultTeam = lastTeamId
+          ? teamsData.find(t => t.id === lastTeamId)
+          : teamsData[0];
+
+        if (!defaultTeam) {
+          console.log('No teams found');
           setHasLoaded(true);
           return;
         }
 
-        // Data exists, load it
-        if (data && data.data) {
-          const rugbyData = data.data;
-          console.log('Loaded existing data with ID:', data.id);
+        setCurrentTeamId(defaultTeam.id);
 
-          // Update state with data from Supabase
-          const loadedPlaydays = rugbyData.playdays || [];
-          const loadedLineups = rugbyData.lineups || {};
-          const loadedRatings = rugbyData.ratings || {};
-          const loadedTraining = rugbyData.training || {};
-          const loadedFavoritePositions = rugbyData.favoritePositions || {};
-          const loadedAllocationRules = rugbyData.allocationRules || allocationRules;
-          const loadedAvailability = rugbyData.availability || {};
+        // Load rugby_data for current team
+        await loadTeamData(defaultTeam.id);
 
-          setPlaydays(loadedPlaydays);
-          setLineups(loadedLineups);
-          setRatings(loadedRatings);
-          setTraining(loadedTraining);
-          setFavoritePositions(loadedFavoritePositions);
-          setAllocationRules(loadedAllocationRules);
-          setAvailability(loadedAvailability);
-          setRugbyDataId(data.id);
-          setRemoteUpdatedAt(data.updated_at);
-          setLastSyncTime(new Date());
-
-          // Set initial state immediately after loading
-          setInitialState({
-            playdays: JSON.stringify(loadedPlaydays),
-            lineups: JSON.stringify(loadedLineups),
-            ratings: JSON.stringify(loadedRatings),
-            training: JSON.stringify(loadedTraining),
-            favoritePositions: JSON.stringify(loadedFavoritePositions),
-            allocationRules: JSON.stringify(loadedAllocationRules),
-            availability: JSON.stringify(loadedAvailability),
-            learningPlayerConfig: JSON.stringify(learningPlayerConfig),
-            satisfactionWeights: JSON.stringify(satisfactionWeights),
-          });
-
-          setHasLoaded(true);
-        }
       } catch (error) {
         console.error('Error loading from Supabase:', error);
         setHasLoaded(true);
@@ -637,7 +590,11 @@ const [lineups, setLineups] = useState({});
         username: currentUsername,
         session_id: sessionId,
         action_type: actionType,
-        details: details,
+        details: {
+          ...details,
+          team_id: currentTeamId,
+          team_name: getCurrentTeam()?.name
+        },
         timestamp: new Date().toISOString()
       };
 
@@ -700,10 +657,11 @@ const [lineups, setLineups] = useState({});
 
     const checkForRemoteChanges = async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error} = await supabase
           .from('rugby_data')
           .select('updated_at')
           .eq('id', rugbyDataId)
+          .eq('team_id', currentTeamId)
           .single();
 
         if (!error && data) {
@@ -787,6 +745,7 @@ const [lineups, setLineups] = useState({});
         .from('rugby_data')
         .select('*')
         .eq('id', rugbyDataId)
+        .eq('team_id', currentTeamId)
         .single();
 
       if (error) {
@@ -875,6 +834,7 @@ const [lineups, setLineups] = useState({});
         .from('rugby_data')
         .update({ data: data })
         .eq('id', rugbyDataId)
+        .eq('team_id', currentTeamId)
         .select()
         .single();
 
@@ -949,6 +909,161 @@ const [lineups, setLineups] = useState({});
     });
     setHasUnsavedChanges(hasChanges);
   }, [playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, hasLoaded, initialState]);
+
+  // Helper function to get current team
+  const getCurrentTeam = () => {
+    return teams.find(t => t.id === currentTeamId);
+  };
+
+  // Team management functions
+  const loadTeamData = async (teamId) => {
+    try {
+      setIsSyncing(true);
+
+      const { data: rugbyData, error } = await supabase
+        .from('rugby_data')
+        .select('*')
+        .eq('team_id', teamId)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        // No data for this team yet, create empty structure
+        const initialData = {
+          playdays: [],
+          lineups: {},
+          ratings: {},
+          training: {},
+          favoritePositions: {},
+          allocationRules: {
+            game: {
+              enabled: true,
+              minFieldTime: 3,
+              maxFieldTime: 4,
+              strictBenchFairness: true,
+              enableLearning: true
+            },
+            training: {
+              enabled: false,
+              minFieldTime: 2,
+              maxFieldTime: 3,
+              strictBenchFairness: false,
+              enableLearning: false
+            }
+          },
+          availability: {}
+        };
+
+        const { data: newData, error: insertError } = await supabase
+          .from('rugby_data')
+          .insert({ team_id: teamId, team_name: getCurrentTeam()?.name || 'New Team', data: initialData })
+          .select()
+          .single();
+
+        if (!insertError) {
+          setRugbyDataId(newData.id);
+          setPlaydays([]);
+          setLineups({});
+          setRatings({});
+          setTraining({});
+          setFavoritePositions({});
+          setAllocationRules(initialData.allocationRules);
+          setAvailability({});
+          setRemoteUpdatedAt(newData.updated_at);
+
+          // Set initial state for change detection
+          setInitialState({
+            playdays: JSON.stringify([]),
+            lineups: JSON.stringify({}),
+            ratings: JSON.stringify({}),
+            training: JSON.stringify({}),
+            favoritePositions: JSON.stringify({}),
+            allocationRules: JSON.stringify(initialData.allocationRules),
+            availability: JSON.stringify({}),
+            learningPlayerConfig: JSON.stringify(learningPlayerConfig),
+            satisfactionWeights: JSON.stringify(satisfactionWeights),
+          });
+        }
+      } else if (!error) {
+        // Load existing data into state
+        setRugbyDataId(rugbyData.id);
+        setPlaydays(rugbyData.data.playdays || []);
+        setLineups(rugbyData.data.lineups || {});
+        setRatings(rugbyData.data.ratings || {});
+        setTraining(rugbyData.data.training || {});
+        setFavoritePositions(rugbyData.data.favoritePositions || {});
+        setAllocationRules(rugbyData.data.allocationRules || allocationRules);
+        setAvailability(rugbyData.data.availability || {});
+        setRemoteUpdatedAt(rugbyData.updated_at);
+
+        // Set initial state for change detection
+        setInitialState({
+          playdays: JSON.stringify(rugbyData.data.playdays || []),
+          lineups: JSON.stringify(rugbyData.data.lineups || {}),
+          ratings: JSON.stringify(rugbyData.data.ratings || {}),
+          training: JSON.stringify(rugbyData.data.training || {}),
+          favoritePositions: JSON.stringify(rugbyData.data.favoritePositions || {}),
+          allocationRules: JSON.stringify(rugbyData.data.allocationRules || allocationRules),
+          availability: JSON.stringify(rugbyData.data.availability || {}),
+          learningPlayerConfig: JSON.stringify(learningPlayerConfig),
+          satisfactionWeights: JSON.stringify(satisfactionWeights),
+        });
+      }
+
+      setHasLoaded(true);
+      setLastSyncTime(new Date());
+    } catch (err) {
+      console.error('Error loading team data:', err);
+      alert(`Error loading team data: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const switchTeam = async (teamId) => {
+    // Check for unsaved changes
+    if (hasUnsavedChanges) {
+      const confirm = window.confirm(
+        'You have unsaved changes. Switch teams anyway? Changes will be lost.'
+      );
+      if (!confirm) return;
+    }
+
+    // Save last team selection
+    localStorage.setItem('rugbyPlannerLastTeamId', teamId);
+    setCurrentTeamId(teamId);
+
+    // Reset state
+    setHasLoaded(false);
+    setHasUnsavedChanges(false);
+
+    // Load team's rugby_data
+    await loadTeamData(teamId);
+  };
+
+  const createTeam = async (teamName, teamLogo) => {
+    try {
+      const { data: newTeam, error } = await supabase
+        .from('teams')
+        .insert({
+          name: teamName,
+          logo: teamLogo,
+          created_by: username || 'anonymous'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setTeams([...teams, newTeam]);
+      logAction('create_team', { team_name: teamName, team_logo: teamLogo });
+
+      // Switch to new team
+      await switchTeam(newTeam.id);
+    } catch (err) {
+      console.error('Error creating team:', err);
+      alert(`Error creating team: ${err.message}`);
+    }
+  };
 
   const tabs = [
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
@@ -3589,14 +3704,57 @@ const [lineups, setLineups] = useState({});
     <div className="min-h-screen" style={{ backgroundColor: DIOK.gray }}>
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          {/* Bulls Logo */}
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden bg-blue-600">
-            <img src={bullsLogo} alt="Bulls" className="w-full h-full object-cover" />
+          {/* Team Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setShowTeamManager(!showTeamManager)}
+              className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-xl hover:border-blue-500 transition-colors"
+            >
+              <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
+              <span className="font-bold text-gray-900 text-sm">{getCurrentTeam()?.name || 'Loading...'}</span>
+              <span className="text-gray-400 text-xs">▼</span>
+            </button>
+
+            {/* Team Dropdown */}
+            {showTeamManager && (
+              <>
+                <div className="fixed inset-0 z-50" onClick={() => setShowTeamManager(false)} />
+                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-2xl border-2 border-gray-200 overflow-hidden z-50">
+                  {teams.map(team => (
+                    <button
+                      key={team.id}
+                      onClick={() => {
+                        switchTeam(team.id);
+                        setShowTeamManager(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition-colors ${
+                        team.id === currentTeamId ? 'bg-blue-100' : ''
+                      }`}
+                    >
+                      <span className="text-2xl">{team.logo}</span>
+                      <span className="font-semibold text-gray-900 text-sm">{team.name}</span>
+                      {team.id === currentTeamId && <span className="ml-auto text-blue-600">✓</span>}
+                    </button>
+                  ))}
+
+                  {/* Create New Team */}
+                  <button
+                    onClick={() => {
+                      setShowTeamManager(false);
+                      setShowCreateTeam(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 border-t-2 border-gray-200 bg-gray-50 hover:bg-blue-50 text-blue-600 font-semibold text-sm"
+                  >
+                    <span className="text-2xl">➕</span>
+                    <span>Create New Team</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="font-bold text-gray-900">{settings.teamName}</h1>
               {/* Active Users Indicator - includes current user */}
               {currentUsername && (
                 <div className="flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded-full">
@@ -3808,6 +3966,76 @@ const [lineups, setLineups] = useState({});
               <p className="text-xs text-gray-500 text-center">
                 Your name is stored locally and can be changed anytime
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Team Modal */}
+      {showCreateTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowCreateTeam(false)}>
+          <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Create New Team</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Team Name</label>
+                <input
+                  type="text"
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.target.value)}
+                  placeholder="e.g., Lions Mini's"
+                  className="w-full bg-gray-50 border-2 border-gray-300 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Team Logo (Emoji)</label>
+                <div className="grid grid-cols-5 gap-2">
+                  {['🐂', '🦈', '🦁', '🐆', '🐉', '🦅', '🐺', '🐻', '🦊', '🐯'].map(emoji => (
+                    <button
+                      key={emoji}
+                      onClick={() => setNewTeamLogo(emoji)}
+                      className={`text-3xl p-2 rounded-lg border-2 hover:bg-blue-50 transition-colors ${
+                        newTeamLogo === emoji ? 'border-blue-500 bg-blue-100' : 'border-gray-300'
+                      }`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <button
+                  onClick={async () => {
+                    if (newTeamName.trim()) {
+                      await createTeam(newTeamName, newTeamLogo);
+                      setShowCreateTeam(false);
+                      setNewTeamName('');
+                      setNewTeamLogo('🐂');
+                    }
+                  }}
+                  disabled={!newTeamName.trim()}
+                  className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors ${
+                    newTeamName.trim() ? 'hover:opacity-90' : 'opacity-50 cursor-not-allowed'
+                  }`}
+                  style={{ backgroundColor: DIOK.blue }}
+                >
+                  Create Team
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCreateTeam(false);
+                    setNewTeamName('');
+                    setNewTeamLogo('🐂');
+                  }}
+                  className="px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
