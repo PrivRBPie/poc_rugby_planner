@@ -373,6 +373,7 @@ const [lineups, setLineups] = useState({});
 
           if (!error && data && data.data) {
             const rugbyData = data.data;
+            setPlayers(rugbyData.players || []);
             setPlaydays(rugbyData.playdays || []);
             setLineups(rugbyData.lineups || {});
             setRatings(rugbyData.ratings || {});
@@ -385,6 +386,7 @@ const [lineups, setLineups] = useState({});
             setLastSyncTime(new Date());
 
             setInitialState({
+              players: JSON.stringify(rugbyData.players || []),
               playdays: JSON.stringify(rugbyData.playdays || []),
               lineups: JSON.stringify(rugbyData.lineups || {}),
               ratings: JSON.stringify(rugbyData.ratings || {}),
@@ -797,6 +799,7 @@ const [lineups, setLineups] = useState({});
 
       if (data && data.data) {
         const rugbyData = data.data;
+        const newPlayers = rugbyData.players || [];
         const newPlaydays = rugbyData.playdays || [];
         const newLineups = rugbyData.lineups || {};
         const newRatings = rugbyData.ratings || {};
@@ -805,6 +808,7 @@ const [lineups, setLineups] = useState({});
         const newAllocationRules = rugbyData.allocationRules || allocationRules;
         const newAvailability = rugbyData.availability || {};
 
+        setPlayers(newPlayers);
         setPlaydays(newPlaydays);
         setLineups(newLineups);
         setRatings(newRatings);
@@ -819,12 +823,14 @@ const [lineups, setLineups] = useState({});
 
         // Log the refresh action
         logAction('get_updates', {
+          playersCount: newPlayers.length,
           playdaysCount: newPlaydays.length,
           lineupsCount: Object.keys(newLineups).length
         });
 
         // Reset initial state to new data
         setInitialState({
+          players: JSON.stringify(newPlayers),
           playdays: JSON.stringify(newPlaydays),
           lineups: JSON.stringify(newLineups),
           ratings: JSON.stringify(newRatings),
@@ -868,7 +874,7 @@ const [lineups, setLineups] = useState({});
 
     try {
       setIsSyncing(true);
-      const data = { playdays, lineups, ratings, training, favoritePositions, allocationRules, availability };
+      const data = { players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability };
 
       console.log('Saving to Supabase...', { rugbyDataId, dataKeys: Object.keys(data) });
 
@@ -899,6 +905,7 @@ const [lineups, setLineups] = useState({});
 
         // Reset initial state to current data after successful save
         setInitialState({
+          players: JSON.stringify(players),
           playdays: JSON.stringify(playdays),
           lineups: JSON.stringify(lineups),
           ratings: JSON.stringify(ratings),
@@ -933,6 +940,7 @@ const [lineups, setLineups] = useState({});
     }
 
     const currentState = {
+      players: JSON.stringify(players),
       playdays: JSON.stringify(playdays),
       lineups: JSON.stringify(lineups),
       ratings: JSON.stringify(ratings),
@@ -950,7 +958,7 @@ const [lineups, setLineups] = useState({});
       changedKeys: Object.keys(currentState).filter(key => currentState[key] !== initialState[key])
     });
     setHasUnsavedChanges(hasChanges);
-  }, [playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, hasLoaded, initialState]);
+  }, [players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, hasLoaded, initialState]);
 
   // Helper function to get current team
   const getCurrentTeam = () => {
@@ -971,6 +979,7 @@ const [lineups, setLineups] = useState({});
       if (error && error.code === 'PGRST116') {
         // No data for this team yet, create empty structure
         const initialData = {
+          players: [],
           playdays: [],
           lineups: {},
           ratings: {},
@@ -1003,6 +1012,7 @@ const [lineups, setLineups] = useState({});
 
         if (!insertError) {
           setRugbyDataId(newData.id);
+          setPlayers([]);
           setPlaydays([]);
           setLineups({});
           setRatings({});
@@ -1014,6 +1024,7 @@ const [lineups, setLineups] = useState({});
 
           // Set initial state for change detection
           setInitialState({
+            players: JSON.stringify([]),
             playdays: JSON.stringify([]),
             lineups: JSON.stringify({}),
             ratings: JSON.stringify({}),
@@ -1028,6 +1039,7 @@ const [lineups, setLineups] = useState({});
       } else if (!error) {
         // Load existing data into state
         setRugbyDataId(rugbyData.id);
+        setPlayers(rugbyData.data.players || []);
         setPlaydays(rugbyData.data.playdays || []);
         setLineups(rugbyData.data.lineups || {});
         setRatings(rugbyData.data.ratings || {});
@@ -1039,6 +1051,7 @@ const [lineups, setLineups] = useState({});
 
         // Set initial state for change detection
         setInitialState({
+          players: JSON.stringify(rugbyData.data.players || []),
           playdays: JSON.stringify(rugbyData.data.playdays || []),
           lineups: JSON.stringify(rugbyData.data.lineups || {}),
           ratings: JSON.stringify(rugbyData.data.ratings || {}),
@@ -2246,13 +2259,14 @@ const [lineups, setLineups] = useState({});
                   </div>
 
                   {/* Remove Player Button */}
-                  <div className="mt-4 pt-3 border-t border-gray-200">
+                  <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end">
                     <button
                       onClick={() => removePlayer(player.id)}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl text-red-600 font-semibold text-sm transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-300 rounded-lg text-red-700 text-xs font-medium transition-colors"
+                      title="Remove player from this team"
                     >
                       <Icons.Trash />
-                      <span>Remove from Team</span>
+                      <span>Remove</span>
                     </button>
                   </div>
                 </div>
@@ -4020,6 +4034,11 @@ const [lineups, setLineups] = useState({});
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-400 border-2 border-white rounded-full animate-pulse" />
               )}
             </button>
+
+            {/* DIOK Logo */}
+            <div className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden bg-white border border-gray-200">
+              <img src={diokLogo} alt="DIOK" className="w-full h-full object-contain p-1" />
+            </div>
           </div>
         </div>
       </header>

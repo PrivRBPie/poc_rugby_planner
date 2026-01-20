@@ -33,6 +33,7 @@ VALUES (
   (SELECT id FROM teams WHERE name = 'Sharks Mini''s'),
   'Sharks Mini''s',
   '{
+    "players": [],
     "playdays": [],
     "lineups": {},
     "ratings": {},
