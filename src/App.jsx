@@ -359,6 +359,48 @@ const [lineups, setLineups] = useState({});
           .select('*')
           .order('created_at');
 
+        // If teams table doesn't exist (migration not run), fall back to old single-team behavior
+        if (teamsError && teamsError.code === '42P01') {
+          console.log('Teams table does not exist - falling back to single team mode');
+
+          // Load rugby_data without team filter (old behavior)
+          const { data, error } = await supabase
+            .from('rugby_data')
+            .select('*')
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (!error && data && data.data) {
+            const rugbyData = data.data;
+            setPlaydays(rugbyData.playdays || []);
+            setLineups(rugbyData.lineups || {});
+            setRatings(rugbyData.ratings || {});
+            setTraining(rugbyData.training || {});
+            setFavoritePositions(rugbyData.favoritePositions || {});
+            setAllocationRules(rugbyData.allocationRules || allocationRules);
+            setAvailability(rugbyData.availability || {});
+            setRugbyDataId(data.id);
+            setRemoteUpdatedAt(data.updated_at);
+            setLastSyncTime(new Date());
+
+            setInitialState({
+              playdays: JSON.stringify(rugbyData.playdays || []),
+              lineups: JSON.stringify(rugbyData.lineups || {}),
+              ratings: JSON.stringify(rugbyData.ratings || {}),
+              training: JSON.stringify(rugbyData.training || {}),
+              favoritePositions: JSON.stringify(rugbyData.favoritePositions || {}),
+              allocationRules: JSON.stringify(rugbyData.allocationRules || allocationRules),
+              availability: JSON.stringify(rugbyData.availability || {}),
+              learningPlayerConfig: JSON.stringify(learningPlayerConfig),
+              satisfactionWeights: JSON.stringify(satisfactionWeights),
+            });
+          }
+
+          setHasLoaded(true);
+          return;
+        }
+
         if (teamsError) {
           console.error('Error loading teams:', teamsError);
           setHasLoaded(true);
@@ -3704,16 +3746,18 @@ const [lineups, setLineups] = useState({});
     <div className="min-h-screen" style={{ backgroundColor: DIOK.gray }}>
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          {/* Team Selector */}
-          <div className="relative">
-            <button
-              onClick={() => setShowTeamManager(!showTeamManager)}
-              className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-xl hover:border-blue-500 transition-colors"
-            >
-              <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
-              <span className="font-bold text-gray-900 text-sm">{getCurrentTeam()?.name || 'Loading...'}</span>
-              <span className="text-gray-400 text-xs">▼</span>
-            </button>
+          {/* Team Logo/Selector */}
+          {teams.length > 0 ? (
+            // Multi-team mode: Show team selector
+            <div className="relative">
+              <button
+                onClick={() => setShowTeamManager(!showTeamManager)}
+                className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-xl hover:border-blue-500 transition-colors"
+              >
+                <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
+                <span className="font-bold text-gray-900 text-sm">{getCurrentTeam()?.name || 'Select Team'}</span>
+                <span className="text-gray-400 text-xs">▼</span>
+              </button>
 
             {/* Team Dropdown */}
             {showTeamManager && (
@@ -3751,10 +3795,20 @@ const [lineups, setLineups] = useState({});
                 </div>
               </>
             )}
-          </div>
+            </div>
+          ) : (
+            // Single-team mode (migration not run): Show Bulls logo image
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden bg-blue-600">
+              <img src={bullsLogo} alt="Bulls" className="w-full h-full object-cover" />
+            </div>
+          )}
 
           <div className="flex-1">
             <div className="flex items-center gap-2">
+              {/* Show team name in single-team mode */}
+              {teams.length === 0 && (
+                <h1 className="font-bold text-gray-900">{settings.teamName}</h1>
+              )}
               {/* Active Users Indicator - includes current user */}
               {currentUsername && (
                 <div className="flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded-full">
