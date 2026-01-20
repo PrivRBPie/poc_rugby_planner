@@ -108,7 +108,7 @@ const DIOK = { blue: '#1e3a5f', blueLight: '#2d5a87', gray: '#f8fafc' };
 
 export default function RugbyLineupPlanner() {
   const [activeTab, setActiveTab] = useState('squad');
-  const [players] = useState(initialPlayers);
+  const [players, setPlayers] = useState(initialPlayers);
   
   const [playdays, setPlaydays] = useState([
     { id: 1, date: '2025-12-03', name: 'Training Week 1', type: 'training', matches: [
@@ -1137,6 +1137,72 @@ const [lineups, setLineups] = useState({});
         return { ...prev, [playerId]: [...current, positionId] };
       }
     });
+  };
+
+  const removePlayer = (playerId) => {
+    const player = players.find(p => p.id === playerId);
+    if (!player) return;
+
+    const confirmMsg = `Remove ${player.name} from the team?\n\nThis will:\n- Remove them from the squad\n- Clear all their ratings and training data\n- Remove them from all lineups\n\nThis action cannot be undone.`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    // Remove player from squad
+    setPlayers(prev => prev.filter(p => p.id !== playerId));
+
+    // Remove from lineups
+    setLineups(prev => {
+      const updated = {};
+      Object.keys(prev).forEach(key => {
+        const lineup = prev[key];
+        updated[key] = {
+          assignments: Object.fromEntries(
+            Object.entries(lineup.assignments || {}).filter(([_, pid]) => pid !== playerId)
+          ),
+          bench: (lineup.bench || []).filter(pid => pid !== playerId)
+        };
+      });
+      return updated;
+    });
+
+    // Remove ratings
+    setRatings(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(key => {
+        if (key.startsWith(`${playerId}-`)) delete updated[key];
+      });
+      return updated;
+    });
+
+    // Remove training
+    setTraining(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(key => {
+        if (key.startsWith(`${playerId}-`)) delete updated[key];
+      });
+      return updated;
+    });
+
+    // Remove favorite positions
+    setFavoritePositions(prev => {
+      const updated = { ...prev };
+      delete updated[playerId];
+      return updated;
+    });
+
+    // Remove availability
+    setAvailability(prev => {
+      const updated = { ...prev };
+      delete updated[playerId];
+      return updated;
+    });
+
+    // Collapse if expanded
+    if (expandedPlayer === playerId) {
+      setExpandedPlayer(null);
+    }
+
+    logAction('remove_player', { player_name: player.name, player_id: playerId });
   };
 
   const benchHistory = useMemo(() => {
@@ -2177,6 +2243,17 @@ const [lineups, setLineups] = useState({});
                         </div>
                       );
                     })}
+                  </div>
+
+                  {/* Remove Player Button */}
+                  <div className="mt-4 pt-3 border-t border-gray-200">
+                    <button
+                      onClick={() => removePlayer(player.id)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl text-red-600 font-semibold text-sm transition-colors"
+                    >
+                      <Icons.Trash />
+                      <span>Remove from Team</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -3754,7 +3831,13 @@ const [lineups, setLineups] = useState({});
                 onClick={() => setShowTeamManager(!showTeamManager)}
                 className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-gray-300 rounded-xl hover:border-blue-500 transition-colors"
               >
-                <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
+                {getCurrentTeam()?.name?.includes('Bulls') ? (
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-blue-600">
+                    <img src={bullsLogo} alt="Bulls" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
+                )}
                 <span className="font-bold text-gray-900 text-sm">{getCurrentTeam()?.name || 'Select Team'}</span>
                 <span className="text-gray-400 text-xs">▼</span>
               </button>
@@ -3775,7 +3858,13 @@ const [lineups, setLineups] = useState({});
                         team.id === currentTeamId ? 'bg-blue-100' : ''
                       }`}
                     >
-                      <span className="text-2xl">{team.logo}</span>
+                      {team.name?.includes('Bulls') ? (
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-blue-600">
+                          <img src={bullsLogo} alt="Bulls" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <span className="text-2xl">{team.logo}</span>
+                      )}
                       <span className="font-semibold text-gray-900 text-sm">{team.name}</span>
                       {team.id === currentTeamId && <span className="ml-auto text-blue-600">✓</span>}
                     </button>
