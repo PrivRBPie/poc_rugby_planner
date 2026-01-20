@@ -2333,7 +2333,7 @@ const [lineups, setLineups] = useState({});
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div><h2 className="text-xl font-bold text-gray-900">Squad</h2><p className="text-sm text-gray-500">{players.length} players · {availablePlayers.length} available</p></div>
-        <button onClick={() => setShowAddPlayer(true)} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Add</button>
+        <button onClick={() => { setNewPlayer({ name: '', miniYear: '2nd year' }); setShowAddPlayer(true); }} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Add</button>
       </div>
       <div className="space-y-2">
         {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(player => {
@@ -4225,6 +4225,7 @@ const [lineups, setLineups] = useState({});
             <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
               {allPlayers
                 .filter(p => !players.find(tp => tp.id === p.id)) // Exclude already added players
+                .sort((a, b) => a.name.localeCompare(b.name)) // Sort alphabetically
                 .map(player => (
                   <button
                     key={player.id}
@@ -4255,6 +4256,7 @@ const [lineups, setLineups] = useState({});
                   onChange={(e) => setNewPlayer({...newPlayer, name: e.target.value})}
                   className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-900 text-sm"
                   placeholder="Enter name"
+                  autoFocus
                 />
               </div>
               <div>
