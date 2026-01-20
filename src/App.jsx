@@ -3508,7 +3508,7 @@ const [lineups, setLineups] = useState({});
   };
 
   const RulesView = () => {
-    const activeRules = allocationRules[allocationMode];
+    const activeRules = allocationRules[allocationMode] || [];
 
     return (
       <div className="space-y-6">
@@ -4118,11 +4118,6 @@ const [lineups, setLineups] = useState({});
               </select>
             </div>
           )}
-
-          {/* DIOK Logo */}
-          <div className="w-10 h-10 rounded flex items-center justify-center overflow-hidden bg-white border border-gray-200">
-            <img src={diokLogo} alt="DIOK" className="w-full h-full object-contain" />
-          </div>
 
           <div className="flex items-center gap-2">
             {/* Get Updates Button */}
