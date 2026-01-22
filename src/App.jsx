@@ -1932,6 +1932,8 @@ const [lineups, setLineups] = useState({});
         const best = candidateScores[0];
         newAssignments[pos.id] = best.player.id;
         assigned.add(best.player.id);
+        // Update playday field history to track assignments during this allocation
+        playdayFieldHistory[best.player.id] = (playdayFieldHistory[best.player.id] || 0) + 1;
         explanationsMap[`${pos.id}-${best.player.id}`] = {
           position: pos,
           player: best.player,
@@ -2005,6 +2007,8 @@ const [lineups, setLineups] = useState({});
         if (benchScores.length > 0) {
           const best = benchScores[0];
           newAssignments[pos.id] = best.player.id;
+          // Update playday field history to track assignments during this allocation
+          playdayFieldHistory[best.player.id] = (playdayFieldHistory[best.player.id] || 0) + 1;
           // Remove from bench
           const benchIndex = newBench.indexOf(best.player.id);
           if (benchIndex > -1) {
