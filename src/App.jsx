@@ -1830,8 +1830,9 @@ const [lineups, setLineups] = useState({});
           const playerField = effectiveFieldHistory[player.id] || 0;
           const maxAllowed = minField + 1;
 
-          // If player has already played more than min + 1, reject them
-          if (playerField > maxAllowed) {
+          // Reject if player already at max allowed (would exceed after assignment)
+          // This enforces: all players must play X or X+1 halves (no player plays more than min+1)
+          if (playerField >= maxAllowed) {
             return { score: -Infinity, explanations: [`❌ Already played ${playerField} halves (max allowed: ${maxAllowed}) (HARD Fair PlayTime)`] };
           }
           break;
@@ -2103,7 +2104,7 @@ const [lineups, setLineups] = useState({});
         availablePlayers.forEach(player => {
           // Calculate score for this player-position pair
           const { score: baseScore, explanations } = calculatePlayerPositionScore(
-            player, pos, new Set(), activeRules, mode, {}, {}
+            player, pos, new Set(), activeRules, mode, fieldCounts, {}
           );
 
           // Skip if not trained (score will be -Infinity)
