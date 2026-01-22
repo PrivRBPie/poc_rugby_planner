@@ -2304,9 +2304,7 @@ const [lineups, setLineups] = useState({});
         position: pos,
         playerCount: playersForPosition.length,
         players: playersForPosition.sort((a, b) => {
-          // Sort by: favorite first, then rating, then name
-          if (a.isFav && !b.isFav) return -1;
-          if (!a.isFav && b.isFav) return 1;
+          // Sort by: rating (high to low), then name (ignore favorites)
           if (b.rating !== a.rating) return b.rating - a.rating;
           return a.player.name.localeCompare(b.player.name);
         }),
@@ -2382,25 +2380,14 @@ const [lineups, setLineups] = useState({});
           </div>
         )}
 
-        {strongPositions.length > 0 && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-            <div className="flex items-start gap-2">
-              <span className="text-lg">💪</span>
-              <div className="flex-1">
-                <div className="text-xs font-semibold text-green-900">Position Strengths</div>
-                <div className="text-xs text-green-700 mt-1">
-                  Strong depth (4+ players with 4+★ average): {strongPositions.map(sp => `#${sp.position.code} ${sp.position.name} (${sp.playerCount}p, ${sp.avgRating.toFixed(1)}★)`).join(', ')}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Position Coverage Heatmap - Rugby Field Layout */}
+        {/* Position Coverage & Availability Heatmaps */}
         <div>
-          <h3 className="text-sm font-bold text-gray-900 mb-2">Position Coverage Heatmap</h3>
-          <div className="bg-gradient-to-b from-emerald-50 via-green-50 to-emerald-100 border-2 border-emerald-200 rounded-xl p-6 shadow-sm">
-            <div className="text-center text-xs font-semibold text-emerald-700 mb-4 tracking-wider uppercase">Rugby Field Layout</div>
+          <h3 className="text-sm font-bold text-gray-900 mb-2">Team Overview</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            {/* Position Coverage Heatmap */}
+            <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-4 shadow-lg">
+              <div className="text-center text-xs font-semibold text-white/70 mb-3 tracking-wider uppercase">Position Coverage</div>
 
             {/* Row 0: Fullback (15) */}
             <div className="flex justify-center gap-2 mb-3">
@@ -2529,12 +2516,152 @@ const [lineups, setLineups] = useState({});
             </div>
 
             {/* Legend */}
-            <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t border-emerald-200 text-xs text-emerald-800 flex-wrap">
-              <span className="flex items-center gap-1.5"><span className="w-4 h-4 bg-green-500 border border-green-600 rounded shadow-sm"></span>Strong (4.5+★)</span>
-              <span className="flex items-center gap-1.5"><span className="w-4 h-4 bg-yellow-400 border border-yellow-500 rounded shadow-sm"></span>Good (3.5+★)</span>
-              <span className="flex items-center gap-1.5"><span className="w-4 h-4 bg-orange-400 border border-orange-500 rounded shadow-sm"></span>Weak (2+★)</span>
-              <span className="flex items-center gap-1.5"><span className="w-4 h-4 bg-red-400 border border-red-500 rounded shadow-sm"></span>Poor (&lt;2★)</span>
+            <div className="flex items-center justify-center gap-3 mt-4 pt-3 border-t border-white/20 text-[10px] text-white/90 flex-wrap">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 border border-green-600 rounded"></span>Strong (4.5+★)</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400 border border-yellow-500 rounded"></span>Good (3.5+★)</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-orange-400 border border-orange-500 rounded"></span>Weak (2+★)</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-400 border border-red-500 rounded"></span>Poor (&lt;2★)</span>
             </div>
+            </div>
+
+            {/* Player Availability Heatmap */}
+            <div className="bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-4 shadow-lg">
+              <div className="text-center text-xs font-semibold text-white/70 mb-3 tracking-wider uppercase">Player Availability</div>
+
+              {/* Row 0: Fullback (15) */}
+              <div className="flex justify-center gap-2 mb-3">
+                {positions.filter(p => p.row === 0).map(pos => {
+                  const pa = positionAnalytics.find(a => a.position.id === pos.id);
+                  const playerCount = pa.playerCount;
+                  const colorClass =
+                    playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                    playerCount >= 5 ? 'bg-green-500 text-white border border-green-600' :
+                    playerCount >= 3 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                    'bg-red-400 text-white border border-red-500';
+
+                  return (
+                    <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${playerCount} available players`}>
+                      <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
+                      <div className="text-base font-bold">{playerCount}</div>
+                      <div className="text-[9px] opacity-90">players</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Row 1: Wings (11, 14) */}
+              <div className="flex justify-center gap-6 mb-3">
+                {positions.filter(p => p.row === 1).map(pos => {
+                  const pa = positionAnalytics.find(a => a.position.id === pos.id);
+                  const playerCount = pa.playerCount;
+                  const colorClass =
+                    playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                    playerCount >= 5 ? 'bg-green-500 text-white border border-green-600' :
+                    playerCount >= 3 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                    'bg-red-400 text-white border border-red-500';
+
+                  return (
+                    <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${playerCount} available players`}>
+                      <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
+                      <div className="text-base font-bold">{playerCount}</div>
+                      <div className="text-[9px] opacity-90">players</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Row 2: Outside Center (13) */}
+              <div className="flex justify-center mb-2">
+                {positions.filter(p => p.row === 2).map(pos => {
+                  const pa = positionAnalytics.find(a => a.position.id === pos.id);
+                  const playerCount = pa.playerCount;
+                  const colorClass =
+                    playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                    playerCount >= 5 ? 'bg-green-500 text-white border border-green-600' :
+                    playerCount >= 3 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                    'bg-red-400 text-white border border-red-500';
+
+                  return (
+                    <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${playerCount} available players`}>
+                      <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
+                      <div className="text-base font-bold">{playerCount}</div>
+                      <div className="text-[9px] opacity-90">players</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Row 3: Inside Center + Flyhalf (12, 10) */}
+              <div className="flex justify-center mb-3">
+                {positions.filter(p => p.row === 3).map(pos => {
+                  const pa = positionAnalytics.find(a => a.position.id === pos.id);
+                  const playerCount = pa.playerCount;
+                  const colorClass =
+                    playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                    playerCount >= 5 ? 'bg-green-500 text-white border border-green-600' :
+                    playerCount >= 3 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                    'bg-red-400 text-white border border-red-500';
+
+                  return (
+                    <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${playerCount} available players`}>
+                      <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
+                      <div className="text-base font-bold">{playerCount}</div>
+                      <div className="text-[9px] opacity-90">players</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Row 4: Scrumhalf + Forwards (9, 6, 7, 8) */}
+              <div className="flex justify-center gap-1 mb-3">
+                {positions.filter(p => p.row === 4).map(pos => {
+                  const pa = positionAnalytics.find(a => a.position.id === pos.id);
+                  const playerCount = pa.playerCount;
+                  const colorClass =
+                    playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                    playerCount >= 5 ? 'bg-green-500 text-white border border-green-600' :
+                    playerCount >= 3 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                    'bg-red-400 text-white border border-red-500';
+
+                  return (
+                    <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${playerCount} available players`}>
+                      <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
+                      <div className="text-base font-bold">{playerCount}</div>
+                      <div className="text-[9px] opacity-90">players</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Row 5: Front Row (1, 2, 3, 4, 5) */}
+              <div className="flex justify-center mb-3">
+                {positions.filter(p => p.row === 5).map(pos => {
+                  const pa = positionAnalytics.find(a => a.position.id === pos.id);
+                  const playerCount = pa.playerCount;
+                  const colorClass =
+                    playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                    playerCount >= 5 ? 'bg-green-500 text-white border border-green-600' :
+                    playerCount >= 3 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                    'bg-red-400 text-white border border-red-500';
+
+                  return (
+                    <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${playerCount} available players`}>
+                      <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
+                      <div className="text-base font-bold">{playerCount}</div>
+                      <div className="text-[9px] opacity-90">players</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="flex items-center justify-center gap-3 mt-4 pt-3 border-t border-white/20 text-[10px] text-white/90 flex-wrap">
+                <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 border border-green-600 rounded"></span>Good (5+)</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400 border border-yellow-500 rounded"></span>Adequate (3-4)</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-400 border border-red-500 rounded"></span>Limited (1-2)</span>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -2567,16 +2694,14 @@ const [lineups, setLineups] = useState({});
             {positionAnalytics.filter(pa => pa.playerCount > 0).map(pa => {
               const isExpanded = expandedPositions[pa.position.id];
 
-              // Re-sort players based on current ratings (in case they changed via interactive stars)
+              // Re-sort players based on current ratings (ignore favorites)
               const sortedPlayers = [...pa.players].sort((a, b) => {
                 const keyA = `${a.player.id}-${pa.position.id}`;
                 const keyB = `${b.player.id}-${pa.position.id}`;
                 const ratingA = ratings[keyA] || 0;
                 const ratingB = ratings[keyB] || 0;
 
-                // Sort by: favorite first, then rating, then name
-                if (a.isFav && !b.isFav) return -1;
-                if (!a.isFav && b.isFav) return 1;
+                // Sort by: rating (high to low), then name
                 if (ratingB !== ratingA) return ratingB - ratingA;
                 return a.player.name.localeCompare(b.player.name);
               });
