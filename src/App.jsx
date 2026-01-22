@@ -2953,7 +2953,14 @@ const [lineups, setLineups] = useState({});
   const SquadView = () => (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div><h2 className="text-xl font-bold text-gray-900">Squad</h2><p className="text-sm text-gray-500">{players.length} players · {availablePlayers.length} available</p></div>
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-gray-900">Squad</h2>
+            <span className="text-sm text-gray-400">•</span>
+            <span className="text-sm font-semibold text-gray-600">{getCurrentTeam()?.name || 'No Team'}</span>
+          </div>
+          <p className="text-sm text-gray-500">{players.length} players · {availablePlayers.length} available</p>
+        </div>
         <button onClick={() => { setNewPlayer({ name: '', miniYear: '2nd year' }); setShowAddPlayer(true); }} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Add</button>
       </div>
       <div className="space-y-2">
