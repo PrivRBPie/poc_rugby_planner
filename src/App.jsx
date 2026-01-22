@@ -2399,25 +2399,24 @@ const [lineups, setLineups] = useState({});
         {/* Position Coverage Heatmap - Rugby Field Layout */}
         <div>
           <h3 className="text-sm font-bold text-gray-900 mb-2">Position Coverage Heatmap</h3>
-          <div className="bg-gradient-to-b from-green-50 to-green-100 border-2 border-green-200 rounded-2xl p-4">
-            <div className="text-center text-xs font-semibold text-green-700 mb-3 tracking-wider">Rugby Field Layout</div>
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+            <div className="text-center text-xs font-semibold text-gray-600 mb-4 tracking-wider uppercase">Rugby Field Layout</div>
 
             {/* Row 0: Fullback (15) */}
             <div className="flex justify-center gap-2 mb-3">
               {positions.filter(p => p.row === 0).map(pos => {
                 const pa = positionAnalytics.find(a => a.position.id === pos.id);
                 const colorClass =
-                  pa.playerCount === 0 ? 'bg-gray-300 text-gray-600 border-2 border-gray-400' :
-                  pa.avgRating >= 4.5 ? 'bg-emerald-500 text-white border-2 border-emerald-600 shadow-md' :
-                  pa.avgRating >= 3.5 ? 'bg-amber-400 text-gray-900 border-2 border-amber-500 shadow-md' :
-                  pa.avgRating >= 2 ? 'bg-orange-500 text-white border-2 border-orange-600 shadow-md' :
-                  'bg-red-500 text-white border-2 border-red-600 shadow-md';
+                  pa.playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                  pa.avgRating >= 4.5 ? 'bg-green-500 text-white border border-green-600' :
+                  pa.avgRating >= 3.5 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                  pa.avgRating >= 2 ? 'bg-orange-400 text-white border border-orange-500' :
+                  'bg-red-400 text-white border border-red-500';
 
                 return (
-                  <div key={pos.id} className={`${colorClass} rounded-lg p-2 text-center transition-transform hover:scale-105`} style={{ width: '52px', height: '52px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
-                    <div className="text-sm font-bold">#{pos.code}</div>
-                    <div className="text-[10px] font-medium">{pa.playerCount}p</div>
-                    <div className="text-[10px] font-medium">{pa.avgRating.toFixed(1)}★</div>
+                  <div key={pos.id} className={`${colorClass} rounded-lg p-2.5 text-center transition-all hover:scale-105 hover:shadow-lg`} style={{ width: '60px', height: '60px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
+                    <div className="text-sm font-bold mb-0.5">#{pos.code}</div>
+                    <div className="text-[9px] opacity-90">{pa.playerCount}p · {pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2428,17 +2427,16 @@ const [lineups, setLineups] = useState({});
               {positions.filter(p => p.row === 1).map(pos => {
                 const pa = positionAnalytics.find(a => a.position.id === pos.id);
                 const colorClass =
-                  pa.playerCount === 0 ? 'bg-gray-300 text-gray-600 border-2 border-gray-400' :
-                  pa.avgRating >= 4.5 ? 'bg-emerald-500 text-white border-2 border-emerald-600 shadow-md' :
-                  pa.avgRating >= 3.5 ? 'bg-amber-400 text-gray-900 border-2 border-amber-500 shadow-md' :
-                  pa.avgRating >= 2 ? 'bg-orange-500 text-white border-2 border-orange-600 shadow-md' :
-                  'bg-red-500 text-white border-2 border-red-600 shadow-md';
+                  pa.playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                  pa.avgRating >= 4.5 ? 'bg-green-500 text-white border border-green-600' :
+                  pa.avgRating >= 3.5 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                  pa.avgRating >= 2 ? 'bg-orange-400 text-white border border-orange-500' :
+                  'bg-red-400 text-white border border-red-500';
 
                 return (
-                  <div key={pos.id} className={`${colorClass} rounded-lg p-2 text-center transition-transform hover:scale-105`} style={{ width: '52px', height: '52px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
-                    <div className="text-sm font-bold">#{pos.code}</div>
-                    <div className="text-[10px] font-medium">{pa.playerCount}p</div>
-                    <div className="text-[10px] font-medium">{pa.avgRating.toFixed(1)}★</div>
+                  <div key={pos.id} className={`${colorClass} rounded-lg p-2.5 text-center transition-all hover:scale-105 hover:shadow-lg`} style={{ width: '60px', height: '60px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
+                    <div className="text-sm font-bold mb-0.5">#{pos.code}</div>
+                    <div className="text-[9px] opacity-90">{pa.playerCount}p · {pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2449,17 +2447,16 @@ const [lineups, setLineups] = useState({});
               {positions.filter(p => p.row === 2).map(pos => {
                 const pa = positionAnalytics.find(a => a.position.id === pos.id);
                 const colorClass =
-                  pa.playerCount === 0 ? 'bg-gray-300 text-gray-600 border-2 border-gray-400' :
-                  pa.avgRating >= 4.5 ? 'bg-emerald-500 text-white border-2 border-emerald-600 shadow-md' :
-                  pa.avgRating >= 3.5 ? 'bg-amber-400 text-gray-900 border-2 border-amber-500 shadow-md' :
-                  pa.avgRating >= 2 ? 'bg-orange-500 text-white border-2 border-orange-600 shadow-md' :
-                  'bg-red-500 text-white border-2 border-red-600 shadow-md';
+                  pa.playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                  pa.avgRating >= 4.5 ? 'bg-green-500 text-white border border-green-600' :
+                  pa.avgRating >= 3.5 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                  pa.avgRating >= 2 ? 'bg-orange-400 text-white border border-orange-500' :
+                  'bg-red-400 text-white border border-red-500';
 
                 return (
-                  <div key={pos.id} className={`${colorClass} rounded-lg p-2 text-center transition-transform hover:scale-105`} style={{ width: '52px', height: '52px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
-                    <div className="text-sm font-bold">#{pos.code}</div>
-                    <div className="text-[10px] font-medium">{pa.playerCount}p</div>
-                    <div className="text-[10px] font-medium">{pa.avgRating.toFixed(1)}★</div>
+                  <div key={pos.id} className={`${colorClass} rounded-lg p-2.5 text-center transition-all hover:scale-105 hover:shadow-lg`} style={{ width: '60px', height: '60px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
+                    <div className="text-sm font-bold mb-0.5">#{pos.code}</div>
+                    <div className="text-[9px] opacity-90">{pa.playerCount}p · {pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2470,17 +2467,16 @@ const [lineups, setLineups] = useState({});
               {positions.filter(p => p.row === 3).map(pos => {
                 const pa = positionAnalytics.find(a => a.position.id === pos.id);
                 const colorClass =
-                  pa.playerCount === 0 ? 'bg-gray-300 text-gray-600 border-2 border-gray-400' :
-                  pa.avgRating >= 4.5 ? 'bg-emerald-500 text-white border-2 border-emerald-600 shadow-md' :
-                  pa.avgRating >= 3.5 ? 'bg-amber-400 text-gray-900 border-2 border-amber-500 shadow-md' :
-                  pa.avgRating >= 2 ? 'bg-orange-500 text-white border-2 border-orange-600 shadow-md' :
-                  'bg-red-500 text-white border-2 border-red-600 shadow-md';
+                  pa.playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                  pa.avgRating >= 4.5 ? 'bg-green-500 text-white border border-green-600' :
+                  pa.avgRating >= 3.5 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                  pa.avgRating >= 2 ? 'bg-orange-400 text-white border border-orange-500' :
+                  'bg-red-400 text-white border border-red-500';
 
                 return (
-                  <div key={pos.id} className={`${colorClass} rounded-lg p-2 text-center transition-transform hover:scale-105`} style={{ width: '52px', height: '52px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
-                    <div className="text-sm font-bold">#{pos.code}</div>
-                    <div className="text-[10px] font-medium">{pa.playerCount}p</div>
-                    <div className="text-[10px] font-medium">{pa.avgRating.toFixed(1)}★</div>
+                  <div key={pos.id} className={`${colorClass} rounded-lg p-2.5 text-center transition-all hover:scale-105 hover:shadow-lg`} style={{ width: '60px', height: '60px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
+                    <div className="text-sm font-bold mb-0.5">#{pos.code}</div>
+                    <div className="text-[9px] opacity-90">{pa.playerCount}p · {pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2491,17 +2487,16 @@ const [lineups, setLineups] = useState({});
               {positions.filter(p => p.row === 4).map(pos => {
                 const pa = positionAnalytics.find(a => a.position.id === pos.id);
                 const colorClass =
-                  pa.playerCount === 0 ? 'bg-gray-300 text-gray-600 border-2 border-gray-400' :
-                  pa.avgRating >= 4.5 ? 'bg-emerald-500 text-white border-2 border-emerald-600 shadow-md' :
-                  pa.avgRating >= 3.5 ? 'bg-amber-400 text-gray-900 border-2 border-amber-500 shadow-md' :
-                  pa.avgRating >= 2 ? 'bg-orange-500 text-white border-2 border-orange-600 shadow-md' :
-                  'bg-red-500 text-white border-2 border-red-600 shadow-md';
+                  pa.playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                  pa.avgRating >= 4.5 ? 'bg-green-500 text-white border border-green-600' :
+                  pa.avgRating >= 3.5 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                  pa.avgRating >= 2 ? 'bg-orange-400 text-white border border-orange-500' :
+                  'bg-red-400 text-white border border-red-500';
 
                 return (
-                  <div key={pos.id} className={`${colorClass} rounded-lg p-2 text-center transition-transform hover:scale-105`} style={{ width: '52px', height: '52px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
-                    <div className="text-sm font-bold">#{pos.code}</div>
-                    <div className="text-[10px] font-medium">{pa.playerCount}p</div>
-                    <div className="text-[10px] font-medium">{pa.avgRating.toFixed(1)}★</div>
+                  <div key={pos.id} className={`${colorClass} rounded-lg p-2.5 text-center transition-all hover:scale-105 hover:shadow-lg`} style={{ width: '60px', height: '60px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
+                    <div className="text-sm font-bold mb-0.5">#{pos.code}</div>
+                    <div className="text-[9px] opacity-90">{pa.playerCount}p · {pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2512,28 +2507,27 @@ const [lineups, setLineups] = useState({});
               {positions.filter(p => p.row === 5).map(pos => {
                 const pa = positionAnalytics.find(a => a.position.id === pos.id);
                 const colorClass =
-                  pa.playerCount === 0 ? 'bg-gray-300 text-gray-600 border-2 border-gray-400' :
-                  pa.avgRating >= 4.5 ? 'bg-emerald-500 text-white border-2 border-emerald-600 shadow-md' :
-                  pa.avgRating >= 3.5 ? 'bg-amber-400 text-gray-900 border-2 border-amber-500 shadow-md' :
-                  pa.avgRating >= 2 ? 'bg-orange-500 text-white border-2 border-orange-600 shadow-md' :
-                  'bg-red-500 text-white border-2 border-red-600 shadow-md';
+                  pa.playerCount === 0 ? 'bg-gray-100 text-gray-500 border border-gray-300' :
+                  pa.avgRating >= 4.5 ? 'bg-green-500 text-white border border-green-600' :
+                  pa.avgRating >= 3.5 ? 'bg-yellow-400 text-gray-900 border border-yellow-500' :
+                  pa.avgRating >= 2 ? 'bg-orange-400 text-white border border-orange-500' :
+                  'bg-red-400 text-white border border-red-500';
 
                 return (
-                  <div key={pos.id} className={`${colorClass} rounded-lg p-2 text-center transition-transform hover:scale-105`} style={{ width: '52px', height: '52px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
-                    <div className="text-sm font-bold">#{pos.code}</div>
-                    <div className="text-[10px] font-medium">{pa.playerCount}p</div>
-                    <div className="text-[10px] font-medium">{pa.avgRating.toFixed(1)}★</div>
+                  <div key={pos.id} className={`${colorClass} rounded-lg p-2.5 text-center transition-all hover:scale-105 hover:shadow-lg`} style={{ width: '60px', height: '60px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
+                    <div className="text-sm font-bold mb-0.5">#{pos.code}</div>
+                    <div className="text-[9px] opacity-90">{pa.playerCount}p · {pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
             </div>
 
             {/* Legend */}
-            <div className="flex items-center justify-center gap-3 mt-4 text-[10px] text-gray-700 flex-wrap">
-              <span className="flex items-center gap-1"><span className="w-4 h-4 bg-emerald-500 border-2 border-emerald-600 rounded"></span>Strong (4.5+★)</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-4 bg-amber-400 border-2 border-amber-500 rounded"></span>Good (3.5+★)</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-4 bg-orange-500 border-2 border-orange-600 rounded"></span>Weak (2+★)</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-4 bg-red-500 border-2 border-red-600 rounded"></span>Poor (&lt;2★)</span>
+            <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t border-gray-200 text-xs text-gray-600 flex-wrap">
+              <span className="flex items-center gap-1.5"><span className="w-4 h-4 bg-green-500 border border-green-600 rounded"></span>Strong (4.5+★)</span>
+              <span className="flex items-center gap-1.5"><span className="w-4 h-4 bg-yellow-400 border border-yellow-500 rounded"></span>Good (3.5+★)</span>
+              <span className="flex items-center gap-1.5"><span className="w-4 h-4 bg-orange-400 border border-orange-500 rounded"></span>Weak (2+★)</span>
+              <span className="flex items-center gap-1.5"><span className="w-4 h-4 bg-red-400 border border-red-500 rounded"></span>Poor (&lt;2★)</span>
             </div>
           </div>
         </div>
@@ -2591,8 +2585,8 @@ const [lineups, setLineups] = useState({});
                         <div key={playerData.player.id} className={`flex items-center gap-2 text-xs p-1.5 rounded border ${strengthColor}`}>
                           <span className="text-gray-400 font-mono w-4">{idx + 1}.</span>
                           <span className="flex-1 truncate font-medium">{playerData.player.name}</span>
-                          {/* Interactive star rating - centered in fixed width */}
-                          <div className="flex gap-0.5 justify-center" style={{ width: '80px' }}>
+                          {/* Interactive star rating - left-aligned */}
+                          <div className="flex gap-0.5" style={{ width: '75px' }}>
                             {[1, 2, 3, 4, 5].map(star => (
                               <button
                                 key={star}
@@ -2606,8 +2600,8 @@ const [lineups, setLineups] = useState({});
                               </button>
                             ))}
                           </div>
-                          {/* Favorite heart - separate in fixed width */}
-                          <div className="w-5 text-center">
+                          {/* Favorite heart - more spacing */}
+                          <div className="w-8 text-center">
                             {playerData.isFav && <span className="text-pink-500 text-sm" title="Favorite position">♥</span>}
                           </div>
                         </div>
