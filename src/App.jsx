@@ -1145,26 +1145,9 @@ const [lineups, setLineups] = useState({});
         // Load existing data into state
         setRugbyDataId(rugbyData.id);
 
-        // Load players from team_players junction table
-        const { data: teamPlayers, error: playersError } = await supabase
-          .from('team_players')
-          .select(`
-            player_id,
-            players (id, name, mini_year)
-          `)
-          .eq('team_id', teamId);
-
-        if (!playersError && teamPlayers) {
-          const loadedPlayers = teamPlayers.map(tp => ({
-            id: tp.players.id,
-            name: tp.players.name,
-            miniYear: tp.players.mini_year
-          }));
-          setPlayers(loadedPlayers);
-        } else {
-          // Fallback to rugby_data.players if junction table not available
-          setPlayers(rugbyData.data.players || []);
-        }
+        // Load players from rugby_data (single source of truth for player data including name/year edits)
+        // The team_players table only tracks which players belong to which team, not their current name/year
+        setPlayers(rugbyData.data.players || []);
 
         setPlaydays(rugbyData.data.playdays || []);
         setLineups(rugbyData.data.lineups || {});
