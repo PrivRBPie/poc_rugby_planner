@@ -383,6 +383,9 @@ const [lineups, setLineups] = useState({});
   const [actionLog, setActionLog] = useState([]);
   const [showUsernamePrompt, setShowUsernamePrompt] = useState(false);
 
+  // Analytics UI state
+  const [expandedPositions, setExpandedPositions] = useState({});
+
   // Allocation Rules Configuration
   const [allocationMode, setAllocationMode] = useState('game'); // 'game' or 'training'
   const [allocationRules, setAllocationRules] = useState({
@@ -2283,8 +2286,6 @@ const [lineups, setLineups] = useState({});
 
   // ==================== ANALYTICS VIEW ====================
   const AnalyticsView = () => {
-    const [expandedPositions, setExpandedPositions] = useState({});
-
     const togglePosition = (posId) => {
       setExpandedPositions(prev => ({ ...prev, [posId]: !prev[posId] }));
     };
@@ -2590,24 +2591,23 @@ const [lineups, setLineups] = useState({});
                         <div key={playerData.player.id} className={`flex items-center gap-2 text-xs p-1.5 rounded border ${strengthColor}`}>
                           <span className="text-gray-400 font-mono w-4">{idx + 1}.</span>
                           <span className="flex-1 truncate font-medium">{playerData.player.name}</span>
-                          <div className="flex items-center gap-1">
-                            {/* Interactive star rating */}
-                            <div className="flex gap-0.5">
-                              {[1, 2, 3, 4, 5].map(star => (
-                                <button
-                                  key={star}
-                                  onClick={() => {
-                                    setRatings(prev => ({ ...prev, [key]: star }));
-                                  }}
-                                  className="text-yellow-600 hover:scale-125 transition-transform cursor-pointer"
-                                  title={`Set ${star} stars`}
-                                >
-                                  <span className="text-[11px]">{star <= currentRating ? '⭐' : '☆'}</span>
-                                </button>
-                              ))}
-                            </div>
-                            {playerData.isFav && <span className="text-pink-500 text-sm" title="Favorite position">♥</span>}
+                          {/* Interactive star rating - centered */}
+                          <div className="flex gap-0.5">
+                            {[1, 2, 3, 4, 5].map(star => (
+                              <button
+                                key={star}
+                                onClick={() => {
+                                  setRatings(prev => ({ ...prev, [key]: star }));
+                                }}
+                                className="text-yellow-600 hover:scale-125 transition-transform cursor-pointer"
+                                title={`Set ${star} stars`}
+                              >
+                                <span className="text-[11px]">{star <= currentRating ? '⭐' : '☆'}</span>
+                              </button>
+                            ))}
                           </div>
+                          {/* Favorite heart - separate */}
+                          {playerData.isFav && <span className="text-pink-500 text-sm" title="Favorite position">♥</span>}
                         </div>
                       );
                     })}
