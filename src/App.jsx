@@ -4250,6 +4250,148 @@ const [lineups, setLineups] = useState({});
             )}
           </div>
         </div>
+
+        {/* Backup & Restore (Hidden at bottom) */}
+        <div className="mt-12 pt-8 border-t border-gray-200">
+          <details className="bg-gray-50 rounded-lg border border-gray-300">
+            <summary className="px-4 py-2 cursor-pointer text-xs text-gray-500 hover:text-gray-700 select-none">
+              🔧 Advanced: Database Backup & Restore
+            </summary>
+            <div className="p-4 space-y-4 border-t border-gray-200">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
+                ⚠️ <strong>Warning:</strong> These operations affect the database. Use with caution. Always create a backup before restoring.
+              </div>
+
+              {/* Create Backup */}
+              <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">Create Backup</h4>
+                <p className="text-xs text-gray-600 mb-3">Download a complete backup of the current team's data (players, lineups, ratings, schedule).</p>
+                <button
+                  onClick={async () => {
+                    try {
+                      const backupData = {
+                        version: APP_VERSION,
+                        timestamp: new Date().toISOString(),
+                        teamId: currentTeamId,
+                        teamName: getCurrentTeam()?.name || 'Unknown Team',
+                        data: {
+                          players,
+                          playdays,
+                          lineups,
+                          ratings,
+                          training,
+                          favoritePositions,
+                          allocationRules,
+                          availability,
+                          learningPlayerConfig,
+                          satisfactionWeights
+                        }
+                      };
+
+                      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `rugby-backup-${getCurrentTeam()?.name.replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().split('T')[0]}.json`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+
+                      alert('✅ Backup created and downloaded!');
+                      logAction('create_backup', { teamName: getCurrentTeam()?.name });
+                    } catch (err) {
+                      console.error('Backup error:', err);
+                      alert('❌ Error creating backup: ' + err.message);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  💾 Create Backup
+                </button>
+              </div>
+
+              {/* Restore Backup */}
+              <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">Restore Backup</h4>
+                <p className="text-xs text-gray-600 mb-3">Upload a backup file to restore data. This will <strong>overwrite</strong> the current team's data.</p>
+                <input
+                  type="file"
+                  accept=".json"
+                  id="backup-file-input"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    try {
+                      const text = await file.text();
+                      const backupData = JSON.parse(text);
+
+                      // Validate backup structure
+                      if (!backupData.version || !backupData.data) {
+                        alert('❌ Invalid backup file format');
+                        return;
+                      }
+
+                      const confirmMsg =
+                        `⚠️ RESTORE BACKUP?\n\n` +
+                        `This will OVERWRITE current data for: ${getCurrentTeam()?.name}\n\n` +
+                        `Backup info:\n` +
+                        `• Team: ${backupData.teamName}\n` +
+                        `• Date: ${new Date(backupData.timestamp).toLocaleString()}\n` +
+                        `• Version: ${backupData.version}\n` +
+                        `• Players: ${backupData.data.players?.length || 0}\n\n` +
+                        `Are you sure you want to restore this backup?`;
+
+                      if (!window.confirm(confirmMsg)) {
+                        e.target.value = ''; // Reset file input
+                        return;
+                      }
+
+                      // Restore data to state
+                      setPlayers(backupData.data.players || []);
+                      setPlaydays(backupData.data.playdays || []);
+                      setLineups(backupData.data.lineups || {});
+                      setRatings(backupData.data.ratings || {});
+                      setTraining(backupData.data.training || {});
+                      setFavoritePositions(backupData.data.favoritePositions || {});
+                      setAllocationRules(backupData.data.allocationRules || allocationRules);
+                      setAvailability(backupData.data.availability || {});
+
+                      if (backupData.data.learningPlayerConfig) {
+                        setLearningPlayerConfig(backupData.data.learningPlayerConfig);
+                      }
+                      if (backupData.data.satisfactionWeights) {
+                        setSatisfactionWeights(backupData.data.satisfactionWeights);
+                      }
+
+                      alert('✅ Backup restored to app! Click SAVE to write to database.');
+                      logAction('restore_backup', {
+                        backupTeam: backupData.teamName,
+                        backupDate: backupData.timestamp,
+                        playerCount: backupData.data.players?.length || 0
+                      });
+
+                      e.target.value = ''; // Reset file input
+                    } catch (err) {
+                      console.error('Restore error:', err);
+                      alert('❌ Error restoring backup: ' + err.message);
+                      e.target.value = ''; // Reset file input
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => document.getElementById('backup-file-input').click()}
+                  className="px-4 py-2 bg-orange-600 text-white text-sm font-semibold rounded-lg hover:bg-orange-700 transition-colors"
+                >
+                  📂 Restore from Backup
+                </button>
+                <p className="text-xs text-gray-500 mt-2">After restoring, remember to click the <strong>Save</strong> button to persist changes to the database.</p>
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
     );
   };
