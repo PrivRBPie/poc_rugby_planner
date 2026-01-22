@@ -1797,7 +1797,7 @@ const [lineups, setLineups] = useState({});
     });
   };
 
-  const calculatePlayerPositionScore = (player, position, assigned, rules, mode = allocationMode, customFieldHistory = null, customBenchHistory = null) => {
+  const calculatePlayerPositionScore = (player, position, assigned, rules, mode = allocationMode, customFieldHistory = null, customBenchHistory = null, fairPlayTimeContext = null) => {
     let score = 0;
     const explanations = [];
 
@@ -1823,15 +1823,24 @@ const [lineups, setLineups] = useState({});
           break;
 
         case 2: // Fair PlayTime as HARD constraint
-          // Get all available players' field history for this playday
-          const availablePlayers = players.filter(p => availability[p.id] === 'available');
-          const availableFieldCounts = availablePlayers.map(p => effectiveFieldHistory[p.id] || 0);
-          const minField = availableFieldCounts.length > 0 ? Math.min(...availableFieldCounts) : 0;
           const playerField = effectiveFieldHistory[player.id] || 0;
-          const maxAllowed = minField + 1;
+          let maxAllowed;
+
+          if (fairPlayTimeContext) {
+            // Use proper calculation: ROUNDUP((positions * halves) / availablePlayers)
+            const { totalPositions, totalHalves, availablePlayersCount } = fairPlayTimeContext;
+            const totalSlots = totalPositions * totalHalves;
+            const idealPerPlayer = totalSlots / availablePlayersCount;
+            maxAllowed = Math.ceil(idealPerPlayer);
+          } else {
+            // Fallback to old logic if context not provided
+            const availablePlayers = players.filter(p => availability[p.id] === 'available');
+            const availableFieldCounts = availablePlayers.map(p => effectiveFieldHistory[p.id] || 0);
+            const minField = availableFieldCounts.length > 0 ? Math.min(...availableFieldCounts) : 0;
+            maxAllowed = minField + 1;
+          }
 
           // Reject if player already at max allowed (would exceed after assignment)
-          // This enforces: all players must play X or X+1 halves (no player plays more than min+1)
           if (playerField >= maxAllowed) {
             return { score: -Infinity, explanations: [`❌ Already played ${playerField} halves (max allowed: ${maxAllowed}) (HARD Fair PlayTime)`] };
           }
@@ -2103,8 +2112,13 @@ const [lineups, setLineups] = useState({});
       positions.forEach(pos => {
         availablePlayers.forEach(player => {
           // Calculate score for this player-position pair
+          const fairPlayTimeContext = {
+            totalPositions: positions.length,
+            totalHalves: totalHalves,
+            availablePlayersCount: availablePlayers.length
+          };
           const { score: baseScore, explanations } = calculatePlayerPositionScore(
-            player, pos, new Set(), activeRules, mode, fieldCounts, {}
+            player, pos, new Set(), activeRules, mode, fieldCounts, {}, fairPlayTimeContext
           );
 
           // Skip if not trained (score will be -Infinity)
