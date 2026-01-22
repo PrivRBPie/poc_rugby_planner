@@ -2591,8 +2591,8 @@ const [lineups, setLineups] = useState({});
                         <div key={playerData.player.id} className={`flex items-center gap-2 text-xs p-1.5 rounded border ${strengthColor}`}>
                           <span className="text-gray-400 font-mono w-4">{idx + 1}.</span>
                           <span className="flex-1 truncate font-medium">{playerData.player.name}</span>
-                          {/* Interactive star rating - centered */}
-                          <div className="flex gap-0.5">
+                          {/* Interactive star rating - centered in fixed width */}
+                          <div className="flex gap-0.5 justify-center" style={{ width: '80px' }}>
                             {[1, 2, 3, 4, 5].map(star => (
                               <button
                                 key={star}
@@ -2606,8 +2606,10 @@ const [lineups, setLineups] = useState({});
                               </button>
                             ))}
                           </div>
-                          {/* Favorite heart - separate */}
-                          {playerData.isFav && <span className="text-pink-500 text-sm" title="Favorite position">♥</span>}
+                          {/* Favorite heart - separate in fixed width */}
+                          <div className="w-5 text-center">
+                            {playerData.isFav && <span className="text-pink-500 text-sm" title="Favorite position">♥</span>}
+                          </div>
                         </div>
                       );
                     })}
