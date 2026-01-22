@@ -2492,8 +2492,7 @@ const [lineups, setLineups] = useState({});
                 return (
                   <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
                     <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
-                    <div className="text-xs font-bold">{pa.playerCount}p</div>
-                    <div className="text-xs font-bold">{pa.avgRating.toFixed(1)}★</div>
+                    <div className="text-base font-bold">{pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2513,8 +2512,7 @@ const [lineups, setLineups] = useState({});
                 return (
                   <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
                     <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
-                    <div className="text-xs font-bold">{pa.playerCount}p</div>
-                    <div className="text-xs font-bold">{pa.avgRating.toFixed(1)}★</div>
+                    <div className="text-base font-bold">{pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2534,8 +2532,7 @@ const [lineups, setLineups] = useState({});
                 return (
                   <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
                     <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
-                    <div className="text-xs font-bold">{pa.playerCount}p</div>
-                    <div className="text-xs font-bold">{pa.avgRating.toFixed(1)}★</div>
+                    <div className="text-base font-bold">{pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2555,8 +2552,7 @@ const [lineups, setLineups] = useState({});
                 return (
                   <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
                     <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
-                    <div className="text-xs font-bold">{pa.playerCount}p</div>
-                    <div className="text-xs font-bold">{pa.avgRating.toFixed(1)}★</div>
+                    <div className="text-base font-bold">{pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2576,8 +2572,7 @@ const [lineups, setLineups] = useState({});
                 return (
                   <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
                     <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
-                    <div className="text-xs font-bold">{pa.playerCount}p</div>
-                    <div className="text-xs font-bold">{pa.avgRating.toFixed(1)}★</div>
+                    <div className="text-base font-bold">{pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2597,8 +2592,7 @@ const [lineups, setLineups] = useState({});
                 return (
                   <div key={pos.id} className={`${colorClass} rounded-xl p-2 text-center transition-all hover:scale-105 hover:shadow-lg flex flex-col justify-center`} style={{ width: '65px', height: '65px' }} title={`${pos.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
                     <div className="text-[10px] font-semibold opacity-75 mb-1">#{pos.code}</div>
-                    <div className="text-xs font-bold">{pa.playerCount}p</div>
-                    <div className="text-xs font-bold">{pa.avgRating.toFixed(1)}★</div>
+                    <div className="text-base font-bold">{pa.avgRating.toFixed(1)}★</div>
                   </div>
                 );
               })}
@@ -2873,7 +2867,7 @@ const [lineups, setLineups] = useState({});
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       pv.role === 'Super-Utility' ? 'bg-purple-100 text-purple-700' :
                       pv.role === 'Utility' ? 'bg-blue-100 text-blue-700' :
-                      'bg-gray-100 text-gray-700'
+                      'bg-red-100 text-red-700'
                     }`}>{pv.role}</span>
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5">
