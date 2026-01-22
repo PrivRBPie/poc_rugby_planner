@@ -1823,11 +1823,16 @@ const [lineups, setLineups] = useState({});
           break;
 
         case 2: // Fair PlayTime as HARD constraint
-          const maxField = Math.max(...Object.values(effectiveFieldHistory), 1);
+          // Get all available players' field history for this playday
+          const availablePlayers = players.filter(p => availability[p.id] === 'available');
+          const availableFieldCounts = availablePlayers.map(p => effectiveFieldHistory[p.id] || 0);
+          const minField = availableFieldCounts.length > 0 ? Math.min(...availableFieldCounts) : 0;
           const playerField = effectiveFieldHistory[player.id] || 0;
-          // If player has already played maximum halves, reject
-          if (playerField >= maxField && maxField > 0) {
-            return { score: -Infinity, explanations: ['❌ Already played max halves (HARD Fair PlayTime)'] };
+          const maxAllowed = minField + 1;
+
+          // If player has already played more than min + 1, reject them
+          if (playerField >= maxAllowed) {
+            return { score: -Infinity, explanations: [`❌ Already played ${playerField} halves (max allowed: ${maxAllowed}) (HARD Fair PlayTime)`] };
           }
           break;
       }
