@@ -458,6 +458,7 @@ const [lineups, setLineups] = useState({});
 
           if (!error && data && data.data) {
             const rugbyData = data.data;
+            console.log('📥 Loading players from DB:', rugbyData.players);
             setPlayers(rugbyData.players || []);
             setPlaydays(rugbyData.playdays || []);
             setLineups(rugbyData.lineups || {});
@@ -470,8 +471,11 @@ const [lineups, setLineups] = useState({});
             setRemoteUpdatedAt(data.updated_at);
             setLastSyncTime(new Date());
 
+            const initialPlayers = JSON.stringify(rugbyData.players || []);
+            console.log('📝 Setting initialState players to:', initialPlayers);
+
             setInitialState({
-              players: JSON.stringify(rugbyData.players || []),
+              players: initialPlayers,
               playdays: JSON.stringify(rugbyData.playdays || []),
               lineups: JSON.stringify(rugbyData.lineups || {}),
               ratings: JSON.stringify(rugbyData.ratings || {}),
@@ -1038,9 +1042,18 @@ const [lineups, setLineups] = useState({});
     };
 
     const hasChanges = Object.keys(currentState).some(key => currentState[key] !== initialState[key]);
+    const changedKeys = Object.keys(currentState).filter(key => currentState[key] !== initialState[key]);
+
+    if (changedKeys.includes('players')) {
+      console.log('🔍 Players mismatch detected!');
+      console.log('Current players:', currentState.players);
+      console.log('Initial players:', initialState.players);
+      console.log('Are they equal?', currentState.players === initialState.players);
+    }
+
     console.log('Change detection:', {
       hasChanges,
-      changedKeys: Object.keys(currentState).filter(key => currentState[key] !== initialState[key])
+      changedKeys
     });
     setHasUnsavedChanges(hasChanges);
   }, [players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, hasLoaded, initialState]);
