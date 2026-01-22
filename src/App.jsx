@@ -963,6 +963,14 @@ const [lineups, setLineups] = useState({});
       return;
     }
 
+    if (!currentTeamId) {
+      console.error('Cannot save: currentTeamId is not set');
+      alert('Error: Current team not found. Please refresh the page.');
+      return;
+    }
+
+    console.log('💾 Saving data:', { rugbyDataId, currentTeamId, teamName: getCurrentTeam()?.name, playerCount: players.length });
+
     // Check for conflicts before saving
     if (hasRemoteChanges) {
       const confirmed = window.confirm(
@@ -1160,6 +1168,7 @@ const [lineups, setLineups] = useState({});
         }
       } else if (!error) {
         // Load existing data into state
+        console.log('📥 Loading team data:', { teamId, rugbyDataId: rugbyData.id, playerCount: rugbyData.data.players?.length || 0 });
         setRugbyDataId(rugbyData.id);
 
         // Load players from rugby_data (single source of truth for player data including name/year edits)
