@@ -1171,9 +1171,61 @@ const [lineups, setLineups] = useState({});
         console.log('📥 Loading team data:', { teamId, rugbyDataId: rugbyData.id, playerCount: rugbyData.data.players?.length || 0 });
         setRugbyDataId(rugbyData.id);
 
-        // Load players from rugby_data (single source of truth for player data including name/year edits)
-        // The team_players table only tracks which players belong to which team, not their current name/year
-        setPlayers(rugbyData.data.players || []);
+        let loadedPlayers = rugbyData.data.players || [];
+
+        // RECOVERY: If players array is missing but we have ratings/training data, recover players
+        if (loadedPlayers.length === 0 && (Object.keys(rugbyData.data.ratings || {}).length > 0 || Object.keys(rugbyData.data.training || {}).length > 0)) {
+          console.warn('⚠️ Players array missing but data exists! Attempting recovery...');
+
+          // Extract unique player IDs from existing data
+          const playerIdsSet = new Set();
+
+          Object.keys(rugbyData.data.ratings || {}).forEach(key => {
+            const playerId = parseInt(key.split('-')[0]);
+            if (!isNaN(playerId)) playerIdsSet.add(playerId);
+          });
+
+          Object.keys(rugbyData.data.training || {}).forEach(key => {
+            const playerId = parseInt(key.split('-')[0]);
+            if (!isNaN(playerId)) playerIdsSet.add(playerId);
+          });
+
+          Object.keys(rugbyData.data.favoritePositions || {}).forEach(key => {
+            const playerId = parseInt(key);
+            if (!isNaN(playerId)) playerIdsSet.add(playerId);
+          });
+
+          Object.values(rugbyData.data.lineups || {}).forEach(lineup => {
+            Object.values(lineup.assignments || {}).forEach(playerId => {
+              if (typeof playerId === 'number') playerIdsSet.add(playerId);
+            });
+            (lineup.bench || []).forEach(playerId => {
+              if (typeof playerId === 'number') playerIdsSet.add(playerId);
+            });
+          });
+
+          const playerIds = Array.from(playerIdsSet).sort((a, b) => a - b);
+
+          // Default names (you can update these)
+          const defaultNames = {
+            1: 'Eick Soe', 2: 'Janes', 3: 'Esca', 4: 'Huib Schr', 5: 'Dries',
+            6: 'Liam', 7: 'Francois Ross', 8: 'Lewis', 9: 'Tobia', 10: 'Alexander Jans',
+            11: 'Okke', 12: 'Rosa On', 13: 'Yannick', 14: 'Ot Dubbe', 15: 'Tjalle',
+            16: 'Chris Klin', 17: 'Ivan', 18: 'Edward Serf', 19: 'Teo Gorri', 20: 'Hedwig',
+            46: 'New Player'
+          };
+
+          loadedPlayers = playerIds.map(id => ({
+            id,
+            name: defaultNames[id] || `Player ${id}`,
+            miniYear: '2nd year'
+          }));
+
+          console.log('✅ Recovered', loadedPlayers.length, 'players!');
+          alert(`Data Recovery: Found ${loadedPlayers.length} players from your lineups and ratings. Please click Save to restore them to the database.`);
+        }
+
+        setPlayers(loadedPlayers);
 
         setPlaydays(rugbyData.data.playdays || []);
         setLineups(rugbyData.data.lineups || {});
