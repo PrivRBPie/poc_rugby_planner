@@ -524,6 +524,95 @@ const [lineups, setLineups] = useState({});
     loadFromSupabase();
   }, []);
 
+  // One-time migration: Fix player ratings and favorite positions (January 2026)
+  useEffect(() => {
+    const migrationKey = 'migration_player_data_jan2026';
+    const hasRunMigration = localStorage.getItem(migrationKey);
+
+    if (!hasRunMigration && hasLoaded && rugbyDataId) {
+      console.log('Running one-time player data migration...');
+
+      // Correct data from dataset
+      const correctRatings = {
+        '1-1': 4, '1-2': 5, '1-3': 4, '1-4': 3, '1-5': 3, '1-15': 5,
+        '2-9': 5, '2-10': 5, '2-12': 3, '2-13': 3, '2-15': 5,
+        '3-11': 4, '3-12': 4, '3-13': 4, '3-14': 4, '3-15': 5,
+        '4-1': 5, '4-2': 3, '4-3': 5, '4-11': 2, '4-14': 2, '4-15': 3,
+        '5-11': 3, '5-12': 4, '5-13': 4, '5-14': 3, '5-15': 5,
+        '6-11': 5, '6-12': 5, '6-13': 5, '6-14': 5,
+        '7-1': 4, '7-2': 5, '7-3': 4, '7-4': 5, '7-5': 5,
+        '8-11': 4, '8-13': 4, '8-14': 3,
+        '9-11': 4, '9-12': 4, '9-13': 4, '9-14': 4, '9-15': 1,
+        '10-1': 4, '10-2': 3, '10-3': 4, '10-4': 5, '10-5': 5,
+        '11-11': 2, '11-14': 2,
+        '12-4': 5, '12-5': 5, '12-11': 5, '12-12': 4, '12-13': 4, '12-14': 5, '12-15': 5,
+        '13-9': 5, '13-10': 5, '13-12': 5, '13-13': 5, '13-15': 4,
+        '14-1': 4, '14-2': 5, '14-3': 4, '14-4': 3, '14-5': 3, '14-15': 2,
+        '15-10': 2, '15-11': 4, '15-12': 4, '15-13': 4, '15-14': 4,
+        '16-1': 5, '16-2': 4, '16-3': 5, '16-4': 3, '16-5': 3,
+        '17-11': 5, '17-14': 5,
+        '18-1': 5, '18-2': 5, '18-3': 5, '18-4': 4, '18-5': 4,
+        '19-1': 5, '19-2': 5, '19-3': 5, '19-4': 4, '19-5': 4,
+        '20-10': 3, '20-11': 3, '20-12': 3, '20-13': 3, '20-14': 3,
+      };
+
+      const correctFavoritePositions = {
+        1: [15, 1, 2, 3],
+        2: [9, 10],
+        3: [15, 12, 13],
+        4: [1, 2, 3, 15],
+        5: [15],
+        6: [11, 14],
+        7: [1, 2, 3, 4, 5],
+        8: [14, 13, 11],
+        9: [11, 13, 12, 14],
+        10: [5, 4, 1, 3],
+        11: [11, 14],
+        12: [15],
+        13: [9, 10],
+        14: [1, 2, 3, 4, 5],
+        15: [10, 11, 14],
+        16: [1, 2, 3, 4, 5],
+        17: [11, 14],
+        18: [1, 2, 3, 4, 5],
+        19: [2, 1, 3],
+        20: [12, 13, 11, 14],
+      };
+
+      const correctTraining = {
+        '1-1': true, '1-2': true, '1-3': true, '1-4': true, '1-5': true, '1-15': true,
+        '2-9': true, '2-10': true, '2-12': true, '2-13': true, '2-15': true,
+        '3-11': true, '3-12': true, '3-13': true, '3-14': true, '3-15': true,
+        '4-1': true, '4-2': true, '4-3': true, '4-11': true, '4-14': true, '4-15': true,
+        '5-11': true, '5-12': true, '5-13': true, '5-14': true, '5-15': true,
+        '6-11': true, '6-12': true, '6-13': true, '6-14': true,
+        '7-1': true, '7-2': true, '7-3': true, '7-4': true, '7-5': true,
+        '8-11': true, '8-13': true, '8-14': true,
+        '9-11': true, '9-12': true, '9-13': true, '9-14': true, '9-15': true,
+        '10-1': true, '10-2': true, '10-3': true, '10-4': true, '10-5': true,
+        '11-11': true, '11-14': true,
+        '12-4': true, '12-5': true, '12-11': true, '12-12': true, '12-13': true, '12-14': true, '12-15': true,
+        '13-9': true, '13-10': true, '13-12': true, '13-13': true, '13-15': true,
+        '14-1': true, '14-2': true, '14-3': true, '14-4': true, '14-5': true, '14-15': true,
+        '15-10': true, '15-11': true, '15-12': true, '15-13': true, '15-14': true,
+        '16-1': true, '16-2': true, '16-3': true, '16-4': true, '16-5': true,
+        '17-11': true, '17-14': true,
+        '18-1': true, '18-2': true, '18-3': true, '18-4': true, '18-5': true,
+        '19-1': true, '19-2': true, '19-3': true, '19-4': true, '19-5': true,
+        '20-10': true, '20-11': true, '20-12': true, '20-13': true, '20-14': true,
+      };
+
+      // Apply the corrected data
+      setRatings(correctRatings);
+      setFavoritePositions(correctFavoritePositions);
+      setTraining(correctTraining);
+
+      // Mark migration as complete
+      localStorage.setItem(migrationKey, 'true');
+      console.log('Migration complete! Player data has been updated. Please save to persist to database.');
+    }
+  }, [hasLoaded, rugbyDataId]);
+
   // Initialize username from localStorage or prompt
   useEffect(() => {
     const storedUsername = localStorage.getItem('rugbyPlannerUsername');
