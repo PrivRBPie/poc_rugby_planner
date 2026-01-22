@@ -1324,6 +1324,7 @@ const [lineups, setLineups] = useState({});
 
   const tabs = [
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
+    { id: 'analytics', label: 'Analytics', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> },
     { id: 'schedule', label: 'Schedule', icon: <Icons.Calendar /> },
     { id: 'lineup', label: 'Lineup', icon: <Icons.Grid /> },
     { id: 'overview', label: 'Overview', icon: <Icons.Eye /> },
@@ -2358,6 +2359,198 @@ const [lineups, setLineups] = useState({});
       <div className="flex items-center gap-0.5" title={`Allocation Score (based on ${allocationMode === 'game' ? 'Game' : 'Training'} rules)`}><span className="text-emerald-500"><Icons.CheckCircle /></span><span className="font-semibold text-gray-600">{scores.allocationScore}</span></div>
     </div>
   );
+
+  // ==================== ANALYTICS VIEW ====================
+  const AnalyticsView = () => {
+    // Calculate analytics data
+    const positionAnalytics = positions.map(pos => {
+      const playersForPosition = players.map(player => {
+        const key = `${player.id}-${pos.id}`;
+        const trained = training[key];
+        const rating = ratings[key] || 0;
+        const isFav = (favoritePositions[player.id] || []).includes(pos.id);
+        return { player, trained, rating, isFav };
+      }).filter(p => p.trained);
+
+      return {
+        position: pos,
+        playerCount: playersForPosition.length,
+        players: playersForPosition.sort((a, b) => {
+          // Sort by: favorite first, then rating, then name
+          if (a.isFav && !b.isFav) return -1;
+          if (!a.isFav && b.isFav) return 1;
+          if (b.rating !== a.rating) return b.rating - a.rating;
+          return a.player.name.localeCompare(b.player.name);
+        }),
+        avgRating: playersForPosition.length > 0
+          ? playersForPosition.reduce((sum, p) => sum + p.rating, 0) / playersForPosition.length
+          : 0,
+        top3: playersForPosition.slice(0, 3)
+      };
+    });
+
+    // Player versatility ranking
+    const playerVersatility = players.map(player => {
+      const trainedPositions = positions.filter(pos => training[`${player.id}-${pos.id}`]);
+      const totalRating = trainedPositions.reduce((sum, pos) => sum + (ratings[`${player.id}-${pos.id}`] || 0), 0);
+      const avgRating = trainedPositions.length > 0 ? totalRating / trainedPositions.length : 0;
+      const versatilityScore = (trainedPositions.length * avgRating) / 5;
+
+      return {
+        player,
+        positionsCount: trainedPositions.length,
+        avgRating: avgRating.toFixed(1),
+        versatilityScore: versatilityScore.toFixed(1),
+        role: trainedPositions.length <= 3 ? 'Specialist' : trainedPositions.length <= 7 ? 'Utility' : 'Super-Utility'
+      };
+    }).sort((a, b) => b.versatilityScore - a.versatilityScore);
+
+    // Team composition stats
+    const totalRatings = Object.values(ratings);
+    const star5Count = totalRatings.filter(r => r === 5).length;
+    const star4Count = totalRatings.filter(r => r === 4).length;
+    const star3Count = totalRatings.filter(r => r === 3).length;
+    const firstYearCount = players.filter(p => p.miniYear === '1st year').length;
+    const secondYearCount = players.filter(p => p.miniYear === '2nd year').length;
+
+    // Position coverage warnings
+    const weakPositions = positionAnalytics.filter(pa => pa.playerCount < 2);
+    const strongPositions = positionAnalytics.filter(pa => pa.playerCount >= 4 && pa.avgRating >= 4);
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Squad Analytics</h2>
+          <p className="text-sm text-gray-500">Comprehensive analysis of team composition and player capabilities</p>
+        </div>
+
+        {/* Team Composition Stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+            <div className="text-2xl font-bold" style={{ color: DIOK.blue }}>{players.length}</div>
+            <div className="text-xs text-blue-700 font-medium">Total Players</div>
+            <div className="text-xs text-blue-600 mt-1">{firstYearCount} × 1st year, {secondYearCount} × 2nd year</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-4 border border-yellow-200">
+            <div className="text-2xl font-bold text-yellow-700">{star5Count}</div>
+            <div className="text-xs text-yellow-700 font-medium">5-Star Skills</div>
+            <div className="text-xs text-yellow-600 mt-1">{star4Count} × 4★, {star3Count} × 3★</div>
+          </div>
+        </div>
+
+        {/* Alerts */}
+        {weakPositions.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+            <div className="flex items-start gap-2">
+              <span className="text-lg">⚠️</span>
+              <div className="flex-1">
+                <div className="text-xs font-semibold text-red-900">Position Coverage Alert</div>
+                <div className="text-xs text-red-700 mt-1">
+                  Limited depth at: {weakPositions.map(wp => `#${wp.position.code} ${wp.position.name}`).join(', ')}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {strongPositions.length > 0 && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+            <div className="flex items-start gap-2">
+              <span className="text-lg">💪</span>
+              <div className="flex-1">
+                <div className="text-xs font-semibold text-green-900">Position Strengths</div>
+                <div className="text-xs text-green-700 mt-1">
+                  Strong depth at: {strongPositions.map(sp => `#${sp.position.code} ${sp.position.name}`).join(', ')}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Position Coverage Heatmap */}
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 mb-2">Position Coverage Heatmap</h3>
+          <div className="bg-white rounded-xl border border-gray-200 p-3 overflow-x-auto">
+            <div className="grid grid-cols-8 gap-1 min-w-max">
+              {positionAnalytics.map(pa => {
+                const colorClass =
+                  pa.playerCount === 0 ? 'bg-gray-200 text-gray-500' :
+                  pa.avgRating >= 4.5 ? 'bg-green-500 text-white' :
+                  pa.avgRating >= 3.5 ? 'bg-yellow-400 text-gray-900' :
+                  pa.avgRating >= 2 ? 'bg-orange-400 text-white' :
+                  'bg-red-400 text-white';
+
+                return (
+                  <div key={pa.position.id} className={`${colorClass} rounded-lg p-2 text-center transition-transform hover:scale-105`} title={`${pa.position.name}: ${pa.playerCount} players, ${pa.avgRating.toFixed(1)}★ avg`}>
+                    <div className="text-xs font-bold">#{pa.position.code}</div>
+                    <div className="text-[10px]">{pa.playerCount}p</div>
+                    <div className="text-[10px]">{pa.avgRating.toFixed(1)}★</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2 mt-2 text-[10px] text-gray-600">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded"></span>Strong (4.5+★)</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400 rounded"></span>Good (3.5+★)</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-orange-400 rounded"></span>Weak (2+★)</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-400 rounded"></span>Poor (&lt;2★)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Positional Depth Charts - Top 3 per position */}
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 mb-2">Positional Depth Charts</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {positionAnalytics.filter(pa => pa.playerCount > 0).map(pa => (
+              <div key={pa.position.id} className="bg-white rounded-lg border border-gray-200 p-2">
+                <div className="text-xs font-bold text-gray-900 mb-1">#{pa.position.code} {pa.position.name}</div>
+                <div className="space-y-1">
+                  {pa.top3.map((playerData, idx) => (
+                    <div key={playerData.player.id} className="flex items-center gap-2 text-xs">
+                      <span className="text-gray-400 font-mono w-4">{idx + 1}.</span>
+                      <span className="flex-1 truncate">{playerData.player.name}</span>
+                      <span className="text-yellow-600">{'⭐'.repeat(playerData.rating)}</span>
+                      {playerData.isFav && <span className="text-yellow-500" title="Favorite position">❤️</span>}
+                    </div>
+                  ))}
+                  {pa.playerCount > 3 && (
+                    <div className="text-[10px] text-gray-500 ml-6">+{pa.playerCount - 3} more</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Player Versatility Ranking */}
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 mb-2">Player Versatility Ranking</h3>
+          <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+            {playerVersatility.map((pv, idx) => (
+              <div key={pv.player.id} className="p-3 flex items-center gap-3">
+                <div className="text-sm font-bold text-gray-400 w-6">#{idx + 1}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{pv.player.name}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      pv.role === 'Super-Utility' ? 'bg-purple-100 text-purple-700' :
+                      pv.role === 'Utility' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>{pv.role}</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {pv.positionsCount} positions · {pv.avgRating}★ avg · Versatility: {pv.versatilityScore}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // ==================== SCHEDULE VIEW ====================
   const ScheduleView = () => {
@@ -4356,6 +4549,7 @@ const [lineups, setLineups] = useState({});
       <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
         {activeTab === 'schedule' && <ScheduleView />}
         {activeTab === 'squad' && <SquadView />}
+        {activeTab === 'analytics' && <AnalyticsView />}
         {activeTab === 'lineup' && <LineupView />}
         {activeTab === 'overview' && <OverviewView />}
         {activeTab === 'rules' && <RulesView />}
