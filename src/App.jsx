@@ -4,6 +4,9 @@ import sharksLogo from './assets/sharks.svg';
 import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
 
+// App version - increment this when deploying breaking changes
+const APP_VERSION = '1.0.0';
+
 // Mini rugby positions (no 6,7,8)
 const positions = [
   { id: 1, code: '1', name: 'Loosehead', row: 0 },
@@ -434,6 +437,31 @@ const [lineups, setLineups] = useState({});
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamLogo, setNewTeamLogo] = useState('🐂');
+
+  // Check app version and prompt for refresh if outdated
+  useEffect(() => {
+    const storedVersion = localStorage.getItem('rugbyPlannerVersion');
+
+    if (storedVersion && storedVersion !== APP_VERSION) {
+      console.log('⚠️ Version mismatch! Stored:', storedVersion, 'Current:', APP_VERSION);
+
+      const shouldRefresh = window.confirm(
+        '🔄 New Version Available!\n\n' +
+        `A new version of the Rugby Planner is available (v${APP_VERSION}).\n\n` +
+        'Click OK to refresh and get the latest features and bug fixes.\n\n' +
+        '(Your data is safe in the database)'
+      );
+
+      if (shouldRefresh) {
+        localStorage.setItem('rugbyPlannerVersion', APP_VERSION);
+        window.location.reload(true); // Force reload from server
+        return;
+      }
+    }
+
+    // Store current version
+    localStorage.setItem('rugbyPlannerVersion', APP_VERSION);
+  }, []);
 
   // Load teams and data from Supabase on mount
   useEffect(() => {
