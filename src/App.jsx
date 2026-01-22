@@ -4265,56 +4265,109 @@ const [lineups, setLineups] = useState({});
               {/* Create Backup */}
               <div className="bg-white rounded-lg border border-gray-200 p-3">
                 <h4 className="text-sm font-semibold text-gray-900 mb-2">Create Backup</h4>
-                <p className="text-xs text-gray-600 mb-3">Download a complete backup of the current team's data (players, lineups, ratings, schedule).</p>
-                <button
-                  onClick={async () => {
-                    try {
-                      const backupData = {
-                        version: APP_VERSION,
-                        timestamp: new Date().toISOString(),
-                        teamId: currentTeamId,
-                        teamName: getCurrentTeam()?.name || 'Unknown Team',
-                        data: {
-                          players,
-                          playdays,
-                          lineups,
-                          ratings,
-                          training,
-                          favoritePositions,
-                          allocationRules,
-                          availability,
-                          learningPlayerConfig,
-                          satisfactionWeights
-                        }
-                      };
+                <p className="text-xs text-gray-600 mb-3">Choose backup type:</p>
+                <div className="flex gap-2">
+                  {/* Current Team Only */}
+                  <button
+                    onClick={async () => {
+                      try {
+                        const backupData = {
+                          version: APP_VERSION,
+                          timestamp: new Date().toISOString(),
+                          backupType: 'team',
+                          teamId: currentTeamId,
+                          teamName: getCurrentTeam()?.name || 'Unknown Team',
+                          data: {
+                            players,
+                            playdays,
+                            lineups,
+                            ratings,
+                            training,
+                            favoritePositions,
+                            allocationRules,
+                            availability,
+                            learningPlayerConfig,
+                            satisfactionWeights
+                          }
+                        };
 
-                      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `rugby-backup-${getCurrentTeam()?.name.replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().split('T')[0]}.json`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      URL.revokeObjectURL(url);
+                        const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `rugby-backup-${getCurrentTeam()?.name.replace(/[^a-z0-9]/gi, '-')}-${new Date().toISOString().split('T')[0]}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
 
-                      alert('✅ Backup created and downloaded!');
-                      logAction('create_backup', { teamName: getCurrentTeam()?.name });
-                    } catch (err) {
-                      console.error('Backup error:', err);
-                      alert('❌ Error creating backup: ' + err.message);
-                    }
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  💾 Create Backup
-                </button>
+                        alert('✅ Team backup created and downloaded!');
+                        logAction('create_backup', { teamName: getCurrentTeam()?.name, type: 'team' });
+                      } catch (err) {
+                        console.error('Backup error:', err);
+                        alert('❌ Error creating backup: ' + err.message);
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    💾 Current Team
+                  </button>
+
+                  {/* Full Database */}
+                  <button
+                    onClick={async () => {
+                      try {
+                        // Fetch all database tables
+                        const [teamsRes, rugbyDataRes] = await Promise.all([
+                          supabase.from('teams').select('*'),
+                          supabase.from('rugby_data').select('*')
+                        ]);
+
+                        if (teamsRes.error) throw teamsRes.error;
+                        if (rugbyDataRes.error) throw rugbyDataRes.error;
+
+                        const backupData = {
+                          version: APP_VERSION,
+                          timestamp: new Date().toISOString(),
+                          backupType: 'full',
+                          database: {
+                            teams: teamsRes.data,
+                            rugby_data: rugbyDataRes.data
+                          }
+                        };
+
+                        const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `rugby-backup-FULL-${new Date().toISOString().split('T')[0]}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+
+                        alert(`✅ Full database backup created!\n\nIncluded:\n• ${teamsRes.data.length} teams\n• ${rugbyDataRes.data.length} rugby_data records`);
+                        logAction('create_backup', { type: 'full', teamCount: teamsRes.data.length });
+                      } catch (err) {
+                        console.error('Full backup error:', err);
+                        alert('❌ Error creating full backup: ' + err.message);
+                      }
+                    }}
+                    className="px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    💾 Full Database
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  <strong>Current Team:</strong> Only this team's data<br/>
+                  <strong>Full Database:</strong> All teams + rugby_data (for complete backup)
+                </p>
               </div>
 
               {/* Restore Backup */}
               <div className="bg-white rounded-lg border border-gray-200 p-3">
                 <h4 className="text-sm font-semibold text-gray-900 mb-2">Restore Backup</h4>
-                <p className="text-xs text-gray-600 mb-3">Upload a backup file to restore data. This will <strong>overwrite</strong> the current team's data.</p>
+                <p className="text-xs text-gray-600 mb-3">Upload a backup file. Team backups overwrite current team. Full backups restore entire database.</p>
                 <input
                   type="file"
                   accept=".json"
@@ -4329,13 +4382,69 @@ const [lineups, setLineups] = useState({});
                       const backupData = JSON.parse(text);
 
                       // Validate backup structure
-                      if (!backupData.version || !backupData.data) {
+                      if (!backupData.version) {
                         alert('❌ Invalid backup file format');
                         return;
                       }
 
+                      // Handle FULL database restore
+                      if (backupData.backupType === 'full') {
+                        const confirmMsg =
+                          `⚠️ RESTORE FULL DATABASE?\n\n` +
+                          `This will REPLACE ALL data in the database!\n\n` +
+                          `Backup info:\n` +
+                          `• Date: ${new Date(backupData.timestamp).toLocaleString()}\n` +
+                          `• Version: ${backupData.version}\n` +
+                          `• Teams: ${backupData.database.teams.length}\n` +
+                          `• Rugby Data Records: ${backupData.database.rugby_data.length}\n\n` +
+                          `⚠️ THIS CANNOT BE UNDONE!\n\n` +
+                          `Type "RESTORE" to confirm:`;
+
+                        const confirmation = prompt(confirmMsg);
+                        if (confirmation !== 'RESTORE') {
+                          alert('❌ Restore cancelled');
+                          e.target.value = '';
+                          return;
+                        }
+
+                        // Delete all existing data first
+                        await supabase.from('rugby_data').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                        await supabase.from('teams').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+                        // Insert teams
+                        const { error: teamsError } = await supabase
+                          .from('teams')
+                          .insert(backupData.database.teams);
+
+                        if (teamsError) throw new Error('Failed to restore teams: ' + teamsError.message);
+
+                        // Insert rugby_data
+                        const { error: dataError } = await supabase
+                          .from('rugby_data')
+                          .insert(backupData.database.rugby_data);
+
+                        if (dataError) throw new Error('Failed to restore rugby_data: ' + dataError.message);
+
+                        alert(`✅ Full database restored!\n\nRestored:\n• ${backupData.database.teams.length} teams\n• ${backupData.database.rugby_data.length} data records\n\nRefreshing page...`);
+
+                        logAction('restore_full_backup', {
+                          backupDate: backupData.timestamp,
+                          teamCount: backupData.database.teams.length
+                        });
+
+                        setTimeout(() => window.location.reload(), 1000);
+                        e.target.value = '';
+                        return;
+                      }
+
+                      // Handle TEAM backup restore
+                      if (!backupData.data) {
+                        alert('❌ Invalid team backup file format');
+                        return;
+                      }
+
                       const confirmMsg =
-                        `⚠️ RESTORE BACKUP?\n\n` +
+                        `⚠️ RESTORE TEAM BACKUP?\n\n` +
                         `This will OVERWRITE current data for: ${getCurrentTeam()?.name}\n\n` +
                         `Backup info:\n` +
                         `• Team: ${backupData.teamName}\n` +
@@ -4345,7 +4454,7 @@ const [lineups, setLineups] = useState({});
                         `Are you sure you want to restore this backup?`;
 
                       if (!window.confirm(confirmMsg)) {
-                        e.target.value = ''; // Reset file input
+                        e.target.value = '';
                         return;
                       }
 
@@ -4366,18 +4475,18 @@ const [lineups, setLineups] = useState({});
                         setSatisfactionWeights(backupData.data.satisfactionWeights);
                       }
 
-                      alert('✅ Backup restored to app! Click SAVE to write to database.');
+                      alert('✅ Team backup restored to app! Click SAVE to write to database.');
                       logAction('restore_backup', {
                         backupTeam: backupData.teamName,
                         backupDate: backupData.timestamp,
                         playerCount: backupData.data.players?.length || 0
                       });
 
-                      e.target.value = ''; // Reset file input
+                      e.target.value = '';
                     } catch (err) {
                       console.error('Restore error:', err);
                       alert('❌ Error restoring backup: ' + err.message);
-                      e.target.value = ''; // Reset file input
+                      e.target.value = '';
                     }
                   }}
                 />
