@@ -1805,12 +1805,33 @@ const [lineups, setLineups] = useState({});
     const effectiveFieldHistory = customFieldHistory || fieldHistory;
     const effectiveBenchHistory = customBenchHistory || benchHistory;
 
-    // HARD constraint: No duplicate assignments
-    if (assigned.has(player.id)) return { score: -Infinity, explanations: ['Already assigned in this half'] };
-
-    // HARD constraint: Must be trained for position (GAME mode only)
     const trainingKey = `${player.id}-${position.id}`;
-    if (mode === 'game' && !training[trainingKey]) return { score: -Infinity, explanations: ['Not trained for this position (game mode)'] };
+
+    // Apply HARD constraints dynamically based on rule configuration
+    for (const rule of rules.filter(r => r.enabled && r.type === 'HARD')) {
+      switch(rule.id) {
+        case 1: // No Duplicate Assignments
+          if (assigned.has(player.id)) {
+            return { score: -Infinity, explanations: ['❌ Already assigned in this half (HARD)'] };
+          }
+          break;
+
+        case 7: // Must Be Trained (GAME mode only)
+          if (mode === 'game' && !training[trainingKey]) {
+            return { score: -Infinity, explanations: ['❌ Not trained for this position (HARD)'] };
+          }
+          break;
+
+        case 2: // Fair PlayTime as HARD constraint
+          const maxField = Math.max(...Object.values(effectiveFieldHistory), 1);
+          const playerField = effectiveFieldHistory[player.id] || 0;
+          // If player has already played maximum halves, reject
+          if (playerField >= maxField && maxField > 0) {
+            return { score: -Infinity, explanations: ['❌ Already played max halves (HARD Fair PlayTime)'] };
+          }
+          break;
+      }
+    }
 
     // Apply SOFT rules - each normalized to 0-100 scale before weighting
     for (const rule of rules.filter(r => r.enabled && r.type === 'SOFT')) {
@@ -2223,6 +2244,26 @@ const [lineups, setLineups] = useState({});
       [allocationMode]: prev[allocationMode].map(r =>
         r.id === ruleId ? { ...r, weight: weight / 100 } : r
       ),
+    }));
+  };
+
+  const toggleRuleType = (ruleId) => {
+    setAllocationRules(prev => ({
+      ...prev,
+      [allocationMode]: prev[allocationMode].map(r => {
+        if (r.id === ruleId && !r.locked) {
+          const newType = r.type === 'HARD' ? 'SOFT' : 'HARD';
+          // When changing to HARD, set weight to 1.0 and enable it
+          // When changing to SOFT, use default weight of 0.5
+          return {
+            ...r,
+            type: newType,
+            weight: newType === 'HARD' ? 1.0 : 0.5,
+            enabled: newType === 'HARD' ? true : r.enabled
+          };
+        }
+        return r;
+      }),
     }));
   };
 
@@ -4621,13 +4662,18 @@ const [lineups, setLineups] = useState({});
                   </td>
                   {/* Type */}
                   <td className="py-3 px-2 text-center">
-                    <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
-                      rule.type === 'HARD' ? 'bg-red-100 text-red-700' :
-                      rule.type === 'CONFIG' ? 'bg-blue-100 text-blue-700' :
-                      'bg-amber-100 text-amber-700'
-                    }`}>
+                    <button
+                      onClick={() => !rule.locked && toggleRuleType(rule.id)}
+                      disabled={rule.locked}
+                      className={`text-[10px] px-2 py-1 rounded-full font-medium transition-all ${
+                        rule.type === 'HARD' ? 'bg-red-100 text-red-700' :
+                        rule.type === 'CONFIG' ? 'bg-blue-100 text-blue-700' :
+                        'bg-amber-100 text-amber-700'
+                      } ${rule.locked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:scale-105 hover:shadow-md'}`}
+                      title={rule.locked ? 'Type locked' : `Click to toggle between HARD/SOFT`}
+                    >
                       {rule.type}
-                    </span>
+                    </button>
                   </td>
                   {/* Enabled */}
                   <td className="py-3 px-2 text-center">
@@ -4674,9 +4720,11 @@ const [lineups, setLineups] = useState({});
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
           <div className="text-sm font-semibold text-gray-900 mb-2">How Rules Work</div>
           <div className="space-y-2 text-xs text-gray-600">
-            <div><strong>HARD:</strong> Constraints that must be satisfied (cannot be disabled)</div>
+            <div><strong>HARD:</strong> Constraints that must be satisfied - players violating these are rejected (always enabled)</div>
             <div><strong>SOFT:</strong> Optimization goals weighted by importance (higher weight = stronger influence)</div>
-            <div><strong>CONFIG:</strong> Settings that filter or configure allocation behavior</div>
+            <div className="text-blue-700 bg-blue-50 p-2 rounded border border-blue-200 mt-2">
+              💡 <strong>Tip:</strong> Click on the Type badge to toggle between HARD/SOFT (except for locked rules). Making "Fair PlayTime" HARD ensures strict equality.
+            </div>
           </div>
         </div>
       </div>
