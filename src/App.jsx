@@ -1903,13 +1903,26 @@ const [lineups, setLineups] = useState({});
 
     const activeRules = allocationRules[mode];
 
+    // Calculate playday-specific field history for Fair PlayTime HARD constraint
+    const playdayFieldHistory = {};
+    players.forEach(p => playdayFieldHistory[p.id] = 0);
+    Object.entries(lineups).forEach(([key, lineup]) => {
+      const [lpId, lmId, lhalf] = key.split('-').map(Number);
+      // Only count lineups from the current playday
+      if (lpId === playdayId) {
+        Object.values(lineup.assignments || {}).forEach(playerId => {
+          if (playerId) playdayFieldHistory[playerId] = (playdayFieldHistory[playerId] || 0) + 1;
+        });
+      }
+    });
+
     // Phase 1: Assign field positions
     const unfilledPositions = [];
     positions.forEach(pos => {
       const candidateScores = availablePlayers
         .filter(p => !assigned.has(p.id))
         .map(p => {
-          const { score, explanations } = calculatePlayerPositionScore(p, pos, assigned, activeRules, mode);
+          const { score, explanations } = calculatePlayerPositionScore(p, pos, assigned, activeRules, mode, playdayFieldHistory);
           return { player: p, score, explanations };
         })
         .filter(c => c.score > -Infinity)
@@ -1983,7 +1996,7 @@ const [lineups, setLineups] = useState({});
           .map(benchPlayerId => {
             const player = players.find(p => p.id === benchPlayerId);
             if (!player) return null;
-            const { score, explanations } = calculatePlayerPositionScore(player, pos, new Set(), activeRules, mode);
+            const { score, explanations } = calculatePlayerPositionScore(player, pos, new Set(), activeRules, mode, playdayFieldHistory);
             return { player, score, explanations };
           })
           .filter(c => c && c.score > -Infinity)
