@@ -2751,6 +2751,7 @@ const [lineups, setLineups] = useState({});
                           type="text"
                           value={player.name}
                           onChange={(e) => {
+                            console.log(`Changing player ${player.id} name from "${player.name}" to "${e.target.value}"`);
                             setPlayers(prev => prev.map(p =>
                               p.id === player.id ? { ...p, name: e.target.value } : p
                             ));
@@ -2763,6 +2764,7 @@ const [lineups, setLineups] = useState({});
                         <select
                           value={player.miniYear}
                           onChange={(e) => {
+                            console.log(`Changing player ${player.id} year from "${player.miniYear}" to "${e.target.value}"`);
                             setPlayers(prev => prev.map(p =>
                               p.id === player.id ? { ...p, miniYear: e.target.value } : p
                             ));
