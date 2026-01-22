@@ -3920,8 +3920,10 @@ const [lineups, setLineups] = useState({});
                         const ratingKey = `${player.id}-${assignment.pos?.id}`;
                         const rating = ratings[ratingKey] || 1;
                         if (rating <= 2) learningCount++;
+                      } else {
+                        // If not on field, count as bench (includes explicit bench and not assigned)
+                        totalBench++;
                       }
-                      if (assignment?.type === 'bench') totalBench++;
                     });
 
                     // Calculate satisfaction score (0-100) using configured weights
@@ -3937,7 +3939,11 @@ const [lineups, setLineups] = useState({});
                     // Build detailed breakdown for tooltip
                     const halfDetails = playdayHalves.map(h => {
                       const assignment = getPlayerAssignment(player.id, h.matchId, h.half);
-                      if (!assignment) return null;
+
+                      if (!assignment) {
+                        // Not assigned = counts as bench
+                        return `Match ${h.matchId} H${h.half}: Bench`;
+                      }
 
                       if (assignment.type === 'bench') {
                         return `Match ${h.matchId} H${h.half}: Bench`;
