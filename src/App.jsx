@@ -5,7 +5,7 @@ import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
 
 // App version - increment this when deploying breaking changes
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 
 // Mini rugby positions (no 6,7,8)
 const positions = [
