@@ -1831,7 +1831,7 @@ const [lineups, setLineups] = useState({});
           const maxAllowed = minField + 1;
 
           // If player has already played more than min + 1, reject them
-          if (playerField >= maxAllowed) {
+          if (playerField > maxAllowed) {
             return { score: -Infinity, explanations: [`❌ Already played ${playerField} halves (max allowed: ${maxAllowed}) (HARD Fair PlayTime)`] };
           }
           break;
