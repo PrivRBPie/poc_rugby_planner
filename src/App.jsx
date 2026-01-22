@@ -3686,6 +3686,9 @@ const [lineups, setLineups] = useState({});
     const activeRules = allocationRules[allocationMode] || [];
 
     const fixPlayerData = () => {
+      console.log('BEFORE FIX - Edward (18) favorites:', favoritePositions[18]);
+      console.log('ALL favoritePositions before fix:', favoritePositions);
+
       const correctRatings = {
         '1-1': 4, '1-2': 5, '1-3': 4, '1-4': 3, '1-5': 3, '1-15': 5,
         '2-9': 5, '2-10': 5, '2-12': 3, '2-13': 3, '2-15': 5,
@@ -3758,6 +3761,10 @@ const [lineups, setLineups] = useState({});
       setRatings(correctRatings);
       setFavoritePositions(correctFavoritePositions);
       setTraining(correctTraining);
+
+      console.log('AFTER FIX - Edward (18) favorites:', correctFavoritePositions[18]);
+      console.log('State should now show Edward as:', correctFavoritePositions[18]);
+
       alert('Player data has been updated! Go to Players tab to verify, then click Save to persist to database.');
     };
 
