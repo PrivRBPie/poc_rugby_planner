@@ -3587,38 +3587,26 @@ const [lineups, setLineups] = useState({});
         );
       };
 
-      const PlayerRow = ({ p, onClick, isAlt, forBench, isUntrained, gameMode }) => (
+      const PlayerRow = ({ p, onClick, isAlt, isUntrained, gameMode }) => (
         <button onClick={onClick} disabled={p.isAssignedElsewhereInHalf}
           className={`w-full text-left p-1.5 rounded-lg transition-all border text-xs ${
             p.isCurrentlyHere ? 'bg-blue-50 border-blue-300' :
             p.isAssignedElsewhereInHalf ? 'bg-gray-100 border-gray-200 opacity-40 cursor-not-allowed' :
-            p.isOnBench && !forBench ? 'bg-purple-50 border-purple-200 hover:bg-purple-100' :
             isUntrained ? (gameMode ? 'bg-red-50 border-red-300 hover:bg-red-100' : 'bg-orange-50 border-orange-200 hover:bg-orange-100') :
             isAlt ? 'bg-amber-50 border-amber-200 hover:bg-amber-100' :
             'bg-white border-gray-200 hover:bg-gray-50'
           }`}>
           <div className="flex items-center gap-1.5">
-            {p.isOnBench && !forBench && <span className="text-[9px] font-semibold text-purple-600 bg-purple-100 px-1 rounded">BENCH</span>}
             <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: DIOK.blue }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
                 <span className="font-medium text-gray-900 truncate">{p.name.split(' ')[0]}</span>
-                {isUntrained && <span className="text-red-500 text-[10px]">⚠️</span>}
-                {p.isPreferred && !forBench && !isUntrained && <span className="text-yellow-500">★</span>}
-                {!forBench && p.playdayPositionCount > 0 && <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1 rounded">{p.playdayPositionCount}×</span>}
+                {p.isOnBench && <span className="text-purple-600">🪑</span>}
+                {p.isPreferred && !isUntrained && <span className="text-yellow-500 text-[10px]">★</span>}
               </div>
-              <div className="flex items-center gap-1.5">
-                {forBench ? (
-                  <BenchIndicator count={p.playdayBenchCount || 0} />
-                ) : isUntrained ? (
-                  <div className="text-[9px] text-red-600 font-medium">Not trained</div>
-                ) : (
-                  <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}</div>
-                )}
-                {!forBench && (p.playdayBenchCount > 0 || p.playdayPositionCount > 0) && (
-                  <span className="text-[8px] text-gray-500">🪑{p.playdayBenchCount}</span>
-                )}
-              </div>
+              {!isUntrained && (
+                <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}</div>
+              )}
             </div>
           </div>
           {p.isAssignedElsewhereInHalf && <div className="text-[9px] text-red-500 flex items-center gap-0.5 mt-0.5"><Icons.AlertTriangle /> Already assigned</div>}
@@ -3672,27 +3660,43 @@ const [lineups, setLineups] = useState({});
                   <div className="text-xs font-bold mb-1 px-1" style={{ color: DIOK.blue }}>{selectedPosition.isBench ? `Bench ${selectedPosition.benchIndex + 1}` : `#${positions.find(p => p.id === selectedPosition.posId)?.code} ${positions.find(p => p.id === selectedPosition.posId)?.name}`}</div>
                   {(selectedPosition.isBench ? lineup.bench?.[selectedPosition.benchIndex] : lineup.assignments[selectedPosition.posId]) && <button onClick={handleClearPosition} className="mb-2 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 border border-red-200">Clear</button>}
 
-                  {/* Show allocation explanation if available */}
-                  {!selectedPosition.isBench && allocationExplanations[key]?.[`${selectedPosition.posId}-${lineup.assignments[selectedPosition.posId]}`] && (
-                    <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="text-[9px] font-semibold text-blue-800 mb-1">Why selected:</div>
-                      <div className="space-y-0.5">
-                        {allocationExplanations[key][`${selectedPosition.posId}-${lineup.assignments[selectedPosition.posId]}`].explanations.map((exp, idx) => (
-                          <div key={idx} className="text-[8px] text-blue-700">• {exp}</div>
-                        ))}
-                      </div>
-                      <div className="text-[8px] text-blue-600 font-semibold mt-1">
-                        Total: {allocationExplanations[key][`${selectedPosition.posId}-${lineup.assignments[selectedPosition.posId]}`].score.toFixed(2)} pts
-                      </div>
-                    </div>
-                  )}
+                  {/* Current Player Stats */}
+                  {(() => {
+                    const currentPlayerId = selectedPosition.isBench ? lineup.bench?.[selectedPosition.benchIndex] : lineup.assignments[selectedPosition.posId];
+                    const currentPlayer = players.find(p => p.id === currentPlayerId);
+                    if (currentPlayer) {
+                      let playdayField = 0, playdayBench = 0, playdayAtPosition = 0;
+                      selectedPlayday.matches.forEach(m => {
+                        [1, 2].forEach(h => {
+                          const lineupKey = `${selectedPlayday.id}-${m.id}-${h}`;
+                          const matchLineup = lineups[lineupKey] || { assignments: {}, bench: [] };
+                          if (Object.values(matchLineup.assignments).includes(currentPlayerId)) {
+                            playdayField++;
+                            if (!selectedPosition.isBench && matchLineup.assignments[selectedPosition.posId] === currentPlayerId) {
+                              playdayAtPosition++;
+                            }
+                          }
+                          if (matchLineup.bench?.includes(currentPlayerId)) playdayBench++;
+                        });
+                      });
+                      return (
+                        <div className="mb-2 p-2 bg-gray-50 border border-gray-200 rounded-lg">
+                          <div className="text-[10px] font-semibold text-gray-700 mb-1">{currentPlayer.name}</div>
+                          <div className="text-[9px] text-gray-600 space-y-0.5">
+                            <div>Field: {playdayField} | Bench: {playdayBench}</div>
+                            {!selectedPosition.isBench && <div>At #{positions.find(p => p.id === selectedPosition.posId)?.code}: {playdayAtPosition}×</div>}
+                          </div>
+                        </div>
+                      );
+                    }
+                  })()}
 
                   <div className="flex-1 overflow-auto">
-                    {!selectedPosition.isBench && skilled.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1" title={`Players with >${learningPlayerConfig.maxStars} stars or >${learningPlayerConfig.maxGames} games at this position`}>✓ Skilled Players</div><div className="space-y-1">{skilled.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
-                    {!selectedPosition.isBench && learning.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1" title={`Players with ≤${learningPlayerConfig.maxStars} stars and ≤${learningPlayerConfig.maxGames} games at this position`}>◐ Learning Players</div><div className="space-y-1">{learning.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
-                    {!selectedPosition.isBench && untrained.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1 flex items-center gap-1" title="Players not trained for this position"><span>📝</span><span>Untrained Players</span></div><div className="space-y-1">{untrained.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isUntrained gameMode={selectedPlayday.type === 'game'} />)}</div></div>}
-                    {selectedPosition.isBench && candidates.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="mb-1"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1" title="Dots show how many times on bench this game day">Available Players</div><div className="space-y-1">{candidates.filter(p => !p.isAssignedElsewhereInHalf).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} forBench />)}</div></div>}
-                    {!selectedPosition.isBench && skilled.length === 0 && learning.length === 0 && untrained.length === 0 && <div className="text-xs text-gray-400 text-center p-4">No available players</div>}
+                    {!selectedPosition.isBench && skilled.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-emerald-600 mb-1 px-1">✓ Skilled</div><div className="space-y-1">{skilled.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
+                    {!selectedPosition.isBench && learning.length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-amber-600 mb-1 px-1">◐ Learning</div><div className="space-y-1">{learning.map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isAlt />)}</div></div>}
+                    {!selectedPosition.isBench && untrained.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="mb-2"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1">📝 Untrained</div><div className="space-y-1">{untrained.filter(p => !p.isAssignedElsewhereInHalf).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} isUntrained gameMode={selectedPlayday.type === 'game'} />)}</div></div>}
+                    {selectedPosition.isBench && candidates.filter(p => !p.isAssignedElsewhereInHalf).length > 0 && <div className="mb-1"><div className="text-[10px] font-semibold text-gray-600 mb-1 px-1">Available Players</div><div className="space-y-1">{candidates.filter(p => !p.isAssignedElsewhereInHalf).map(p => <PlayerRow key={p.id} p={p} onClick={() => handleAssignPlayer(p.id)} />)}</div></div>}
+                    {!selectedPosition.isBench && skilled.length === 0 && learning.length === 0 && untrained.filter(p => !p.isAssignedElsewhereInHalf).length === 0 && <div className="text-xs text-gray-400 text-center p-4">No available players</div>}
                   </div>
                 </>
               ) : <div className="flex-1 flex items-center justify-center text-xs text-gray-400 text-center p-2">← Tap position</div>}
