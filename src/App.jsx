@@ -1667,9 +1667,10 @@ const [lineups, setLineups] = useState({});
     const key = `${playdayId}-${matchId}-${half}`;
     const lineup = lineups[key] || { assignments: {}, bench: [] };
 
-    // Calculate bench count for this specific playday
+    // Calculate bench count and position-specific playtime for this specific playday
     const playday = playdays.find(pd => pd.id === playdayId);
     const playdayBenchCounts = {};
+    const playdayPositionCounts = {};
     if (playday) {
       playday.matches.forEach(m => {
         [1, 2].forEach(h => {
@@ -1677,6 +1678,12 @@ const [lineups, setLineups] = useState({});
           const matchLineup = lineups[lineupKey] || { assignments: {}, bench: [] };
           (matchLineup.bench || []).forEach(playerId => {
             if (playerId) playdayBenchCounts[playerId] = (playdayBenchCounts[playerId] || 0) + 1;
+          });
+          // Count position-specific assignments for this playday
+          Object.entries(matchLineup.assignments || {}).forEach(([posId, playerId]) => {
+            if (playerId && parseInt(posId) === positionId) {
+              playdayPositionCounts[playerId] = (playdayPositionCounts[playerId] || 0) + 1;
+            }
           });
         });
       });
@@ -1689,6 +1696,7 @@ const [lineups, setLineups] = useState({});
       const isPreferred = isFavoritePosition(p.id, positionId);
       const benchCount = benchHistory[p.id] || 0; // Overall bench count
       const playdayBenchCount = playdayBenchCounts[p.id] || 0; // Bench count for this playday only
+      const playdayPositionCount = playdayPositionCounts[p.id] || 0; // Times at this position this playday
       const fieldCount = fieldHistory[p.id] || 0;
       const timesAtPosition = playerPositionCounts[p.id]?.[positionId] || 0;
       // Check if player is assigned elsewhere in this half
@@ -1700,12 +1708,12 @@ const [lineups, setLineups] = useState({});
 
       const isCurrentlyHere = forBench ? lineup.bench?.includes(p.id) : lineup.assignments[positionId] === p.id;
       const isOnBench = lineup.bench?.includes(p.id);
-      
+
       let score = 1000;
       if (forBench) score = benchCount * 100 - fieldCount * 10;
       else if (trained) score = 100 - (rating * 10) - (isPreferred ? 50 : 0);
 
-      return { ...p, trained, rating, isPreferred, benchCount, playdayBenchCount, fieldCount, timesAtPosition, isAssignedElsewhereInHalf, isCurrentlyHere, isOnBench, score };
+      return { ...p, trained, rating, isPreferred, benchCount, playdayBenchCount, playdayPositionCount, fieldCount, timesAtPosition, isAssignedElsewhereInHalf, isCurrentlyHere, isOnBench, score };
     }).sort((a, b) => {
       if (a.isCurrentlyHere !== b.isCurrentlyHere) return a.isCurrentlyHere ? -1 : 1;
       if (a.isAssignedElsewhereInHalf !== b.isAssignedElsewhereInHalf) return a.isAssignedElsewhereInHalf ? 1 : -1;
@@ -1724,14 +1732,25 @@ const [lineups, setLineups] = useState({});
     // Split trained players into skilled and learning based on config
     const skilled = trained
       .filter(c => c.rating > learningPlayerConfig.maxStars || c.timesAtPosition > learningPlayerConfig.maxGames)
-      .sort((a, b) => b.rating - a.rating); // Sort by rating descending
+      .sort((a, b) => {
+        // Currently assigned player always on top
+        if (a.isCurrentlyHere !== b.isCurrentlyHere) return a.isCurrentlyHere ? -1 : 1;
+        return b.rating - a.rating;
+      });
 
     const learning = trained
       .filter(c => c.rating <= learningPlayerConfig.maxStars && c.timesAtPosition <= learningPlayerConfig.maxGames)
-      .sort((a, b) => b.rating - a.rating); // Sort by rating descending
+      .sort((a, b) => {
+        // Currently assigned player always on top
+        if (a.isCurrentlyHere !== b.isCurrentlyHere) return a.isCurrentlyHere ? -1 : 1;
+        return b.rating - a.rating;
+      });
 
-    // Sort untrained by rating descending as well
-    const untrainedSorted = untrained.sort((a, b) => b.rating - a.rating);
+    // Sort untrained by rating descending, with currently assigned on top
+    const untrainedSorted = untrained.sort((a, b) => {
+      if (a.isCurrentlyHere !== b.isCurrentlyHere) return a.isCurrentlyHere ? -1 : 1;
+      return b.rating - a.rating;
+    });
 
     return {
       skilled,
@@ -3586,9 +3605,20 @@ const [lineups, setLineups] = useState({});
                 <span className="font-medium text-gray-900 truncate">{p.name.split(' ')[0]}</span>
                 {isUntrained && <span className="text-red-500 text-[10px]">⚠️</span>}
                 {p.isPreferred && !forBench && !isUntrained && <span className="text-yellow-500">★</span>}
-                {!forBench && p.timesAtPosition > 0 && <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 px-1 rounded">{p.timesAtPosition}×</span>}
+                {!forBench && p.playdayPositionCount > 0 && <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 px-1 rounded">{p.playdayPositionCount}×</span>}
               </div>
-              {forBench ? <BenchIndicator count={p.playdayBenchCount || 0} /> : isUntrained ? <div className="text-[9px] text-red-600 font-medium">Not trained</div> : <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}</div>}
+              <div className="flex items-center gap-1.5">
+                {forBench ? (
+                  <BenchIndicator count={p.playdayBenchCount || 0} />
+                ) : isUntrained ? (
+                  <div className="text-[9px] text-red-600 font-medium">Not trained</div>
+                ) : (
+                  <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className={`text-[9px] ${s <= p.rating ? 'text-yellow-500' : 'text-gray-300'}`}>★</span>)}</div>
+                )}
+                {!forBench && (p.playdayBenchCount > 0 || p.playdayPositionCount > 0) && (
+                  <span className="text-[8px] text-gray-500">🪑{p.playdayBenchCount}</span>
+                )}
+              </div>
             </div>
           </div>
           {p.isAssignedElsewhereInHalf && <div className="text-[9px] text-red-500 flex items-center gap-0.5 mt-0.5"><Icons.AlertTriangle /> Already assigned</div>}
@@ -3632,6 +3662,9 @@ const [lineups, setLineups] = useState({});
               <div className="flex justify-center mb-3">{positions.filter(p => p.row === 5).map(pos => <PosButton key={pos.id} pos={pos} />)}</div>
               <div className="border-t border-white/40 my-3 mx-4" />
               <div className="flex justify-center gap-1">{Array.from({ length: BENCH_SIZE }).map((_, idx) => <BenchButton key={idx} idx={idx} />)}</div>
+              <div className="text-center text-[10px] text-white mt-2">
+                Number of allocated players: {Object.values(lineup.assignments).filter(id => id).length + (lineup.bench?.filter(id => id).length || 0)}
+              </div>
             </div>
             <div className="w-44 bg-white rounded-2xl border border-gray-200 p-2 flex flex-col max-h-[480px] shadow-sm">
               {selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half ? (
