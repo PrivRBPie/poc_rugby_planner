@@ -377,6 +377,9 @@ const [lineups, setLineups] = useState({});
   const [showWhySelected, setShowWhySelected] = useState(null); // Format: 'playdayId-matchId-half-posId'
   const [showPlayerInfo, setShowPlayerInfo] = useState(null); // Format: 'playdayId-matchId-half-posId'
   const [showSatisfactionExplanation, setShowSatisfactionExplanation] = useState(false);
+  const [overviewSortColumn, setOverviewSortColumn] = useState('satisfaction');
+  const [overviewSortDirection, setOverviewSortDirection] = useState('asc');
+  const [playerNotes, setPlayerNotes] = useState({}); // Format: { playerId: [{timestamp, coach, note}] }
 
   // Presence tracking
   const [currentUsername, setCurrentUsername] = useState(null);
@@ -2892,7 +2895,33 @@ const [lineups, setLineups] = useState({});
                 <div key={pa.position.id} className="bg-white rounded-lg border border-gray-200 p-2">
                   <div className="flex items-center justify-between mb-1">
                     <div className="text-xs font-bold text-gray-900">#{pa.position.code} {pa.position.name}</div>
-                    <div className="text-[10px] text-gray-500">{pa.avgRating.toFixed(1)}★ avg</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-[10px] text-gray-500">{pa.avgRating.toFixed(1)}★ avg</div>
+                      <button
+                        onClick={() => {
+                          // Find players not trained at this position
+                          const untrainedPlayers = players.filter(p => !training[`${p.id}-${pa.position.id}`]);
+                          if (untrainedPlayers.length === 0) {
+                            alert('All players are already trained at this position');
+                            return;
+                          }
+                          const playerName = prompt(`Add player to ${pa.position.name}?\n\nAvailable players:\n${untrainedPlayers.map(p => p.name).join('\n')}\n\nEnter player name:`);
+                          if (playerName) {
+                            const player = untrainedPlayers.find(p => p.name.toLowerCase().includes(playerName.toLowerCase()));
+                            if (player) {
+                              setTraining(prev => ({ ...prev, [`${player.id}-${pa.position.id}`]: true }));
+                              setRatings(prev => ({ ...prev, [`${player.id}-${pa.position.id}`]: 1 }));
+                            } else {
+                              alert('Player not found');
+                            }
+                          }
+                        }}
+                        className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold px-1.5 py-0.5 hover:bg-blue-50 rounded"
+                        title="Add player to this position"
+                      >
+                        + Add
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     {displayPlayers.map((playerData, idx) => {
@@ -3245,6 +3274,49 @@ const [lineups, setLineups] = useState({});
                         </div>
                       );
                     })}
+                  </div>
+
+                  {/* Player Notes */}
+                  <div className="mt-4 pt-3 border-t border-gray-200">
+                    <div className="text-xs font-medium text-gray-500 mb-2">Notes</div>
+                    <div className="space-y-2 mb-2">
+                      {(playerNotes[player.id] || []).map((note, idx) => (
+                        <div key={idx} className="bg-yellow-50 border border-yellow-200 rounded-lg p-2">
+                          <div className="text-[10px] text-gray-500 mb-1">
+                            {new Date(note.timestamp).toLocaleString()} • {note.coach}
+                          </div>
+                          <div className="text-xs text-gray-800">{note.note}</div>
+                          <button
+                            onClick={() => {
+                              setPlayerNotes(prev => ({
+                                ...prev,
+                                [player.id]: (prev[player.id] || []).filter((_, i) => i !== idx)
+                              }));
+                            }}
+                            className="text-[10px] text-red-600 hover:text-red-700 mt-1"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        const timestamp = new Date().toISOString();
+                        const coach = settings.coachName;
+                        const noteText = prompt(`Add note for ${player.name}\n\n${new Date(timestamp).toLocaleString()} • ${coach}\n\nEnter note:`);
+                        if (noteText && noteText.trim()) {
+                          setPlayerNotes(prev => ({
+                            ...prev,
+                            [player.id]: [...(prev[player.id] || []), { timestamp, coach, note: noteText.trim() }]
+                          }));
+                        }
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-lg text-blue-700 text-xs font-medium transition-colors"
+                    >
+                      <Icons.Plus />
+                      <span>Add Note</span>
+                    </button>
                   </div>
 
                   {/* Remove Player Button */}
@@ -3800,10 +3872,6 @@ const [lineups, setLineups] = useState({});
   const OverviewView = () => {
     if (!selectedPlayday) return null;
 
-    // Sort state for overview table
-    const [sortColumn, setSortColumn] = React.useState('satisfaction');
-    const [sortDirection, setSortDirection] = React.useState('asc');
-
     // Get all halves for this playday
     const playdayHalves = selectedPlayday.matches.flatMap(m => [
       { matchId: m.id, half: 1, opponent: m.opponent, number: m.number, key: `${selectedPlayday.id}-${m.id}-1` },
@@ -3812,13 +3880,13 @@ const [lineups, setLineups] = useState({});
 
     // Handle column header click for sorting
     const handleSort = (column) => {
-      if (sortColumn === column) {
+      if (overviewSortColumn === column) {
         // Toggle direction if clicking same column
-        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        setOverviewSortDirection(overviewSortDirection === 'asc' ? 'desc' : 'asc');
       } else {
         // New column, default to ascending
-        setSortColumn(column);
-        setSortDirection('asc');
+        setOverviewSortColumn(column);
+        setOverviewSortDirection('asc');
       }
     };
 
@@ -3949,8 +4017,8 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors"
                     >
                       Player
-                      {sortColumn === 'player' ? (
-                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      {overviewSortColumn === 'player' ? (
+                        <span className="text-blue-600">{overviewSortDirection === 'asc' ? '↑' : '↓'}</span>
                       ) : (
                         <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
@@ -3962,8 +4030,8 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       Field/Bench
-                      {sortColumn === 'field' ? (
-                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      {overviewSortColumn === 'field' ? (
+                        <span className="text-blue-600">{overviewSortDirection === 'asc' ? '↑' : '↓'}</span>
                       ) : (
                         <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
@@ -3975,8 +4043,8 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       Bench Ratio
-                      {sortColumn === 'benchRatio' ? (
-                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      {overviewSortColumn === 'benchRatio' ? (
+                        <span className="text-blue-600">{overviewSortDirection === 'asc' ? '↑' : '↓'}</span>
                       ) : (
                         <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
@@ -3988,8 +4056,8 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       😊 Fun
-                      {sortColumn === 'fun' ? (
-                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      {overviewSortColumn === 'fun' ? (
+                        <span className="text-blue-600">{overviewSortDirection === 'asc' ? '↑' : '↓'}</span>
                       ) : (
                         <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
@@ -4001,8 +4069,8 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       📚 Learning
-                      {sortColumn === 'learning' ? (
-                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      {overviewSortColumn === 'learning' ? (
+                        <span className="text-blue-600">{overviewSortDirection === 'asc' ? '↑' : '↓'}</span>
                       ) : (
                         <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
@@ -4014,8 +4082,8 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       Satisfaction
-                      {sortColumn === 'satisfaction' ? (
-                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      {overviewSortColumn === 'satisfaction' ? (
+                        <span className="text-blue-600">{overviewSortDirection === 'asc' ? '↑' : '↓'}</span>
                       ) : (
                         <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
@@ -4124,10 +4192,10 @@ const [lineups, setLineups] = useState({});
                       cumulativeGames
                     };
                   }).sort((a, b) => {
-                    // Dynamic sorting based on sortColumn and sortDirection
+                    // Dynamic sorting based on overviewSortColumn and overviewSortDirection
                     let compareValue = 0;
 
-                    switch (sortColumn) {
+                    switch (overviewSortColumn) {
                       case 'player':
                         compareValue = a.player.name.localeCompare(b.player.name);
                         break;
@@ -4155,7 +4223,7 @@ const [lineups, setLineups] = useState({});
                     }
 
                     // Apply sort direction
-                    return sortDirection === 'asc' ? compareValue : -compareValue;
+                    return overviewSortDirection === 'asc' ? compareValue : -compareValue;
                   });
 
                   // Calculate mean and standard deviation for satisfaction
