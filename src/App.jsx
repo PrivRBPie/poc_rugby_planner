@@ -2929,7 +2929,7 @@ const [lineups, setLineups] = useState({});
                         'bg-orange-50 border-orange-200';
 
                       return (
-                        <div key={playerData.player.id} className={`flex items-center gap-2 text-xs p-1.5 rounded border ${strengthColor}`}>
+                        <div key={playerData.player.id} className={`flex items-center gap-2 text-xs p-1.5 rounded border ${strengthColor} group`}>
                           <span className="text-gray-400 font-mono w-4">{idx + 1}.</span>
                           <span className="flex-1 truncate font-medium">{playerData.player.name}</span>
                           {/* Interactive star rating - left-aligned */}
@@ -2951,6 +2951,27 @@ const [lineups, setLineups] = useState({});
                           <div className="w-8 text-center">
                             {playerData.isFav && <span className="text-pink-500 text-sm" title="Favorite position">♥</span>}
                           </div>
+                          {/* Remove button - shows on hover */}
+                          <button
+                            onClick={() => {
+                              if (confirm(`Remove ${playerData.player.name} from ${pa.position.name}?`)) {
+                                setTraining(prev => {
+                                  const newTraining = { ...prev };
+                                  delete newTraining[key];
+                                  return newTraining;
+                                });
+                                setRatings(prev => {
+                                  const newRatings = { ...prev };
+                                  delete newRatings[key];
+                                  return newRatings;
+                                });
+                              }
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-red-600 hover:text-red-700 hover:bg-red-50 rounded p-1 transition-all"
+                            title="Remove from this position"
+                          >
+                            <Icons.Trash />
+                          </button>
                         </div>
                       );
                     })}
