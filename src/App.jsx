@@ -2909,9 +2909,9 @@ const [lineups, setLineups] = useState({});
                           setShowTrainPlayerModal({ positionId: pa.position.id, positionName: pa.position.name });
                         }}
                         className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold px-1.5 py-0.5 hover:bg-blue-50 rounded"
-                        title="Mark an existing player as trained for this position"
+                        title="Add player to this position"
                       >
-                        + Train
+                        + Add
                       </button>
                     </div>
                   </div>
@@ -5621,13 +5621,13 @@ const [lineups, setLineups] = useState({});
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-gray-200 p-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-gray-900">Train Player for {showTrainPlayerModal.positionName}</h3>
+                <h3 className="text-lg font-bold text-gray-900">Add Player to {showTrainPlayerModal.positionName}</h3>
                 <button
                   onClick={() => setShowTrainPlayerModal(null)}
                   className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 font-bold transition-colors"
                 >×</button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">Select a player to mark as trained for this position</p>
+              <p className="text-xs text-gray-500 mt-1">Select a player to add to this position</p>
             </div>
             <div className="p-4 overflow-y-auto max-h-[60vh]">
               <div className="space-y-2">
