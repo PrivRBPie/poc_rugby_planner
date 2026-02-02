@@ -3945,8 +3945,10 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors"
                     >
                       Player
-                      {sortColumn === 'player' && (
+                      {sortColumn === 'player' ? (
                         <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      ) : (
+                        <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
                     </button>
                   </th>
@@ -3956,8 +3958,10 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       Field/Bench
-                      {sortColumn === 'field' && (
+                      {sortColumn === 'field' ? (
                         <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      ) : (
+                        <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
                     </button>
                   </th>
@@ -3967,8 +3971,10 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       Bench Ratio
-                      {sortColumn === 'benchRatio' && (
+                      {sortColumn === 'benchRatio' ? (
                         <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      ) : (
+                        <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
                     </button>
                   </th>
@@ -3978,8 +3984,10 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       😊 Fun
-                      {sortColumn === 'fun' && (
+                      {sortColumn === 'fun' ? (
                         <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      ) : (
+                        <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
                     </button>
                   </th>
@@ -3989,8 +3997,10 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       📚 Learning
-                      {sortColumn === 'learning' && (
+                      {sortColumn === 'learning' ? (
                         <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      ) : (
+                        <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
                     </button>
                   </th>
@@ -4000,8 +4010,10 @@ const [lineups, setLineups] = useState({});
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
                       Satisfaction
-                      {sortColumn === 'satisfaction' && (
+                      {sortColumn === 'satisfaction' ? (
                         <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      ) : (
+                        <span className="text-gray-400 text-[10px]">⇅</span>
                       )}
                     </button>
                   </th>
