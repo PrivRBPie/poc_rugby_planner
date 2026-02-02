@@ -3930,6 +3930,17 @@ const [lineups, setLineups] = useState({});
                   </th>
                   <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">
                     <button
+                      onClick={() => handleSort('benchRatio')}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
+                    >
+                      Bench Ratio
+                      {sortColumn === 'benchRatio' && (
+                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">
+                    <button
                       onClick={() => handleSort('fun')}
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
                     >
@@ -3992,6 +4003,32 @@ const [lineups, setLineups] = useState({});
                       }
                     });
 
+                    // Calculate cumulative bench ratio across ALL playdays
+                    let cumulativeBench = 0, cumulativeGames = 0;
+                    playdays.forEach(playday => {
+                      const allHalves = playday.matches.flatMap(m => [
+                        { matchId: m.id, half: 1 },
+                        { matchId: m.id, half: 2 }
+                      ]);
+
+                      allHalves.forEach(({ matchId, half }) => {
+                        const key = `${playday.id}-${matchId}-${half}`;
+                        const lineup = lineups[key] || { assignments: {}, bench: [] };
+                        const posId = Object.entries(lineup.assignments).find(([k, v]) => v === player.id)?.[0];
+
+                        if (posId || lineup.bench?.includes(player.id)) {
+                          // Player was in this game (on field or on bench)
+                          cumulativeGames++;
+                          if (!posId) {
+                            // Player was on bench
+                            cumulativeBench++;
+                          }
+                        }
+                      });
+                    });
+
+                    const benchRatio = cumulativeGames > 0 ? (cumulativeBench / cumulativeGames) : 0;
+
                     // Calculate satisfaction score (0-100) using configured weights
                     // Playing Time: Combined field time percentage + bench fairness penalty
                     const fieldTimeRatio = totalField / playdayHalves.length; // 0-1
@@ -4032,7 +4069,10 @@ const [lineups, setLineups] = useState({});
                       funCount,
                       learningCount,
                       satisfaction,
-                      halfDetails
+                      halfDetails,
+                      benchRatio,
+                      cumulativeBench,
+                      cumulativeGames
                     };
                   }).sort((a, b) => {
                     // Dynamic sorting based on sortColumn and sortDirection
@@ -4048,6 +4088,9 @@ const [lineups, setLineups] = useState({});
                         if (compareValue === 0) {
                           compareValue = a.totalBench - b.totalBench;
                         }
+                        break;
+                      case 'benchRatio':
+                        compareValue = a.benchRatio - b.benchRatio;
                         break;
                       case 'fun':
                         compareValue = a.funCount - b.funCount;
@@ -4072,7 +4115,7 @@ const [lineups, setLineups] = useState({});
                   const variance = satisfactions.reduce((sum, val) => sum + Math.pow(val - meanSatisfaction, 2), 0) / satisfactions.length;
                   const stdDev = Math.sqrt(variance);
 
-                  return playerStats.map(({ player, totalField, totalBench, funCount, learningCount, satisfaction, halfDetails }) => {
+                  return playerStats.map(({ player, totalField, totalBench, funCount, learningCount, satisfaction, halfDetails, benchRatio, cumulativeBench, cumulativeGames }) => {
                     // Determine if outlier (more than 1 std dev from mean)
                     const isLowOutlier = satisfaction < (meanSatisfaction - stdDev);
                     const isHighOutlier = satisfaction > (meanSatisfaction + stdDev);
@@ -4093,6 +4136,16 @@ const [lineups, setLineups] = useState({});
                           <span className="text-emerald-600 font-semibold">{totalField}</span>
                           <span className="text-gray-300 mx-0.5">/</span>
                           <span className="text-orange-500">{totalBench}</span>
+                        </td>
+                        <td className="text-center p-2">
+                          <div className="inline-flex items-center gap-1">
+                            <span className="font-semibold text-orange-600">{cumulativeBench}</span>
+                            <span className="text-gray-300 mx-0.5">/</span>
+                            <span className="text-gray-600">{cumulativeGames}</span>
+                          </div>
+                          <div className="text-[10px] text-gray-500 mt-0.5">
+                            ({Math.round(benchRatio * 100)}%)
+                          </div>
                         </td>
                         <td className="text-center p-2">
                           <div className="inline-flex items-center gap-1">
