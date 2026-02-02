@@ -2905,10 +2905,11 @@ const [lineups, setLineups] = useState({});
                             alert('All players are already trained at this position');
                             return;
                           }
-                          const playerName = prompt(`Add player to ${pa.position.name}?\n\nAvailable players:\n${untrainedPlayers.map(p => p.name).join('\n')}\n\nEnter player name:`);
+                          const playerName = prompt(`Train existing player for ${pa.position.name}?\n\nUntrained players:\n${untrainedPlayers.map(p => p.name).join('\n')}\n\nEnter player name:`);
                           if (playerName) {
                             const player = untrainedPlayers.find(p => p.name.toLowerCase().includes(playerName.toLowerCase()));
                             if (player) {
+                              // Mark player as trained for this position with 1-star rating
                               setTraining(prev => ({ ...prev, [`${player.id}-${pa.position.id}`]: true }));
                               setRatings(prev => ({ ...prev, [`${player.id}-${pa.position.id}`]: 1 }));
                             } else {
@@ -2917,9 +2918,9 @@ const [lineups, setLineups] = useState({});
                           }
                         }}
                         className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold px-1.5 py-0.5 hover:bg-blue-50 rounded"
-                        title="Add player to this position"
+                        title="Mark an existing player as trained for this position"
                       >
-                        + Add
+                        + Train
                       </button>
                     </div>
                   </div>
