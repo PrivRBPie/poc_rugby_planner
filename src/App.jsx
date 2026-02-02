@@ -380,6 +380,7 @@ const [lineups, setLineups] = useState({});
   const [overviewSortColumn, setOverviewSortColumn] = useState('satisfaction');
   const [overviewSortDirection, setOverviewSortDirection] = useState('asc');
   const [playerNotes, setPlayerNotes] = useState({}); // Format: { playerId: [{timestamp, coach, note}] }
+  const [showTrainPlayerModal, setShowTrainPlayerModal] = useState(null); // Format: { positionId, positionName }
 
   // Presence tracking
   const [currentUsername, setCurrentUsername] = useState(null);
@@ -2905,17 +2906,7 @@ const [lineups, setLineups] = useState({});
                             alert('All players are already trained at this position');
                             return;
                           }
-                          const playerName = prompt(`Train existing player for ${pa.position.name}?\n\nUntrained players:\n${untrainedPlayers.map(p => p.name).join('\n')}\n\nEnter player name:`);
-                          if (playerName) {
-                            const player = untrainedPlayers.find(p => p.name.toLowerCase().includes(playerName.toLowerCase()));
-                            if (player) {
-                              // Mark player as trained for this position with 1-star rating
-                              setTraining(prev => ({ ...prev, [`${player.id}-${pa.position.id}`]: true }));
-                              setRatings(prev => ({ ...prev, [`${player.id}-${pa.position.id}`]: 1 }));
-                            } else {
-                              alert('Player not found');
-                            }
-                          }
+                          setShowTrainPlayerModal({ positionId: pa.position.id, positionName: pa.position.name });
                         }}
                         className="text-[10px] text-blue-600 hover:text-blue-700 font-semibold px-1.5 py-0.5 hover:bg-blue-50 rounded"
                         title="Mark an existing player as trained for this position"
@@ -5602,6 +5593,59 @@ const [lineups, setLineups] = useState({});
           <button onClick={addMatch} disabled={!newMatch.opponent.trim()} className={`w-full py-3 rounded-xl font-bold text-white ${newMatch.opponent.trim() ? '' : 'opacity-50'}`} style={{ backgroundColor: DIOK.blue }}>Add Match</button>
         </div>
       </BottomSheet>
+
+      {/* Train Player Modal */}
+      {showTrainPlayerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowTrainPlayerModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-900">Train Player for {showTrainPlayerModal.positionName}</h3>
+                <button
+                  onClick={() => setShowTrainPlayerModal(null)}
+                  className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 font-bold transition-colors"
+                >×</button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Select a player to mark as trained for this position</p>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              <div className="space-y-2">
+                {players
+                  .filter(p => !training[`${p.id}-${showTrainPlayerModal.positionId}`])
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(player => (
+                    <button
+                      key={player.id}
+                      onClick={() => {
+                        // Mark player as trained for this position with 1-star rating
+                        setTraining(prev => ({ ...prev, [`${player.id}-${showTrainPlayerModal.positionId}`]: true }));
+                        setRatings(prev => ({ ...prev, [`${player.id}-${showTrainPlayerModal.positionId}`]: 1 }));
+                        setShowTrainPlayerModal(null);
+                      }}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-all text-left"
+                    >
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm text-white" style={{ backgroundColor: DIOK.blue }}>
+                        {player.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-gray-900">{player.name}</div>
+                        <div className="text-xs text-gray-500">{player.miniYear}</div>
+                      </div>
+                      <div className="text-blue-600">
+                        <Icons.ChevronRight />
+                      </div>
+                    </button>
+                  ))}
+                {players.filter(p => !training[`${p.id}-${showTrainPlayerModal.positionId}`]).length === 0 && (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    All players are already trained at this position
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Username Prompt Modal */}
       {showUsernamePrompt && (
