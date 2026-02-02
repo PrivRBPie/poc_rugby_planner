@@ -3763,11 +3763,27 @@ const [lineups, setLineups] = useState({});
   const OverviewView = () => {
     if (!selectedPlayday) return null;
 
+    // Sort state for overview table
+    const [sortColumn, setSortColumn] = React.useState('satisfaction');
+    const [sortDirection, setSortDirection] = React.useState('asc');
+
     // Get all halves for this playday
     const playdayHalves = selectedPlayday.matches.flatMap(m => [
       { matchId: m.id, half: 1, opponent: m.opponent, number: m.number, key: `${selectedPlayday.id}-${m.id}-1` },
       { matchId: m.id, half: 2, opponent: m.opponent, number: m.number, key: `${selectedPlayday.id}-${m.id}-2` },
     ]);
+
+    // Handle column header click for sorting
+    const handleSort = (column) => {
+      if (sortColumn === column) {
+        // Toggle direction if clicking same column
+        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      } else {
+        // New column, default to ascending
+        setSortColumn(column);
+        setSortDirection('asc');
+      }
+    };
 
     const getPlayerAssignment = (playerId, matchId, half) => {
       const key = `${selectedPlayday.id}-${matchId}-${half}`;
@@ -3890,11 +3906,61 @@ const [lineups, setLineups] = useState({});
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left p-2 font-semibold text-gray-700 sticky left-0 bg-gray-50 min-w-[120px]">Player</th>
-                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[50px]">Field/Bench</th>
-                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">😊 Fun</th>
-                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">📚 Learning</th>
-                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[80px]">Satisfaction</th>
+                  <th className="text-left p-2 font-semibold text-gray-700 sticky left-0 bg-gray-50 min-w-[120px]">
+                    <button
+                      onClick={() => handleSort('player')}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                    >
+                      Player
+                      {sortColumn === 'player' && (
+                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[50px]">
+                    <button
+                      onClick={() => handleSort('field')}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
+                    >
+                      Field/Bench
+                      {sortColumn === 'field' && (
+                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">
+                    <button
+                      onClick={() => handleSort('fun')}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
+                    >
+                      😊 Fun
+                      {sortColumn === 'fun' && (
+                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[60px]">
+                    <button
+                      onClick={() => handleSort('learning')}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
+                    >
+                      📚 Learning
+                      {sortColumn === 'learning' && (
+                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </button>
+                  </th>
+                  <th className="text-center p-2 font-semibold text-gray-700 min-w-[80px]">
+                    <button
+                      onClick={() => handleSort('satisfaction')}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors mx-auto"
+                    >
+                      Satisfaction
+                      {sortColumn === 'satisfaction' && (
+                        <span className="text-blue-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -3968,7 +4034,37 @@ const [lineups, setLineups] = useState({});
                       satisfaction,
                       halfDetails
                     };
-                  }).sort((a, b) => a.satisfaction - b.satisfaction); // Sort by satisfaction ascending (lowest first)
+                  }).sort((a, b) => {
+                    // Dynamic sorting based on sortColumn and sortDirection
+                    let compareValue = 0;
+
+                    switch (sortColumn) {
+                      case 'player':
+                        compareValue = a.player.name.localeCompare(b.player.name);
+                        break;
+                      case 'field':
+                        // Sort by field count, then by bench count
+                        compareValue = a.totalField - b.totalField;
+                        if (compareValue === 0) {
+                          compareValue = a.totalBench - b.totalBench;
+                        }
+                        break;
+                      case 'fun':
+                        compareValue = a.funCount - b.funCount;
+                        break;
+                      case 'learning':
+                        compareValue = a.learningCount - b.learningCount;
+                        break;
+                      case 'satisfaction':
+                        compareValue = a.satisfaction - b.satisfaction;
+                        break;
+                      default:
+                        compareValue = a.satisfaction - b.satisfaction;
+                    }
+
+                    // Apply sort direction
+                    return sortDirection === 'asc' ? compareValue : -compareValue;
+                  });
 
                   // Calculate mean and standard deviation for satisfaction
                   const satisfactions = playerStats.map(s => s.satisfaction);

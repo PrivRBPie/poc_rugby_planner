@@ -20,7 +20,9 @@
       "Bash(timeout /t 30)",
       "Bash(echo:*)",
       "Bash(node test-allocation.js:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ]
   }
 }
