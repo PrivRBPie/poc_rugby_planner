@@ -3316,7 +3316,7 @@ const [lineups, setLineups] = useState({});
                     <button
                       onClick={() => {
                         const timestamp = new Date().toISOString();
-                        const coach = settings.coachName;
+                        const coach = currentUsername || settings.coachName;
                         const noteText = prompt(`Add note for ${player.name}\n\n${new Date(timestamp).toLocaleString()} • ${coach}\n\nEnter note:`);
                         if (noteText && noteText.trim()) {
                           setPlayerNotes(prev => ({
