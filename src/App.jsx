@@ -5361,8 +5361,8 @@ const [lineups, setLineups] = useState({});
                   <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
                 )}
               </button>
-              {/* Subtle dropdown indicator below the logo */}
-              <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-gray-400 text-xs group-hover:text-blue-500 transition-colors">
+              {/* Dropdown indicator below the logo */}
+              <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-gray-500 text-lg font-bold group-hover:text-blue-600 transition-colors">
                 <Icons.ChevronDown />
               </div>
 
