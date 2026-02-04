@@ -3736,7 +3736,16 @@ const [lineups, setLineups] = useState({});
               <div className="border-t border-white/40 my-3 mx-4" />
               <div className="flex justify-center gap-1">{Array.from({ length: BENCH_SIZE }).map((_, idx) => <BenchButton key={idx} idx={idx} />)}</div>
               <div className="text-center text-[10px] text-white mt-2">
-                Number of allocated players: {Object.values(lineup.assignments).filter(id => id).length + (lineup.bench?.filter(id => id).length || 0)}
+                {(() => {
+                  const allocatedCount = Object.values(lineup.assignments).filter(id => id).length + (lineup.bench?.filter(id => id).length || 0);
+                  const allocatedPlayerIds = new Set([
+                    ...Object.values(lineup.assignments).filter(id => id),
+                    ...(lineup.bench?.filter(id => id) || [])
+                  ]);
+                  const availablePlayersCount = availablePlayers.length;
+                  const unallocatedCount = availablePlayersCount - allocatedPlayerIds.size;
+                  return `Unallocated available players: ${unallocatedCount}`;
+                })()}
               </div>
             </div>
             <div className="w-44 bg-white rounded-2xl border border-gray-200 p-2 flex flex-col max-h-[480px] shadow-sm">
@@ -5343,9 +5352,13 @@ const [lineups, setLineups] = useState({});
             <div className="relative">
               <button
                 onClick={() => setShowTeamManager(!showTeamManager)}
-                className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-white border-2 border-gray-300 hover:border-blue-500 transition-colors"
+                className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-white border-2 border-blue-400 hover:border-blue-600 hover:shadow-lg transition-all relative group"
                 title={getCurrentTeam()?.name || 'Select Team'}
               >
+                {/* Dropdown indicator */}
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs group-hover:bg-blue-600 transition-colors shadow-md">
+                  ▼
+                </div>
                 {getTeamLogo(getCurrentTeam()?.name) ? (
                   <img src={getTeamLogo(getCurrentTeam()?.name)} alt={getCurrentTeam()?.name} className="w-full h-full object-cover" />
                 ) : (
