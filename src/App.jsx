@@ -5352,19 +5352,21 @@ const [lineups, setLineups] = useState({});
             <div className="relative group">
               <button
                 onClick={() => setShowTeamManager(!showTeamManager)}
-                className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-white border-2 border-gray-300 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer"
+                className="w-12 h-12 rounded-xl flex items-center justify-center relative bg-white border-2 border-gray-300 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer"
                 title="Click to switch teams"
               >
-                {getTeamLogo(getCurrentTeam()?.name) ? (
-                  <img src={getTeamLogo(getCurrentTeam()?.name)} alt={getCurrentTeam()?.name} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
-                )}
+                <div className="absolute inset-0 overflow-hidden rounded-xl">
+                  {getTeamLogo(getCurrentTeam()?.name) ? (
+                    <img src={getTeamLogo(getCurrentTeam()?.name)} alt={getCurrentTeam()?.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-2xl flex items-center justify-center h-full">{getCurrentTeam()?.logo || '🐂'}</span>
+                  )}
+                </div>
+                {/* Dropdown indicator in bottom-right corner */}
+                <div className="absolute bottom-0 right-0 bg-white rounded-tl-lg rounded-br-xl px-1 text-gray-600 group-hover:text-blue-600 transition-colors shadow-sm">
+                  <Icons.ChevronDown />
+                </div>
               </button>
-              {/* Dropdown indicator below the logo */}
-              <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-gray-500 text-lg font-bold group-hover:text-blue-600 transition-colors">
-                <Icons.ChevronDown />
-              </div>
 
             {/* Team Dropdown */}
             {showTeamManager && (
