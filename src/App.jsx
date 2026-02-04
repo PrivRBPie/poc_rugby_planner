@@ -5349,24 +5349,22 @@ const [lineups, setLineups] = useState({});
           {/* Team Logo/Selector */}
           {teams.length > 0 ? (
             // Multi-team mode: Show team selector (icon only)
-            <div className="relative group">
+            <div className="relative group flex items-center gap-1">
               <button
                 onClick={() => setShowTeamManager(!showTeamManager)}
-                className="w-12 h-12 rounded-xl flex items-center justify-center relative bg-white border-2 border-gray-300 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer"
+                className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-white border-2 border-gray-300 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer"
                 title="Click to switch teams"
               >
-                <div className="absolute inset-0 overflow-hidden rounded-xl">
-                  {getTeamLogo(getCurrentTeam()?.name) ? (
-                    <img src={getTeamLogo(getCurrentTeam()?.name)} alt={getCurrentTeam()?.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-2xl flex items-center justify-center h-full">{getCurrentTeam()?.logo || '🐂'}</span>
-                  )}
-                </div>
-                {/* Dropdown indicator in bottom-right corner */}
-                <div className="absolute bottom-0 right-0 bg-white rounded-tl-lg rounded-br-xl px-1 text-gray-600 group-hover:text-blue-600 transition-colors shadow-sm">
-                  <Icons.ChevronDown />
-                </div>
+                {getTeamLogo(getCurrentTeam()?.name) ? (
+                  <img src={getTeamLogo(getCurrentTeam()?.name)} alt={getCurrentTeam()?.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
+                )}
               </button>
+              {/* Dropdown indicator to the right */}
+              <div className="text-gray-600 group-hover:text-blue-600 transition-colors text-lg">
+                <Icons.ChevronDown />
+              </div>
 
             {/* Team Dropdown */}
             {showTeamManager && (
