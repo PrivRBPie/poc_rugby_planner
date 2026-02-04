@@ -5349,22 +5349,22 @@ const [lineups, setLineups] = useState({});
           {/* Team Logo/Selector */}
           {teams.length > 0 ? (
             // Multi-team mode: Show team selector (icon only)
-            <div className="relative">
+            <div className="relative group">
               <button
                 onClick={() => setShowTeamManager(!showTeamManager)}
-                className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-white border-2 border-blue-400 hover:border-blue-600 hover:shadow-lg transition-all relative group"
-                title={getCurrentTeam()?.name || 'Select Team'}
+                className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-white border-2 border-gray-300 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer"
+                title="Click to switch teams"
               >
-                {/* Dropdown indicator */}
-                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs group-hover:bg-blue-600 transition-colors shadow-md">
-                  ▼
-                </div>
                 {getTeamLogo(getCurrentTeam()?.name) ? (
                   <img src={getTeamLogo(getCurrentTeam()?.name)} alt={getCurrentTeam()?.name} className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-2xl">{getCurrentTeam()?.logo || '🐂'}</span>
                 )}
               </button>
+              {/* Subtle dropdown indicator below the logo */}
+              <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-gray-400 text-xs group-hover:text-blue-500 transition-colors">
+                <Icons.ChevronDown />
+              </div>
 
             {/* Team Dropdown */}
             {showTeamManager && (
