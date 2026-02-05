@@ -3,6 +3,7 @@ import bullsLogo from './assets/bulls.svg';
 import sharksLogo from './assets/sharks.svg';
 import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
+import * as XLSX from 'xlsx';
 
 // App version - increment this when deploying breaking changes
 const APP_VERSION = '1.0.1';
@@ -3353,6 +3354,70 @@ const [lineups, setLineups] = useState({});
   );
 
   // ==================== LINEUP VIEW ====================
+  const exportLineupToExcel = () => {
+    if (!selectedPlayday) return;
+
+    const data = [];
+
+    selectedPlayday.matches.forEach((match, matchIndex) => {
+      // Add game header
+      data.push([`Game ${match.number}: ${match.opponent}`, `Date: ${selectedPlayday.date}`]);
+      data.push(['']); // Empty row
+
+      // Add column headers
+      data.push(['Position', 'Half 1', 'Half 2']);
+
+      // Add each position
+      positions.forEach((pos) => {
+        const half1Key = `${selectedPlayday.id}-${match.id}-1`;
+        const half2Key = `${selectedPlayday.id}-${match.id}-2`;
+        const half1Lineup = lineups[half1Key] || { assignments: {}, bench: [] };
+        const half2Lineup = lineups[half2Key] || { assignments: {}, bench: [] };
+
+        const player1 = players.find(p => p.id === half1Lineup.assignments[pos.id]);
+        const player2 = players.find(p => p.id === half2Lineup.assignments[pos.id]);
+
+        data.push([
+          `${pos.code}: ${pos.name}`,
+          player1 ? player1.name : '-',
+          player2 ? player2.name : '-'
+        ]);
+      });
+
+      // Add bench players
+      for (let i = 0; i < BENCH_SIZE; i++) {
+        const half1Key = `${selectedPlayday.id}-${match.id}-1`;
+        const half2Key = `${selectedPlayday.id}-${match.id}-2`;
+        const half1Lineup = lineups[half1Key] || { assignments: {}, bench: [] };
+        const half2Lineup = lineups[half2Key] || { assignments: {}, bench: [] };
+
+        const benchPlayer1 = players.find(p => p.id === half1Lineup.bench?.[i]);
+        const benchPlayer2 = players.find(p => p.id === half2Lineup.bench?.[i]);
+
+        data.push([
+          `Bench ${i + 1}`,
+          benchPlayer1 ? benchPlayer1.name : '-',
+          benchPlayer2 ? benchPlayer2.name : '-'
+        ]);
+      }
+
+      // Add spacing between games
+      data.push(['']);
+      data.push(['']);
+    });
+
+    // Create workbook and worksheet
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Lineup');
+
+    // Generate filename
+    const filename = `${selectedPlayday.name}_Lineup_${selectedPlayday.date}.xlsx`;
+
+    // Save file
+    XLSX.writeFile(wb, filename);
+  };
+
   const LineupView = () => {
     if (!selectedPlayday || selectedPlayday.matches.length === 0) {
       return (
@@ -3823,6 +3888,12 @@ const [lineups, setLineups] = useState({});
                 className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
                 title="Auto-propose all halves (Training mode)">
                 <span className="text-xs">📚</span>
+              </button>
+              <button
+                onClick={exportLineupToExcel}
+                className="p-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+                title="Export lineup to Excel">
+                <span className="text-xs">📊</span>
               </button>
               <button
                 onClick={() => clearFullDay(selectedPlayday.id)}
