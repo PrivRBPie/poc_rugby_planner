@@ -73,6 +73,7 @@ const Icons = {
   CheckCircle: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>,
   AlertTriangle: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   Trash: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+  Excel: () => <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="4" fill="#1D6F42"/><path d="M7 7l2.5 4.5L7 17h2.2l1.8-2.8 1.8 2.8H15l-2.5-5.5L15 7h-2.2l-1.8 2.8L9.2 7H7z" fill="white"/></svg>,
 };
 
 const StarRating = ({ value, onChange, readonly = false }) => (
@@ -3368,65 +3369,59 @@ const [lineups, setLineups] = useState({});
   const exportLineupToExcel = () => {
     if (!selectedPlayday) return;
 
-    const data = [];
+    const teamName = (getCurrentTeam()?.name || 'TEAM').toUpperCase();
+    const matches = selectedPlayday.matches;
 
-    selectedPlayday.matches.forEach((match, matchIndex) => {
-      // Add game header
-      data.push([`Game ${match.number}: ${match.opponent}`, `Date: ${selectedPlayday.date}`]);
-      data.push(['']); // Empty row
+    // Pre-compute lineup lookups per match
+    const matchLineups = matches.map(match => ({
+      half1: lineups[`${selectedPlayday.id}-${match.id}-1`] || { assignments: {}, bench: [] },
+      half2: lineups[`${selectedPlayday.id}-${match.id}-2`] || { assignments: {}, bench: [] },
+      label: match.opponent || `Game ${match.number}`,
+    }));
 
-      // Add column headers
-      data.push(['Position', 'Half 1', 'Half 2']);
+    // Header row: Team name | Opp1 | Opp1.2 | Opp2 | Opp2.2 | ...
+    const headerRow = [teamName];
+    matchLineups.forEach(({ label }) => {
+      headerRow.push(label);
+      headerRow.push(`${label}.2`);
+    });
+    const data = [headerRow];
 
-      // Add each position
-      positions.forEach((pos) => {
-        const half1Key = `${selectedPlayday.id}-${match.id}-1`;
-        const half2Key = `${selectedPlayday.id}-${match.id}-2`;
-        const half1Lineup = lineups[half1Key] || { assignments: {}, bench: [] };
-        const half2Lineup = lineups[half2Key] || { assignments: {}, bench: [] };
-
-        const player1 = players.find(p => p.id === half1Lineup.assignments[pos.id]);
-        const player2 = players.find(p => p.id === half2Lineup.assignments[pos.id]);
-
-        data.push([
-          `${pos.code}: ${pos.name}`,
-          player1 ? player1.name : '-',
-          player2 ? player2.name : '-'
-        ]);
+    // Position rows
+    positions.forEach((pos) => {
+      const row = [pos.code];
+      matchLineups.forEach(({ half1, half2 }) => {
+        const p1 = players.find(p => p.id === half1.assignments[pos.id]);
+        const p2 = players.find(p => p.id === half2.assignments[pos.id]);
+        row.push(p1 ? p1.name.split(' ')[0] : '-');
+        row.push(p2 ? p2.name.split(' ')[0] : '-');
       });
-
-      // Add bench players
-      for (let i = 0; i < BENCH_SIZE; i++) {
-        const half1Key = `${selectedPlayday.id}-${match.id}-1`;
-        const half2Key = `${selectedPlayday.id}-${match.id}-2`;
-        const half1Lineup = lineups[half1Key] || { assignments: {}, bench: [] };
-        const half2Lineup = lineups[half2Key] || { assignments: {}, bench: [] };
-
-        const benchPlayer1 = players.find(p => p.id === half1Lineup.bench?.[i]);
-        const benchPlayer2 = players.find(p => p.id === half2Lineup.bench?.[i]);
-
-        data.push([
-          `Bench ${i + 1}`,
-          benchPlayer1 ? benchPlayer1.name : '-',
-          benchPlayer2 ? benchPlayer2.name : '-'
-        ]);
-      }
-
-      // Add spacing between games
-      data.push(['']);
-      data.push(['']);
+      data.push(row);
     });
 
-    // Create workbook and worksheet
+    // Empty separator row before bench
+    data.push(Array(headerRow.length).fill(''));
+
+    // Bench rows
+    for (let i = 0; i < BENCH_SIZE; i++) {
+      const row = [`Bench ${i + 1}`];
+      matchLineups.forEach(({ half1, half2 }) => {
+        const b1 = players.find(p => p.id === half1.bench?.[i]);
+        const b2 = players.find(p => p.id === half2.bench?.[i]);
+        row.push(b1 ? b1.name.split(' ')[0] : '-');
+        row.push(b2 ? b2.name.split(' ')[0] : '-');
+      });
+      data.push(row);
+    }
+
     const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Set column widths: first col narrow, rest equal
+    ws['!cols'] = [{ wch: 10 }, ...Array(headerRow.length - 1).fill({ wch: 14 })];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Lineup');
-
-    // Generate filename
-    const filename = `${selectedPlayday.name}_Lineup_${selectedPlayday.date}.xlsx`;
-
-    // Save file
-    XLSX.writeFile(wb, filename);
+    XLSX.writeFile(wb, `${selectedPlayday.name}_Lineup_${selectedPlayday.date}.xlsx`);
   };
 
   const LineupView = () => {
@@ -3902,9 +3897,9 @@ const [lineups, setLineups] = useState({});
               </button>
               <button
                 onClick={exportLineupToExcel}
-                className="p-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-green-100 transition-colors"
                 title="Export lineup to Excel">
-                <span className="text-xs">📊</span>
+                <Icons.Excel />
               </button>
               <button
                 onClick={() => clearFullDay(selectedPlayday.id)}
