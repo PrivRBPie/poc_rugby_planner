@@ -5439,15 +5439,8 @@ const [lineups, setLineups] = useState({});
           {/* Contact card */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
             <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-2xl mx-auto mb-3">👨‍💼</div>
-            <div className="font-semibold text-gray-900 mb-1">Paul Schrier</div>
-            <div className="text-xs text-gray-500 mb-4">Administrator</div>
-            <a
-              href="mailto:paul.schrier@gmail.com"
-              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
-            >
-              <span>✉️</span>
-              <span>paul.schrier@gmail.com</span>
-            </a>
+            <div className="font-semibold text-gray-900 mb-1">Contact Paul</div>
+            <div className="text-xs text-gray-500">Administrator</div>
           </div>
 
           {/* Try again button */}
