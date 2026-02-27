@@ -429,6 +429,7 @@ const [lineups, setLineups] = useState({});
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [isDbUnavailable, setIsDbUnavailable] = useState(false);
   const [rugbyDataId, setRugbyDataId] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [remoteUpdatedAt, setRemoteUpdatedAt] = useState(null);
@@ -530,6 +531,11 @@ const [lineups, setLineups] = useState({});
 
         if (teamsError) {
           console.error('Error loading teams:', teamsError);
+          // Detect if Supabase project is paused (network-level failure)
+          const msg = teamsError.message?.toLowerCase() || '';
+          if (msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('network request failed') || msg.includes('fetch')) {
+            setIsDbUnavailable(true);
+          }
           setHasLoaded(true);
           return;
         }
@@ -555,6 +561,11 @@ const [lineups, setLineups] = useState({});
 
       } catch (error) {
         console.error('Error loading from Supabase:', error);
+        // Detect if Supabase project is paused (network-level failure)
+        const msg = error?.message?.toLowerCase() || '';
+        if (msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('network request failed') || msg.includes('fetch')) {
+          setIsDbUnavailable(true);
+        }
         setHasLoaded(true);
       } finally {
         setIsSyncing(false);
@@ -5412,6 +5423,44 @@ const [lineups, setLineups] = useState({});
     </div>
     );
   };
+
+  // Database unavailable screen (Supabase paused or network error)
+  if (isDbUnavailable) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="text-center max-w-sm w-full">
+          {/* Rugby ball icon */}
+          <div className="text-7xl mb-6">🏉</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Database is sleeping</h1>
+          <p className="text-gray-500 text-sm mb-8">
+            The database needs to be woken up by the administrator.
+          </p>
+
+          {/* Contact card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-2xl mx-auto mb-3">👨‍💼</div>
+            <div className="font-semibold text-gray-900 mb-1">Paul Schrier</div>
+            <div className="text-xs text-gray-500 mb-4">Administrator</div>
+            <a
+              href="mailto:paul.schrier@gmail.com"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              <span>✉️</span>
+              <span>paul.schrier@gmail.com</span>
+            </a>
+          </div>
+
+          {/* Try again button */}
+          <button
+            onClick={() => window.location.reload()}
+            className="text-sm text-gray-400 hover:text-gray-600 underline transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: DIOK.gray }}>
