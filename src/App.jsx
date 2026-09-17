@@ -115,8 +115,13 @@ const BottomSheet = ({ isOpen, onClose, title, children }) => {
 
 const DIOK = { blue: '#1e3a5f', blueLight: '#2d5a87', gray: '#f8fafc' };
 
-export default function RugbyLineupPlanner() {
+export default function RugbyLineupPlanner({ coachRole = 'coach' }) {
   const [activeTab, setActiveTab] = useState('squad');
+  const isAdmin = coachRole === 'admin';
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'admin') setActiveTab('squad');
+  }, [isAdmin, activeTab]);
   const [players, setPlayers] = useState(initialPlayers);
   const [allPlayers, setAllPlayers] = useState([]); // Global player library
   
@@ -6216,11 +6221,11 @@ const [lineups, setLineups] = useState({});
         {activeTab === 'lineup' && LineupView()}
         {activeTab === 'overview' && OverviewView()}
         {activeTab === 'rules' && RulesView()}
-        {activeTab === 'admin' && AdminView()}
+        {activeTab === 'admin' && isAdmin && AdminView()}
       </main>
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 shadow-lg">
         <div className="max-w-3xl mx-auto flex gap-1">
-          {tabs.map(tab => (
+          {tabs.filter(tab => tab.id !== 'admin' || isAdmin).map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-xl transition-colors ${activeTab === tab.id ? 'text-white' : 'text-gray-400 hover:text-gray-600'}`}
               style={{ backgroundColor: activeTab === tab.id ? DIOK.blue : 'transparent' }}>{tab.icon}<span className="text-[10px] font-medium">{tab.label}</span></button>

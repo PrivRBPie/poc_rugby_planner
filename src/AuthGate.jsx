@@ -172,7 +172,11 @@ export default function AuthGate({ children }) {
     return <div className="min-h-screen grid place-items-center bg-slate-50 text-slate-600">Loading…</div>;
   }
 
-  if (session && coach?.ok && !coach.mustSetPassword) return children;
+  if (session && coach?.ok && !coach.mustSetPassword) {
+    return React.isValidElement(children)
+      ? React.cloneElement(children, { coachRole: coach.role || 'coach' })
+      : children;
+  }
 
   if (session && coach?.ok && coach.mustSetPassword) {
     return (
