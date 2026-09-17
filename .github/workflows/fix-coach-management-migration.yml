@@ -1,0 +1,33 @@
+name: Fix coach management migration
+
+on:
+  push:
+    branches: ["feature/coach-access-management"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/coach-access-management
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch migration
+        run: python scripts/fix_coach_management_migration.py
+      - name: Commit migration fix
+        run: |
+          if git diff --quiet; then
+            echo "No migration change needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add migrations/20260917_r8_coach_management.sql
+          git commit -m "Harden primary-team migration update"
+          git push origin HEAD:feature/coach-access-management
