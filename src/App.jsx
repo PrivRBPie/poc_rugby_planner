@@ -4,7 +4,7 @@ import sharksLogo from './assets/sharks.svg';
 import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
 import * as XLSX from 'xlsx';
-import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBenchSize, cleanupLineupsForPlayday, cleanupLineupsForMatch, getHistoryRange, validateAssignment, validateLineupForPublish, normalizeAvailabilityStatus, normalizeSuitability, preferenceScore } from './domain/planner';
+import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBenchSize, cleanupLineupsForPlayday, cleanupLineupsForMatch, getHistoryRange, validateLineupForPublish, normalizeAvailabilityStatus, normalizeSuitability, preferenceScore } from './domain/planner';
 import { loadOfflineSnapshot, saveOfflineSnapshot } from './offlineStore';
 
 // App version - increment this when deploying breaking changes
@@ -2122,7 +2122,9 @@ const [lineups, setLineups] = useState({});
       });
     }
 
-    return getEligiblePlayersForHalf(playdayId, matchId, half, allocationMode).map(p => {
+    return getEligiblePlayersForHalf(playdayId, matchId, half, allocationMode)
+      .filter(p => forBench || getSuitability(p.id, positionId) !== 10)
+      .map(p => {
       const trainingKey = `${p.id}-${positionId}`;
       const trained = training[trainingKey] || false;
       const rating = trained ? (ratings[trainingKey] || 0) : 0;
@@ -2650,22 +2652,9 @@ const [lineups, setLineups] = useState({});
       }
     }
     
-    if (!isBench) {
-      const status = getHalfStatus(playerId, playdayId, matchId, half);
-      const trainedForPosition = training[`${playerId}-${posId}`] || false;
-      const violations = validateAssignment({
-        status,
-        mode: selectedPlayday?.type === 'training' ? 'training' : 'game',
-        trained: trainedForPosition,
-        duplicate: false,
-        suitability: getSuitability(playerId, posId),
-      });
-      if (violations.length > 0) {
-        const reason = window.prompt(`Coach override required:\n\n${violations.join("\n")}\n\nEnter an override reason to continue, or Cancel to stop.`);
-        if (!reason?.trim()) return;
-        logAction('coach_override', { player_id: playerId, position_id: posId, playday_id: playdayId, match_id: matchId, half, reason: reason.trim(), violations });
-      }
-    }
+    // A red × is a true hard block. Untrained players may still be assigned manually,
+    // but a player explicitly blocked from this position may never be placed here.
+    if (!isBench && getSuitability(playerId, posId) === 10) return;
 
     updateLineup(playdayId, matchId, half, (prev) => {
       const newAssignments = { ...prev.assignments };
@@ -4360,15 +4349,6 @@ const [lineups, setLineups] = useState({});
                           <div className="text-[10px] font-semibold text-gray-700 mb-1">{currentPlayer.name}</div>
                           <div className="text-[9px] text-gray-600 space-y-0.5">
                             <div>Field: {playdayField} | Bench: {playdayBench}</div>
-                            <div className="pt-1">
-                              <select
-                                value={getHalfStatus(currentPlayerId, selectedPlayday.id, matchId, half)}
-                                onChange={(e) => setHalfAvailability(currentPlayerId, selectedPlayday.id, matchId, half, e.target.value)}
-                                className="w-full border border-gray-300 rounded px-1 py-0.5 text-[9px] bg-white"
-                              >
-                                {availabilityOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                              </select>
-                            </div>
                             {!selectedPosition.isBench && <div>At #{positions.find(p => p.id === selectedPosition.posId)?.code}: {playdayAtPosition}×</div>}
                           </div>
                         </div>
