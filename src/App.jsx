@@ -1725,9 +1725,41 @@ const [lineups, setLineups] = useState({});
 
       const nextInactivePlayerIds = Array.from(new Set([...inactivePlayerIds, playerId]));
       const nextAvailability = { ...availability, [playerId]: 'not-selected' };
+
+      // Keep completed matches as historical evidence, but remove the player from
+      // today's/upcoming lineups so they cannot remain scheduled for the old team.
+      const today = new Date().toISOString().split('T')[0];
+      const currentOrFuturePlaydayIds = new Set(
+        playdays
+          .filter(playday => !playday.date || playday.date >= today)
+          .map(playday => String(playday.id))
+      );
+      const changedFutureLineupKeys = new Set();
+      const nextSourceLineups = Object.fromEntries(
+        Object.entries(lineups).map(([key, lineup]) => {
+          const playdayId = String(key).split('-')[0];
+          if (!currentOrFuturePlaydayIds.has(playdayId)) return [key, lineup];
+
+          const hadPlayer = Object.values(lineup.assignments || {}).includes(playerId)
+            || (lineup.bench || []).includes(playerId);
+          if (!hadPlayer) return [key, lineup];
+
+          changedFutureLineupKeys.add(key);
+          return [key, {
+            ...lineup,
+            assignments: Object.fromEntries(
+              Object.entries(lineup.assignments || {}).filter(([, assignedPlayerId]) => assignedPlayerId !== playerId)
+            ),
+            bench: (lineup.bench || []).filter(benchPlayerId => benchPlayerId !== playerId)
+          }];
+        })
+      );
+      const nextPublishedHalves = { ...publishedHalves };
+      changedFutureLineupKeys.forEach(key => delete nextPublishedHalves[key]);
+
       const nextSourceData = {
-        players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences,
-        publishedHalves, keyPositionMultiplier, allocationRules, availability: nextAvailability,
+        players, playdays, lineups: nextSourceLineups, ratings, training, favoritePositions, suitability, positionPreferences,
+        publishedHalves: nextPublishedHalves, keyPositionMultiplier, allocationRules, availability: nextAvailability,
         learningPlayerConfig, satisfactionWeights, playerNotes,
         inactivePlayerIds: nextInactivePlayerIds,
         seasonStartDate
@@ -1753,6 +1785,15 @@ const [lineups, setLineups] = useState({});
 
       setInactivePlayerIds(nextInactivePlayerIds);
       setAvailability(nextAvailability);
+      setLineups(nextSourceLineups);
+      setPublishedHalves(nextPublishedHalves);
+      setInitialState(prev => prev ? {
+        ...prev,
+        lineups: JSON.stringify(nextSourceLineups),
+        publishedHalves: JSON.stringify(nextPublishedHalves),
+        availability: JSON.stringify(nextAvailability)
+      } : prev);
+      setHasUnsavedChanges(false);
       setRemoteUpdatedAt(updatedSource.updated_at);
       setLastSyncTime(new Date());
       setExpandedPlayer(null);
@@ -1900,7 +1941,7 @@ const [lineups, setLineups] = useState({});
       });
     });
     return counts;
-  }, [lineups, players]);
+  }, [currentSeasonLineups, players]);
 
   const fieldHistory = useMemo(() => {
     const counts = {};
@@ -1911,7 +1952,7 @@ const [lineups, setLineups] = useState({});
       });
     });
     return counts;
-  }, [lineups, players]);
+  }, [currentSeasonLineups, players]);
 
   const playerPositionCounts = useMemo(() => {
     const counts = {};
@@ -1923,7 +1964,7 @@ const [lineups, setLineups] = useState({});
       });
     });
     return counts;
-  }, [lineups]);
+  }, [currentSeasonLineups]);
 
   const availablePlayers = useMemo(() => {
     return activePlayers.filter(p => {
@@ -2915,7 +2956,10 @@ const [lineups, setLineups] = useState({});
     }).sort((a, b) => b.versatilityScore - a.versatilityScore);
 
     // Team composition stats
-    const totalRatings = Object.values(ratings);
+    const activePlayerIdSet = new Set(activePlayers.map(player => String(player.id)));
+    const totalRatings = Object.entries(ratings)
+      .filter(([key]) => activePlayerIdSet.has(key.split('-')[0]))
+      .map(([, rating]) => rating);
     const star5Count = totalRatings.filter(r => r === 5).length;
     const star4Count = totalRatings.filter(r => r === 4).length;
     const star3Count = totalRatings.filter(r => r === 3).length;
