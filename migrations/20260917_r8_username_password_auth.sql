@@ -4,7 +4,8 @@
 --   1. Supabase Auth creates an anonymous technical user (email/phone remain NULL).
 --   2. coach_login(username, password) verifies a bcrypt password hash in coach_accounts.
 --   3. A successful login maps the anonymous auth.uid() to the coach's team memberships.
---   4. Existing team-based RLS can therefore continue to use team_members + auth.uid().
+--   4. RLS additionally requires is_current_coach(), so an anonymous technical session
+--      has no planner access before the username/password check succeeds.
 --
 -- Prerequisite: enable Anonymous Sign-Ins in Supabase Authentication settings.
 -- Run this migration BEFORE the R8 security/RLS migration.
@@ -53,6 +54,26 @@ alter table public.coach_sessions enable row level security;
 revoke all on table public.coach_accounts from anon, authenticated;
 revoke all on table public.coach_team_access from anon, authenticated;
 revoke all on table public.coach_sessions from anon, authenticated;
+
+-- Central RLS guard: a Supabase anonymous Auth user has role=authenticated,
+-- therefore role checks alone are NOT sufficient. Only a technical auth.uid()
+-- that has successfully passed coach_login() is considered an application coach.
+create or replace function public.is_current_coach()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth.uid() is not null
+    and exists (
+      select 1
+      from public.coach_sessions cs
+      join public.coach_accounts ca on ca.id = cs.coach_id
+      where cs.auth_user_id = auth.uid()
+        and ca.disabled = false
+    );
+$$;
 
 create or replace function public.current_coach()
 returns jsonb
@@ -175,8 +196,7 @@ begin
         and cta.team_id = tm.team_id
     );
 
-  -- Materialize stable coach access into team_members so the normal RLS policies
-  -- can continue to use auth.uid() without exposing credential data.
+  -- Materialize stable coach access into team_members so normal team RLS can use auth.uid().
   insert into public.team_members (team_id, user_id, role)
   select cta.team_id, auth.uid(), cta.role
   from public.coach_team_access cta
@@ -241,9 +261,11 @@ create trigger trg_sync_coach_team_access
 after insert or update of role on public.team_members
 for each row execute function public.sync_coach_team_access_from_membership();
 
+revoke all on function public.is_current_coach() from public, anon;
 revoke all on function public.current_coach() from public, anon;
 revoke all on function public.coach_login(text, text) from public, anon;
 revoke all on function public.coach_logout() from public, anon;
+grant execute on function public.is_current_coach() to authenticated;
 grant execute on function public.current_coach() to authenticated;
 grant execute on function public.coach_login(text, text) to authenticated;
 grant execute on function public.coach_logout() to authenticated;
