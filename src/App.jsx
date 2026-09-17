@@ -1586,15 +1586,14 @@ const [lineups, setLineups] = useState({});
     if (typeof stored === 'string') return stored;
     if (!Array.isArray(stored)) return '';
 
+    const lineBreak = String.fromCharCode(10);
     return stored.map(note => {
       const timestamp = note?.timestamp ? new Date(note.timestamp).toLocaleString() : '';
       const coach = note?.coach || 'Coach';
       const header = [timestamp, coach].filter(Boolean).join(' • ');
-      return `${header ? `[${header}]
-` : ''}${note?.note || ''}`.trim();
-    }).filter(Boolean).join('
-
-');
+      const body = note?.note || '';
+      return (header ? `[${header}]${lineBreak}${body}` : body).trim();
+    }).filter(Boolean).join(`${lineBreak}${lineBreak}`);
   };
 
   const updatePlayerNotesText = (playerId, value) => {
