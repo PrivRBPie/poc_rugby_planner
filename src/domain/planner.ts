@@ -1,15 +1,24 @@
-export type AvailabilityStatus = 'available' | 'train-only' | 'injured' | 'absent' | 'not-selected' | 'unavailable';
+export type AvailabilityStatus = 'available' | 'train-only' | 'unavailable';
+
+type LegacyAvailabilityStatus = 'injured' | 'absent' | 'not-selected';
+type StoredAvailabilityStatus = AvailabilityStatus | LegacyAvailabilityStatus | string | null | undefined;
+
+export function normalizeAvailabilityStatus(status: StoredAvailabilityStatus): AvailabilityStatus {
+  if (status === 'available') return 'available';
+  if (status === 'train-only') return 'train-only';
+  return status ? 'unavailable' : 'available';
+}
 
 export function availabilityKey(playdayId: number | string, matchId: number | string, half: number | string, playerId: number | string) {
   return `half:${playdayId}:${matchId}:${half}:${playerId}`;
 }
 
-export function getAvailabilityStatus(map: Record<string, AvailabilityStatus>, playerId: number | string, playdayId?: number | string, matchId?: number | string, half?: number | string): AvailabilityStatus {
+export function getAvailabilityStatus(map: Record<string, StoredAvailabilityStatus>, playerId: number | string, playdayId?: number | string, matchId?: number | string, half?: number | string): AvailabilityStatus {
   if (playdayId !== undefined && matchId !== undefined && half !== undefined) {
     const halfStatus = map[availabilityKey(playdayId, matchId, half, playerId)];
-    if (halfStatus) return halfStatus;
+    if (halfStatus) return normalizeAvailabilityStatus(halfStatus);
   }
-  return map[String(playerId)] || 'available';
+  return normalizeAvailabilityStatus(map[String(playerId)]);
 }
 
 export function isEligibleForHalf(status: AvailabilityStatus, mode: 'game' | 'training' = 'game') {

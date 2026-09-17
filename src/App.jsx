@@ -4,7 +4,7 @@ import sharksLogo from './assets/sharks.svg';
 import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
 import * as XLSX from 'xlsx';
-import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBenchSize, cleanupLineupsForPlayday, cleanupLineupsForMatch, getHistoryRange, validateAssignment, validateLineupForPublish, normalizeSuitability, preferenceScore } from './domain/planner';
+import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBenchSize, cleanupLineupsForPlayday, cleanupLineupsForMatch, getHistoryRange, validateAssignment, validateLineupForPublish, normalizeAvailabilityStatus, normalizeSuitability, preferenceScore } from './domain/planner';
 import { loadOfflineSnapshot, saveOfflineSnapshot } from './offlineStore';
 
 // App version - increment this when deploying breaking changes
@@ -52,10 +52,7 @@ const initialPlayers = [
 const availabilityOptions = [
   { value: 'available', label: 'Available', icon: '✓', color: '#059669', bg: '#d1fae5' },
   { value: 'train-only', label: 'Train Only', icon: '◐', color: '#ca8a04', bg: '#fef9c3' },
-  { value: 'injured', label: 'Injured', icon: '✚', color: '#b91c1c', bg: '#fee2e2' },
-  { value: 'absent', label: 'Absent', icon: '○', color: '#6b7280', bg: '#f3f4f6' },
-  { value: 'not-selected', label: 'Not selected', icon: '–', color: '#7c3aed', bg: '#ede9fe' },
-  { value: 'unavailable', label: 'Unavailable', icon: '✕', color: '#dc2626', bg: '#fee2e2' },
+  { value: 'unavailable', label: 'Not available', icon: '✕', color: '#dc2626', bg: '#fee2e2' },
 ];
 
 
@@ -1582,6 +1579,25 @@ const [lineups, setLineups] = useState({});
       else next[key] = 10;
       return next;
     });
+  };
+
+  const getPlayerNotesText = (playerId) => {
+    const stored = playerNotes[playerId] ?? playerNotes[String(playerId)] ?? '';
+    if (typeof stored === 'string') return stored;
+    if (!Array.isArray(stored)) return '';
+
+    const lineBreak = String.fromCharCode(10);
+    return stored.map(note => {
+      const timestamp = note?.timestamp ? new Date(note.timestamp).toLocaleString() : '';
+      const coach = note?.coach || 'Coach';
+      const header = [timestamp, coach].filter(Boolean).join(' • ');
+      const body = note?.note || '';
+      return (header ? `[${header}]${lineBreak}${body}` : body).trim();
+    }).filter(Boolean).join(`${lineBreak}${lineBreak}`);
+  };
+
+  const updatePlayerNotesText = (playerId, value) => {
+    setPlayerNotes(prev => ({ ...prev, [playerId]: value }));
   };
 
   const removePlayer = async (playerId) => {
@@ -3649,7 +3665,7 @@ const [lineups, setLineups] = useState({});
       </div>
       <div className="space-y-2">
         {[...activePlayers].sort((a, b) => a.name.localeCompare(b.name)).map(player => {
-          const playerAvail = availability[player.id] || 'available';
+          const playerAvail = normalizeAvailabilityStatus(availability[player.id]);
           const isExpanded = expandedPlayer === player.id;
           const favPositions = favoritePositions[player.id] || [];
           const benchCount = benchHistory[player.id] || 0;
@@ -3750,7 +3766,7 @@ const [lineups, setLineups] = useState({});
                     })}
                   </div>
                   <div className="text-xs font-medium text-gray-500 mb-1">Position Training & Rating</div>
-                  <p className="text-[10px] text-gray-400 mb-2">1★ = avoid if possible · 3★ = suitable · 5★ = excellent. Use “Do not play” only for a hard block.</p>
+                  <p className="text-[10px] text-gray-400 mb-2">1★ = avoid if possible · 3★ = suitable · 5★ = excellent. Tick the red × only when a player must not play that position.</p>
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {positions.map(pos => {
                       const key = `${player.id}-${pos.id}`;
@@ -3760,21 +3776,22 @@ const [lineups, setLineups] = useState({});
                       const positionSuitability = getSuitability(player.id, pos.id);
                       const timesPlayed = playerPositionCounts[player.id]?.[pos.id] || 0;
                       return (
-                        <div key={pos.id} className={`rounded-xl p-2 text-center border ${trained ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-100'}`}>
-                          <div className="flex items-center justify-center gap-1 mb-1">
+                        <div key={pos.id} className={`relative rounded-xl p-2 text-center border ${trained ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-100'}`}>
+                          <button
+                            type="button"
+                            onClick={() => toggleDoNotPlayPosition(player.id, pos.id)}
+                            aria-pressed={positionSuitability === 10}
+                            className={`absolute top-1 right-1 w-5 h-5 rounded-full border flex items-center justify-center text-[11px] font-bold transition-all ${positionSuitability === 10 ? 'bg-red-600 border-red-600 text-white shadow-sm' : 'bg-white border-red-200 text-red-400 hover:bg-red-50 hover:border-red-400'}`}
+                            title={positionSuitability === 10 ? 'Do not play here — click to allow again' : 'Tick to block this position'}
+                          >
+                            ✕
+                          </button>
+                          <div className="flex items-center justify-center gap-1 mb-1 pr-4">
                             <span className="text-xs font-bold" style={{ color: DIOK.blue }}>#{pos.code}</span>
                             {preferenceRank && <span className="text-[9px] font-bold text-yellow-600">P{preferenceRank}</span>}
                           </div>
                           <div className="text-[10px] text-gray-500 mb-1">{pos.name}</div>
                           {timesPlayed > 0 && <div className="text-[10px] text-emerald-600 mb-1">{timesPlayed}× played</div>}
-                          <button
-                            type="button"
-                            onClick={() => toggleDoNotPlayPosition(player.id, pos.id)}
-                            className={`w-full mb-1 text-[9px] border rounded px-1.5 py-1 font-semibold transition-colors ${positionSuitability === 10 ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
-                            title={positionSuitability === 10 ? 'Hard block: this player must not play this position' : 'Set a hard block for this position'}
-                          >
-                            {positionSuitability === 10 ? '⛔ Do not play' : 'Position allowed'}
-                          </button>
                           <button onClick={() => handleTrainingToggle(player.id, pos.id)} className={`text-[10px] px-2 py-1 rounded-full transition-all w-full mb-1.5 font-medium ${trained ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'}`}>{trained ? '✓ Trained' : 'Not trained'}</button>
                           {trained && <div className="flex justify-center"><StarRating value={rating} onChange={(v) => handleRatingChange(player.id, pos.id, v)} /></div>}
                         </div>
@@ -3784,45 +3801,18 @@ const [lineups, setLineups] = useState({});
 
                   {/* Player Notes */}
                   <div className="mt-4 pt-3 border-t border-gray-200">
-                    <div className="text-xs font-medium text-gray-500 mb-2">Notes</div>
-                    <div className="space-y-2 mb-2">
-                      {(playerNotes[player.id] || []).map((note, idx) => (
-                        <div key={idx} className="bg-yellow-50 border border-yellow-200 rounded-lg p-2">
-                          <div className="text-[10px] text-gray-500 mb-1">
-                            {new Date(note.timestamp).toLocaleString()} • {note.coach}
-                          </div>
-                          <div className="text-xs text-gray-800">{note.note}</div>
-                          <button
-                            onClick={() => {
-                              setPlayerNotes(prev => ({
-                                ...prev,
-                                [player.id]: (prev[player.id] || []).filter((_, i) => i !== idx)
-                              }));
-                            }}
-                            className="text-[10px] text-red-600 hover:text-red-700 mt-1"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      ))}
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="text-xs font-medium text-gray-500">Shared Coach Notes</div>
+                      <div className="text-[10px] text-gray-400">Visible and editable by all coaches</div>
                     </div>
-                    <button
-                      onClick={() => {
-                        const timestamp = new Date().toISOString();
-                        const coach = currentUsername || settings.coachName;
-                        const noteText = prompt(`Add note for ${player.name}\n\n${new Date(timestamp).toLocaleString()} • ${coach}\n\nEnter note:`);
-                        if (noteText && noteText.trim()) {
-                          setPlayerNotes(prev => ({
-                            ...prev,
-                            [player.id]: [...(prev[player.id] || []), { timestamp, coach, note: noteText.trim() }]
-                          }));
-                        }
-                      }}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-lg text-blue-700 text-xs font-medium transition-colors"
-                    >
-                      <Icons.Plus />
-                      <span>Add Note</span>
-                    </button>
+                    <textarea
+                      value={getPlayerNotesText(player.id)}
+                      onChange={(e) => updatePlayerNotesText(player.id, e.target.value)}
+                      rows={6}
+                      placeholder="Add observations, development points or other remarks here…"
+                      className="w-full resize-y px-3 py-2 text-xs text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <div className="text-[10px] text-gray-400 mt-1">Any coach with access can add, change or remove text. Use Save to sync changes.</div>
                   </div>
 
                   {/* Move / Remove Player */}
