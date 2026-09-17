@@ -21,6 +21,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Refresh lockfile for declared dependency changes
+        run: npm install --package-lock-only
       - run: npm ci
       - name: Apply non-breaking audit fixes
         run: npm audit fix || true
