@@ -4,11 +4,11 @@ import sharksLogo from './assets/sharks.svg';
 import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
 import * as XLSX from 'xlsx';
-import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBenchSize, cleanupLineupsForPlayday, cleanupLineupsForMatch, getHistoryRange, validateAssignment } from './domain/planner';
+import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBenchSize, cleanupLineupsForPlayday, cleanupLineupsForMatch, getHistoryRange, validateAssignment, validateLineupForPublish, normalizeSuitability, preferenceScore } from './domain/planner';
 import { loadOfflineSnapshot, saveOfflineSnapshot } from './offlineStore';
 
 // App version - increment this when deploying breaking changes
-const APP_VERSION = '2.0.0-r8';
+const APP_VERSION = '2.1.0-r8';
 
 // Mini rugby positions (no 6,7,8)
 const positions = [
@@ -345,6 +345,11 @@ const [lineups, setLineups] = useState({});
   });
 
   // Favorite positions per player (up to 4 positions)
+  const [suitability, setSuitability] = useState({}); // player-position -> 0/1/2/3/10
+  const [positionPreferences, setPositionPreferences] = useState({}); // player -> { preference1, preference2 }
+  const [publishedHalves, setPublishedHalves] = useState({}); // lineup key -> publication metadata
+  const [keyPositionMultiplier, setKeyPositionMultiplier] = useState(1.15);
+
   const [favoritePositions, setFavoritePositions] = useState({
     1: [15, 1, 2, 3],        // Eick: Fullback, Loosehead, Hooker, Tighthead
     2: [9, 10],              // Janes: Scrumhalf, Flyhalf
@@ -453,10 +458,14 @@ const [lineups, setLineups] = useState({});
   useEffect(() => {
     if (!hasLoaded) return;
     const timer = setTimeout(() => {
-      saveOfflineSnapshot(currentTeamId || 'legacy', { players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes }).catch(console.error);
+      saveOfflineSnapshot(currentTeamId || 'legacy', { players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes }).catch(console.error);
     }, 250);
     return () => clearTimeout(timer);
-  }, [hasLoaded, currentTeamId, players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes]);
+  }, [hasLoaded, currentTeamId, players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes]);
+
+  const derivePreferences = (favorites = {}) => Object.fromEntries(
+    Object.entries(favorites).map(([playerId, list]) => [playerId, { preference1: list?.[0] || null, preference2: list?.[1] || null }])
+  );
 
   const restoreOfflineData = async (teamId = currentTeamId || localStorage.getItem('rugbyPlannerLastTeamId') || 'legacy') => {
     const cached = await loadOfflineSnapshot(teamId);
@@ -468,6 +477,10 @@ const [lineups, setLineups] = useState({});
     setRatings(data.ratings || {});
     setTraining(data.training || {});
     setFavoritePositions(data.favoritePositions || {});
+    setSuitability(data.suitability || {});
+    setPositionPreferences(data.positionPreferences || derivePreferences(data.favoritePositions || {}));
+    setPublishedHalves(data.publishedHalves || {});
+    setKeyPositionMultiplier(data.keyPositionMultiplier || 1.15);
     setAllocationRules(data.allocationRules || allocationRules);
     setAvailability(data.availability || {});
     setLearningPlayerConfig(data.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
@@ -535,6 +548,10 @@ const [lineups, setLineups] = useState({});
             setRatings(rugbyData.ratings || {});
             setTraining(rugbyData.training || {});
             setFavoritePositions(rugbyData.favoritePositions || {});
+            setSuitability(rugbyData.suitability || {});
+            setPositionPreferences(rugbyData.positionPreferences || derivePreferences(rugbyData.favoritePositions || {}));
+            setPublishedHalves(rugbyData.publishedHalves || {});
+            setKeyPositionMultiplier(rugbyData.keyPositionMultiplier || 1.15);
             setAllocationRules(rugbyData.allocationRules || allocationRules);
             setAvailability(rugbyData.availability || {});
             setLearningPlayerConfig(rugbyData.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
@@ -554,6 +571,10 @@ const [lineups, setLineups] = useState({});
               ratings: JSON.stringify(rugbyData.ratings || {}),
               training: JSON.stringify(rugbyData.training || {}),
               favoritePositions: JSON.stringify(rugbyData.favoritePositions || {}),
+              suitability: JSON.stringify(rugbyData.suitability || {}),
+              positionPreferences: JSON.stringify(rugbyData.positionPreferences || derivePreferences(rugbyData.favoritePositions || {})),
+              publishedHalves: JSON.stringify(rugbyData.publishedHalves || {}),
+              keyPositionMultiplier: JSON.stringify(rugbyData.keyPositionMultiplier || 1.15),
               allocationRules: JSON.stringify(rugbyData.allocationRules || allocationRules),
               availability: JSON.stringify(rugbyData.availability || {}),
               learningPlayerConfig: JSON.stringify(learningPlayerConfig),
@@ -765,7 +786,7 @@ const [lineups, setLineups] = useState({});
       .subscribe();
 
     // Also poll every 10 seconds to ensure consistency
-    const pollInterval = setInterval(fetchActiveUsers, 10000);
+    const pollInterval = setInterval(fetchActiveUsers, 60000);
 
     return () => {
       supabase.removeChannel(channel);
@@ -791,13 +812,8 @@ const [lineups, setLineups] = useState({});
       }
     };
 
-    fetchLoginHistory();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchLoginHistory, 30000);
-
-    return () => clearInterval(interval);
-  }, []);
+    if (activeTab === 'admin') fetchLoginHistory();
+  }, [activeTab]);
 
   // Helper function to log user actions
   const logAction = async (actionType, details = {}) => {
@@ -857,12 +873,8 @@ const [lineups, setLineups] = useState({});
       )
       .subscribe();
 
-    // Refresh every 30 seconds as fallback
-    const interval = setInterval(fetchActionLog, 30000);
-
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(interval);
     };
   }, []);
 
@@ -922,10 +934,20 @@ const [lineups, setLineups] = useState({});
       checkForRemoteChanges();
     }
 
-    // Then check every 10 seconds
-    const interval = setInterval(checkForRemoteChanges, 10000);
+    const channel = supabase
+      .channel(`rugby_data_${rugbyDataId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rugby_data', filter: `id=eq.${rugbyDataId}` }, payload => {
+        if (payload.new?.updated_at && payload.new.updated_at !== remoteUpdatedAt) setHasRemoteChanges(true);
+      })
+      .subscribe();
 
-    return () => clearInterval(interval);
+    // Slow fallback in case realtime disconnects; no state replacement occurs here.
+    const interval = setInterval(checkForRemoteChanges, 60000);
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [rugbyDataId, remoteUpdatedAt, currentTeamId]);
 
   // Manual refresh from Supabase
@@ -940,6 +962,10 @@ const [lineups, setLineups] = useState({});
         ratings: JSON.stringify(ratings),
         training: JSON.stringify(training),
         favoritePositions: JSON.stringify(favoritePositions),
+        suitability: JSON.stringify(suitability),
+        positionPreferences: JSON.stringify(positionPreferences),
+        publishedHalves: JSON.stringify(publishedHalves),
+        keyPositionMultiplier: JSON.stringify(keyPositionMultiplier),
         allocationRules: JSON.stringify(allocationRules),
         availability: JSON.stringify(availability),
         learningPlayerConfig: JSON.stringify(learningPlayerConfig),
@@ -955,6 +981,10 @@ const [lineups, setLineups] = useState({});
         ratings: '⭐ Player ratings',
         training: '📚 Training records',
         favoritePositions: '❤️ Favorite positions',
+        suitability: '🎯 Position suitability',
+        positionPreferences: '🥇 Ranked preferences',
+        publishedHalves: '📣 Published lineups',
+        keyPositionMultiplier: '⚖️ Key-position weight',
         allocationRules: '⚙️ Allocation rules',
         availability: '✓ Player availability',
         learningPlayerConfig: '🎓 Learning player definition',
@@ -1003,6 +1033,10 @@ const [lineups, setLineups] = useState({});
         setRatings(newRatings);
         setTraining(newTraining);
         setFavoritePositions(newFavoritePositions);
+        setSuitability(rugbyData.suitability || {});
+        setPositionPreferences(rugbyData.positionPreferences || derivePreferences(newFavoritePositions));
+        setPublishedHalves(rugbyData.publishedHalves || {});
+        setKeyPositionMultiplier(rugbyData.keyPositionMultiplier || 1.15);
         setAllocationRules(newAllocationRules);
         setAvailability(newAvailability);
         setLearningPlayerConfig(rugbyData.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
@@ -1028,6 +1062,10 @@ const [lineups, setLineups] = useState({});
           ratings: JSON.stringify(newRatings),
           training: JSON.stringify(newTraining),
           favoritePositions: JSON.stringify(newFavoritePositions),
+          suitability: JSON.stringify(rugbyData.suitability || {}),
+          positionPreferences: JSON.stringify(rugbyData.positionPreferences || derivePreferences(newFavoritePositions)),
+          publishedHalves: JSON.stringify(rugbyData.publishedHalves || {}),
+          keyPositionMultiplier: JSON.stringify(rugbyData.keyPositionMultiplier || 1.15),
           allocationRules: JSON.stringify(newAllocationRules),
           availability: JSON.stringify(newAvailability),
           learningPlayerConfig: JSON.stringify(learningPlayerConfig),
@@ -1099,7 +1137,7 @@ const [lineups, setLineups] = useState({});
     try {
       setIsSyncing(true);
       await syncRelationalRoster();
-      const data = { players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes };
+      const data = { players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes };
 
       console.log('Saving to Supabase...', { rugbyDataId, dataKeys: Object.keys(data) });
 
@@ -1140,6 +1178,10 @@ const [lineups, setLineups] = useState({});
           ratings: JSON.stringify(ratings),
           training: JSON.stringify(training),
           favoritePositions: JSON.stringify(favoritePositions),
+        suitability: JSON.stringify(suitability),
+        positionPreferences: JSON.stringify(positionPreferences),
+        publishedHalves: JSON.stringify(publishedHalves),
+        keyPositionMultiplier: JSON.stringify(keyPositionMultiplier),
           allocationRules: JSON.stringify(allocationRules),
           availability: JSON.stringify(availability),
           learningPlayerConfig: JSON.stringify(learningPlayerConfig),
@@ -1176,6 +1218,10 @@ const [lineups, setLineups] = useState({});
       ratings: JSON.stringify(ratings),
       training: JSON.stringify(training),
       favoritePositions: JSON.stringify(favoritePositions),
+        suitability: JSON.stringify(suitability),
+        positionPreferences: JSON.stringify(positionPreferences),
+        publishedHalves: JSON.stringify(publishedHalves),
+        keyPositionMultiplier: JSON.stringify(keyPositionMultiplier),
       allocationRules: JSON.stringify(allocationRules),
       availability: JSON.stringify(availability),
       learningPlayerConfig: JSON.stringify(learningPlayerConfig),
@@ -1198,7 +1244,7 @@ const [lineups, setLineups] = useState({});
       changedKeys
     });
     setHasUnsavedChanges(hasChanges);
-  }, [players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes, hasLoaded, initialState]);
+  }, [players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes, hasLoaded, initialState]);
 
   // Helper function to get current team
   const getCurrentTeam = () => {
@@ -1232,6 +1278,10 @@ const [lineups, setLineups] = useState({});
           ratings: {},
           training: {},
           favoritePositions: {},
+          suitability: {},
+          positionPreferences: {},
+          publishedHalves: {},
+          keyPositionMultiplier: 1.15,
           allocationRules: JSON.parse(JSON.stringify(allocationRules)),
           availability: {},
           learningPlayerConfig: { ...learningPlayerConfig },
@@ -1253,6 +1303,10 @@ const [lineups, setLineups] = useState({});
           setRatings({});
           setTraining({});
           setFavoritePositions({});
+          setSuitability({});
+          setPositionPreferences({});
+          setPublishedHalves({});
+          setKeyPositionMultiplier(1.15);
           setAllocationRules(initialData.allocationRules);
           setAvailability({});
           setRemoteUpdatedAt(newData.updated_at);
@@ -1265,6 +1319,10 @@ const [lineups, setLineups] = useState({});
             ratings: JSON.stringify({}),
             training: JSON.stringify({}),
             favoritePositions: JSON.stringify({}),
+            suitability: JSON.stringify({}),
+            positionPreferences: JSON.stringify({}),
+            publishedHalves: JSON.stringify({}),
+            keyPositionMultiplier: JSON.stringify(1.15),
             allocationRules: JSON.stringify(initialData.allocationRules),
             availability: JSON.stringify({}),
             learningPlayerConfig: JSON.stringify(learningPlayerConfig),
@@ -1338,6 +1396,10 @@ const [lineups, setLineups] = useState({});
         setRatings(rugbyData.data.ratings || {});
         setTraining(rugbyData.data.training || {});
         setFavoritePositions(rugbyData.data.favoritePositions || {});
+        setSuitability(rugbyData.data.suitability || {});
+        setPositionPreferences(rugbyData.data.positionPreferences || derivePreferences(rugbyData.data.favoritePositions || {}));
+        setPublishedHalves(rugbyData.data.publishedHalves || {});
+        setKeyPositionMultiplier(rugbyData.data.keyPositionMultiplier || 1.15);
         setAllocationRules(rugbyData.data.allocationRules || allocationRules);
         setAvailability(rugbyData.data.availability || {});
         setLearningPlayerConfig(rugbyData.data.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
@@ -1353,6 +1415,10 @@ const [lineups, setLineups] = useState({});
           ratings: JSON.stringify(rugbyData.data.ratings || {}),
           training: JSON.stringify(rugbyData.data.training || {}),
           favoritePositions: JSON.stringify(rugbyData.data.favoritePositions || {}),
+          suitability: JSON.stringify(rugbyData.data.suitability || {}),
+          positionPreferences: JSON.stringify(rugbyData.data.positionPreferences || derivePreferences(rugbyData.data.favoritePositions || {})),
+          publishedHalves: JSON.stringify(rugbyData.data.publishedHalves || {}),
+          keyPositionMultiplier: JSON.stringify(rugbyData.data.keyPositionMultiplier || 1.15),
           allocationRules: JSON.stringify(rugbyData.data.allocationRules || allocationRules),
           availability: JSON.stringify(rugbyData.data.availability || {}),
           learningPlayerConfig: JSON.stringify(learningPlayerConfig),
@@ -1435,17 +1501,39 @@ const [lineups, setLineups] = useState({});
     ]);
   }, [selectedPlayday]);
 
-  const isFavoritePosition = (playerId, positionId) => (favoritePositions[playerId] || []).includes(positionId);
+  const getPreferenceRank = (playerId, positionId) => {
+    const prefs = positionPreferences[playerId] || positionPreferences[String(playerId)];
+    if (prefs?.preference1 === positionId) return 1;
+    if (prefs?.preference2 === positionId) return 2;
+    const legacy = favoritePositions[playerId] || [];
+    const index = legacy.indexOf(positionId);
+    return index >= 0 && index < 2 ? index + 1 : null;
+  };
 
-  const toggleFavoritePosition = (playerId, positionId) => {
-    setFavoritePositions(prev => {
-      const current = prev[playerId] || [];
-      if (current.includes(positionId)) {
-        return { ...prev, [playerId]: current.filter(id => id !== positionId) };
-      } else {
-        return { ...prev, [playerId]: [...current, positionId] };
+  const isFavoritePosition = (playerId, positionId) => getPreferenceRank(playerId, positionId) !== null;
+
+  const setPreference = (playerId, rank, positionId) => {
+    const parsed = positionId ? Number(positionId) : null;
+    setPositionPreferences(prev => {
+      const current = prev[playerId] || { preference1: null, preference2: null };
+      const next = { ...current, [rank === 1 ? 'preference1' : 'preference2']: parsed };
+      if (next.preference1 && next.preference1 === next.preference2) {
+        next[rank === 1 ? 'preference2' : 'preference1'] = null;
       }
+      setFavoritePositions(fav => ({ ...fav, [playerId]: [next.preference1, next.preference2].filter(Boolean) }));
+      return { ...prev, [playerId]: next };
     });
+  };
+
+  const getSuitability = (playerId, positionId) => {
+    const key = `${playerId}-${positionId}`;
+    if (suitability[key] !== undefined) return normalizeSuitability(suitability[key]);
+    return training[key] ? 2 : 0;
+  };
+
+  const setPositionSuitability = (playerId, positionId, value) => {
+    const key = `${playerId}-${positionId}`;
+    setSuitability(prev => ({ ...prev, [key]: normalizeSuitability(Number(value)) }));
   };
 
   const removePlayer = async (playerId) => {
@@ -1506,10 +1594,12 @@ const [lineups, setLineups] = useState({});
         return updated;
       });
 
-      // Remove favorite positions
-      setFavoritePositions(prev => {
+      // Remove preferences and position profiles
+      setFavoritePositions(prev => { const updated = { ...prev }; delete updated[playerId]; return updated; });
+      setPositionPreferences(prev => { const updated = { ...prev }; delete updated[playerId]; return updated; });
+      setSuitability(prev => {
         const updated = { ...prev };
-        delete updated[playerId];
+        Object.keys(updated).forEach(key => { if (key.startsWith(`${playerId}-`)) delete updated[key]; });
         return updated;
       });
 
@@ -1848,9 +1938,40 @@ const [lineups, setLineups] = useState({});
     };
   };
 
+  const markHalfDraft = (key) => setPublishedHalves(prev => { const next = { ...prev }; delete next[key]; return next; });
+
   const updateLineup = (playdayId, matchId, half, fn) => {
     const key = `${playdayId}-${matchId}-${half}`;
     setLineups(prev => ({ ...prev, [key]: fn(prev[key] || { assignments: {}, bench: [] }) }));
+    markHalfDraft(key);
+  };
+
+  const getPublishErrors = (playdayId, matchId, half) => {
+    const key = `${playdayId}-${matchId}-${half}`;
+    const lineup = lineups[key] || { assignments: {}, bench: [] };
+    const mode = selectedPlayday?.type === 'training' ? 'training' : 'game';
+    const eligible = getEligiblePlayersForHalf(playdayId, matchId, half, mode);
+    return validateLineupForPublish({
+      positions: positions.map(p => p.id),
+      eligiblePlayerIds: eligible.map(p => p.id),
+      assignments: lineup.assignments || {},
+      bench: lineup.bench || [],
+      mode,
+      isTrained: (playerId, positionId) => !!training[`${playerId}-${positionId}`],
+      getSuitability: (playerId, positionId) => getSuitability(playerId, positionId),
+    });
+  };
+
+  const publishHalf = (playdayId, matchId, half) => {
+    const key = `${playdayId}-${matchId}-${half}`;
+    const errors = getPublishErrors(playdayId, matchId, half);
+    if (errors.length) {
+      alert(`Cannot publish this half yet:\n\n${errors.map(e => `• ${e}`).join("\n")}`);
+      return;
+    }
+    const publication = { publishedAt: new Date().toISOString(), publishedBy: currentUsername || 'Coach' };
+    setPublishedHalves(prev => ({ ...prev, [key]: publication }));
+    logAction('publish_lineup', { playday_id: playdayId, match_id: matchId, half });
   };
 
   const copyPreviousLineup = (playdayId, matchId, half) => {
@@ -1862,12 +1983,14 @@ const [lineups, setLineups] = useState({});
     if (prevLineup) {
       const key = `${playdayId}-${matchId}-${half}`;
       setLineups(prev => ({ ...prev, [key]: { assignments: { ...prevLineup.assignments }, bench: [...(prevLineup.bench || [])] } }));
+      markHalfDraft(key);
     }
   };
 
   const clearLineup = (playdayId, matchId, half) => {
     const key = `${playdayId}-${matchId}-${half}`;
     setLineups(prev => ({ ...prev, [key]: { assignments: {}, bench: [] } }));
+    markHalfDraft(key);
 
     // Log the clear action
     const playday = playdays.find(pd => pd.id === playdayId);
@@ -1895,6 +2018,11 @@ const [lineups, setLineups] = useState({});
     });
 
     setLineups(prev => ({ ...prev, ...clearedLineups }));
+    setPublishedHalves(prev => {
+      const next = { ...prev };
+      Object.keys(clearedLineups).forEach(key => delete next[key]);
+      return next;
+    });
 
     // Log the action
     const playday = playdays.find(pd => pd.id === playdayId);
@@ -1914,6 +2042,10 @@ const [lineups, setLineups] = useState({});
     const effectiveBenchHistory = customBenchHistory || benchHistory;
 
     const trainingKey = `${player.id}-${position.id}`;
+    const playerSuitability = getSuitability(player.id, position.id);
+    if (playerSuitability === 10) {
+      return { score: -Infinity, explanations: ['❌ Suitability 10: do not play this position (HARD)'] };
+    }
 
     // Apply HARD constraints dynamically based on rule configuration
     for (const rule of rules.filter(r => r.enabled && r.type === 'HARD')) {
@@ -1983,10 +2115,13 @@ const [lineups, setLineups] = useState({});
 
         case 4: // Player Skill (0-100 scale based on rating)
           const rating = ratings[trainingKey] || 0;
-          const strengthNormalized = (rating / 5) * 100; // 0-5 stars -> 0-100
-          const strengthScore = (strengthNormalized / 100) * rule.weight * 10;
+          const ratingNormalized = (rating / 5) * 100;
+          const suitabilityNormalized = ({ 0: 10, 1: 100, 2: 65, 3: 30 }[playerSuitability] ?? 0);
+          const strengthNormalized = (ratingNormalized * 0.6) + (suitabilityNormalized * 0.4);
+          const keyMultiplier = [1, 2, 3, 9, 10, 12].includes(position.id) ? keyPositionMultiplier : 1;
+          const strengthScore = (strengthNormalized / 100) * rule.weight * 10 * keyMultiplier;
           score += strengthScore;
-          explanations.push(`Skill (${rating}★): ${strengthScore.toFixed(2)} pts`);
+          explanations.push(`Skill (${rating}★, suitability ${playerSuitability})${keyMultiplier > 1 ? ` ×${keyMultiplier.toFixed(2)} key position` : ""}: ${strengthScore.toFixed(2)} pts`);
           break;
 
         case 5: // Position Variety (0-100 scale: never played = 100, played 5+ times = near 0)
@@ -1998,12 +2133,12 @@ const [lineups, setLineups] = useState({});
           break;
 
         case 6: // Player Fun (0-100 scale: favorite=100, not=0)
-          const isFavorite = favoritePositions[player.id]?.includes(position.id);
-          const preferenceNormalized = isFavorite ? 100 : 0;
-          const preferenceScore = (preferenceNormalized / 100) * rule.weight * 10;
-          score += preferenceScore;
-          if (isFavorite) {
-            explanations.push(`Fun (favorite ★): ${preferenceScore.toFixed(2)} pts`);
+          const preferenceRank = getPreferenceRank(player.id, position.id);
+          const preferenceNormalized = preferenceScore(preferenceRank);
+          const preferencePoints = (preferenceNormalized / 100) * rule.weight * 10;
+          score += preferencePoints;
+          if (preferenceRank) {
+            explanations.push(`Fun (Preference ${preferenceRank}): ${preferencePoints.toFixed(2)} pts`);
           }
           break;
       }
@@ -2152,6 +2287,7 @@ const [lineups, setLineups] = useState({});
 
     const key = `${playdayId}-${matchId}-${half}`;
     setLineups(prev => ({ ...prev, [key]: { assignments: newAssignments, bench: newBench } }));
+    markHalfDraft(key);
     setAllocationExplanations(prev => ({ ...prev, [key]: explanationsMap }));
 
     // Log the auto-propose action
@@ -2225,6 +2361,11 @@ const [lineups, setLineups] = useState({});
     });
 
     setLineups(prev => ({ ...prev, ...newLineupsForDay }));
+    setPublishedHalves(prev => {
+      const next = { ...prev };
+      Object.keys(newLineupsForDay).forEach(key => delete next[key]);
+      return next;
+    });
     setAllocationExplanations(prev => ({ ...prev, ...newExplanationsForDay }));
     const playday = playdays.find(pd => pd.id === playdayId);
     logAction('auto_propose_full_day', { playday: playday?.name, mode, halvesCount: halves.length, matchesCount: selectedPlayday.matches.length });
@@ -2263,6 +2404,7 @@ const [lineups, setLineups] = useState({});
         mode: selectedPlayday?.type === 'training' ? 'training' : 'game',
         trained: trainedForPosition,
         duplicate: false,
+        suitability: getSuitability(playerId, posId),
       });
       if (violations.length > 0) {
         const reason = window.prompt(`Coach override required:\n\n${violations.join("\n")}\n\nEnter an override reason to continue, or Cancel to stop.`);
@@ -2388,6 +2530,7 @@ const [lineups, setLineups] = useState({});
     if (playdays.length <= 1) return;
     setPlaydays(playdays.filter(p => p.id !== id));
     setLineups(prev => cleanupLineupsForPlayday(prev, id));
+    setPublishedHalves(prev => cleanupLineupsForPlayday(prev, id));
     if (selectedPlaydayId === id) setSelectedPlaydayId(playdays.find(p => p.id !== id)?.id || 1);
   };
 
@@ -2406,6 +2549,7 @@ const [lineups, setLineups] = useState({});
   const deleteMatch = (matchId) => {
     setPlaydays(playdays.map(p => p.id !== selectedPlaydayId ? p : { ...p, matches: p.matches.filter(m => m.id !== matchId) }));
     setLineups(prev => cleanupLineupsForMatch(prev, selectedPlaydayId, matchId));
+    setPublishedHalves(prev => cleanupLineupsForMatch(prev, selectedPlaydayId, matchId));
   };
 
   const updatePlaydayName = (playdayId, newName) => {
@@ -2516,7 +2660,8 @@ const [lineups, setLineups] = useState({});
         const trained = training[key];
         const rating = ratings[key] || 0;
         const isFav = (favoritePositions[player.id] || []).includes(pos.id);
-        return { player, trained, rating, isFav };
+        const suit = getSuitability(player.id, pos.id);
+        return { player, trained, rating, isFav, suitability: suit };
       }).filter(p => p.trained);
 
       return {
@@ -2527,6 +2672,7 @@ const [lineups, setLineups] = useState({});
           if (b.rating !== a.rating) return b.rating - a.rating;
           return a.player.name.localeCompare(b.player.name);
         }),
+        bestFitCount: playersForPosition.filter(p => p.suitability === 1).length,
         avgRating: playersForPosition.length > 0
           ? playersForPosition.reduce((sum, p) => sum + p.rating, 0) / playersForPosition.length
           : 0,
@@ -2559,7 +2705,7 @@ const [lineups, setLineups] = useState({});
     const secondYearCount = players.filter(p => p.miniYear === '2nd year').length;
 
     // Position coverage warnings
-    const weakPositions = positionAnalytics.filter(pa => pa.playerCount < 2);
+    const weakPositions = positionAnalytics.filter(pa => pa.bestFitCount <= 1);
     const strongPositions = positionAnalytics.filter(pa => pa.playerCount >= 4 && pa.avgRating >= 4);
 
     return (
@@ -2592,7 +2738,7 @@ const [lineups, setLineups] = useState({});
               <div className="flex-1">
                 <div className="text-xs font-semibold text-red-900">Position Coverage Alert</div>
                 <div className="text-xs text-red-700 mt-1">
-                  Limited depth at: {weakPositions.map(wp => `#${wp.position.code} ${wp.position.name}`).join(', ')}
+                  Suitability-1 coverage risk at: {weakPositions.map(wp => `#${wp.position.code} ${wp.position.name} (${wp.bestFitCount} best-fit)`).join(', ')}
                 </div>
               </div>
             </div>
@@ -3283,34 +3429,55 @@ const [lineups, setLineups] = useState({});
                     </div>
                   </div>
 
-                  <div className="text-xs font-medium text-gray-500 mt-3 mb-1">Favorite Positions</div>
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {positions.map(pos => {
-                      const isFav = isFavoritePosition(player.id, pos.id);
+                  <div className="text-xs font-medium text-gray-500 mt-3 mb-1">Ranked Position Preferences</div>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {[1, 2].map(rank => {
+                      const prefs = positionPreferences[player.id] || derivePreferences({ [player.id]: favoritePositions[player.id] || [] })[player.id] || {};
+                      const value = rank === 1 ? prefs.preference1 : prefs.preference2;
                       return (
-                        <button key={pos.id} onClick={() => toggleFavoritePosition(player.id, pos.id)}
-                          className={`px-2 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${isFav ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'}`}>
-                          {isFav && <span className="text-yellow-500">★</span>}#{pos.code}
-                        </button>
+                        <label key={rank} className="text-[10px] text-gray-500">
+                          Preference {rank}
+                          <select
+                            value={value || ''}
+                            onChange={(e) => setPreference(player.id, rank, e.target.value)}
+                            className="mt-1 w-full bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-800"
+                          >
+                            <option value="">None</option>
+                            {positions.map(pos => <option key={pos.id} value={pos.id}>#{pos.code} {pos.name}</option>)}
+                          </select>
+                        </label>
                       );
                     })}
                   </div>
-                  <div className="text-xs font-medium text-gray-500 mb-2">Position Training & Ratings</div>
+                  <div className="text-xs font-medium text-gray-500 mb-2">Position Training, Suitability & Ratings</div>
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {positions.map(pos => {
                       const key = `${player.id}-${pos.id}`;
                       const trained = training[key];
                       const rating = ratings[key] || 0;
-                      const isFav = isFavoritePosition(player.id, pos.id);
+                      const preferenceRank = getPreferenceRank(player.id, pos.id);
+                      const positionSuitability = getSuitability(player.id, pos.id);
                       const timesPlayed = playerPositionCounts[player.id]?.[pos.id] || 0;
                       return (
                         <div key={pos.id} className={`rounded-xl p-2 text-center border ${trained ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-100'}`}>
                           <div className="flex items-center justify-center gap-1 mb-1">
                             <span className="text-xs font-bold" style={{ color: DIOK.blue }}>#{pos.code}</span>
-                            {isFav && <Icons.Star filled />}
+                            {preferenceRank && <span className="text-[9px] font-bold text-yellow-600">P{preferenceRank}</span>}
                           </div>
                           <div className="text-[10px] text-gray-500 mb-1">{pos.name}</div>
                           {timesPlayed > 0 && <div className="text-[10px] text-emerald-600 mb-1">{timesPlayed}× played</div>}
+                          <select
+                            value={positionSuitability}
+                            onChange={(e) => setPositionSuitability(player.id, pos.id, e.target.value)}
+                            className={`w-full mb-1 text-[9px] border rounded px-1 py-1 ${positionSuitability === 10 ? "bg-red-100 border-red-300 text-red-800" : "bg-white border-gray-200 text-gray-700"}`}
+                            title="Suitability: 0 test, 1 best fit, 2 OK, 3 needs attention, 10 do not play"
+                          >
+                            <option value="0">S0 · test</option>
+                            <option value="1">S1 · best fit</option>
+                            <option value="2">S2 · OK</option>
+                            <option value="3">S3 · attention</option>
+                            <option value="10">S10 · do not play</option>
+                          </select>
                           <button onClick={() => handleTrainingToggle(player.id, pos.id)} className={`text-[10px] px-2 py-1 rounded-full transition-all w-full mb-1.5 font-medium ${trained ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'}`}>{trained ? '✓ Trained' : 'Not trained'}</button>
                           {trained && <div className="flex justify-center"><StarRating value={rating} onChange={(v) => handleRatingChange(player.id, pos.id, v)} /></div>}
                         </div>
@@ -3968,7 +4135,7 @@ const [lineups, setLineups] = useState({});
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <div><div className="font-semibold text-gray-900 text-sm">{selectedPlayday.type === 'game' ? `vs. ${opponent}` : opponent}</div><div className="text-xs text-gray-500">{selectedPlayday.type === 'game' ? `Game ${number}` : `Training ${number}`} · Half {half}</div></div>
+                        <div><div className="font-semibold text-gray-900 text-sm">{selectedPlayday.type === 'game' ? `vs. ${opponent}` : opponent}</div><div className="text-xs text-gray-500 flex items-center gap-1.5">{selectedPlayday.type === 'game' ? `Game ${number}` : `Training ${number}`} · Half {half}<span className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${publishedHalves[key] ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{publishedHalves[key] ? 'Published' : 'Draft'}</span></div></div>
                         <div className="flex flex-col items-end gap-0.5"><ScoreBadge scores={scores} /><span className="text-[9px] text-gray-400">{scores.filled}/12 + {scores.bench}B</span></div>
                       </div>
                     </div>
@@ -3980,6 +4147,11 @@ const [lineups, setLineups] = useState({});
                         {renderCollapsedView(matchId, half)}
                       </div>
                       <div className="flex items-center gap-1 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => publishHalf(selectedPlayday.id, matchId, half)}
+                          className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold ${publishedHalves[key] ? "bg-emerald-100 text-emerald-700" : "bg-blue-50 text-blue-700 hover:bg-blue-100"}`}
+                          title={publishedHalves[key] ? 'Published lineup' : 'Validate and publish this half'}
+                        >{publishedHalves[key] ? '✓ Published' : 'Publish'}</button>
                         <button
                           onClick={() => proposeLineup(selectedPlayday.id, matchId, half, 'game')}
                           className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
@@ -5160,6 +5332,18 @@ const [lineups, setLineups] = useState({});
               💡 <strong>Tip:</strong> Click on the Type badge to toggle between HARD/SOFT (except for locked rules). Making "Fair PlayTime" HARD ensures strict equality.
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">Key Position Weighting</h3>
+          <p className="text-xs text-gray-500">Small skill/suitability multiplier for positions 1, 2, 3, 9, 10 and 12</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2"><span className="text-xs font-semibold text-gray-700">Multiplier</span><span className="text-sm font-bold" style={{ color: DIOK.blue }}>{keyPositionMultiplier.toFixed(2)}×</span></div>
+          <input type="range" min="100" max="130" value={Math.round(keyPositionMultiplier * 100)} onChange={(e) => setKeyPositionMultiplier(Number(e.target.value) / 100)} className="w-full" />
+          <p className="text-[11px] text-gray-500 mt-1">Kept deliberately small (1.00–1.30×) so it cannot overwhelm fairness.</p>
         </div>
       </div>
 

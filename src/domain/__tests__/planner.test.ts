@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { availabilityKey, cleanupLineupsForMatch, cleanupLineupsForPlayday, getAvailabilityStatus, getDynamicBenchSize, getHistoryRange, isEligibleForHalf, validateAssignment } from '../planner';
+import { availabilityKey, cleanupLineupsForMatch, cleanupLineupsForPlayday, getAvailabilityStatus, getDynamicBenchSize, getHistoryRange, isEligibleForHalf, normalizeSuitability, preferenceScore, validateAssignment, validateLineupForPublish } from '../planner';
 
 describe('planner domain', () => {
   it('supports per-half availability with legacy fallback', () => {
@@ -25,5 +25,38 @@ describe('planner domain', () => {
   });
   it('returns hard-rule violations for game assignments', () => {
     expect(validateAssignment({ status: 'injured', mode: 'game', trained: false, duplicate: false })).toHaveLength(2);
+  });
+  it('supports the formal suitability values and ranked preferences', () => {
+    expect(normalizeSuitability(10)).toBe(10);
+    expect(normalizeSuitability(7)).toBe(0);
+    expect(preferenceScore(1)).toBe(100);
+    expect(preferenceScore(2)).toBe(60);
+    expect(preferenceScore(null)).toBe(0);
+  });
+
+  it('blocks publishing invalid halves', () => {
+    const errors = validateLineupForPublish({
+      positions: [1, 2],
+      eligiblePlayerIds: [10, 11, 12],
+      assignments: { 1: 10, 2: 11 },
+      bench: [12],
+      mode: 'game',
+      isTrained: (_player, position) => Number(position) !== 2,
+      getSuitability: (_player, position) => Number(position) === 1 ? 10 : 2,
+    });
+    expect(errors.some(error => error.includes('suitability 10'))).toBe(true);
+    expect(errors.some(error => error.includes('not trained'))).toBe(true);
+  });
+
+  it('accepts a complete valid published half', () => {
+    expect(validateLineupForPublish({
+      positions: [1, 2],
+      eligiblePlayerIds: [10, 11, 12],
+      assignments: { 1: 10, 2: 11 },
+      bench: [12],
+      mode: 'game',
+      isTrained: () => true,
+      getSuitability: () => 2,
+    })).toEqual([]);
   });
 });
