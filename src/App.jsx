@@ -6,6 +6,7 @@ import { supabase, supabaseConfig } from './supabaseClient';
 import * as XLSX from 'xlsx';
 import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBenchSize, cleanupLineupsForPlayday, cleanupLineupsForMatch, getHistoryRange, validateLineupForPublish, normalizeAvailabilityStatus, normalizeSuitability, preferenceScore } from './domain/planner';
 import { loadOfflineSnapshot, saveOfflineSnapshot } from './offlineStore';
+import CoachAccessPanel from './CoachAccessPanel';
 
 // App version - increment this when deploying breaking changes
 const APP_VERSION = '2.2.0-r8';
@@ -605,11 +606,19 @@ const [lineups, setLineups] = useState({});
 
         setTeams(teamsData || []);
 
-        // Get last selected team from localStorage or default to first team
+        // On a fresh login, start on the coach's Primary team. During an existing
+        // session, preserve the last team they deliberately switched to.
+        const startTeamId = localStorage.getItem('rugbyPlannerStartTeamId');
         const lastTeamId = localStorage.getItem('rugbyPlannerLastTeamId');
-        const defaultTeam = lastTeamId
-          ? teamsData.find(t => t.id === lastTeamId)
-          : teamsData[0];
+        const primaryTeamId = localStorage.getItem('rugbyPlannerPrimaryTeamId');
+        const defaultTeam = (startTeamId && teamsData.find(t => t.id === startTeamId))
+          || (lastTeamId && teamsData.find(t => t.id === lastTeamId))
+          || (primaryTeamId && teamsData.find(t => t.id === primaryTeamId))
+          || teamsData[0];
+
+        // The Primary-team redirect is one-shot after login. Once inside the app,
+        // normal team switching and the remembered last team continue to work.
+        if (startTeamId) localStorage.removeItem('rugbyPlannerStartTeamId');
 
         if (!defaultTeam) {
           console.log('No teams found');
@@ -5221,6 +5230,10 @@ const [lineups, setLineups] = useState({});
               </div>
             )}
           </div>
+        </div>
+
+        <div className="mt-8">
+          <CoachAccessPanel teams={teams} />
         </div>
 
         {/* Backup & Restore (Hidden at bottom) */}
