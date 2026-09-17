@@ -1,16 +1,26 @@
-# React + Vite
+# Mini Rugby Lineup Planner
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Mobile-first React/Vite planner for mini-rugby squad management, training eligibility, per-half attendance, fair bench rotation, position allocation and coach collaboration.
 
-Currently, two official plugins are available:
+## Local development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+1. Copy environment values for `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+2. Run `npm ci`.
+3. Run `npm run dev`.
+4. Before pushing, run `npm run check`.
 
-## React Compiler
+## R8 stabilization
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+R8 fixes active-field edit resets caused by nested component remounting, adds optimistic concurrency, per-half availability overrides, dynamic benches, cascading schedule cleanup, IndexedDB offline snapshots, complete settings persistence, shared assignment validation, tests/type checking and an authentication gate.
 
-## Expanding the ESLint configuration
+### Security migration
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The code now expects authenticated coaches. Before merging R8 to production, configure Supabase email authentication and review/apply `migrations/20260917_r8_security_rls.sql`. Bootstrap at least one admin in `team_members` before switching from the existing public policies. The migration is not automatically executed by GitHub Pages.
+
+## Data model transition
+
+The repository still keeps the legacy JSONB planner document for compatibility while using `players` / `team_players` for the shared player library. R8 keeps these paths compatible; a later migration should make the relational roster authoritative and remove the duplicated JSON roster.
+
+## Deployment
+
+Pushes to `main` run lint, TypeScript domain checks, unit tests and the Vite production build before GitHub Pages deployment.
