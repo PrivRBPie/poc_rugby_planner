@@ -1,0 +1,33 @@
+name: Apply shared notes and status cleanup
+
+on:
+  push:
+    branches: ["feature/shared-notes-simplified-status"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/shared-notes-simplified-status
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply source patch
+        run: python scripts/apply_shared_notes_status_cleanup.py
+      - name: Commit patched source
+        run: |
+          if git diff --quiet; then
+            echo "No source changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.jsx src/domain/planner.ts src/domain/__tests__/planner.test.ts
+          git commit -m "Simplify availability, shared notes and position blocks"
+          git push origin HEAD:feature/shared-notes-simplified-status
