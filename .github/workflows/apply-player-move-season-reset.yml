@@ -19,7 +19,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Apply source patch
-        run: python scripts/apply_player_move_season_reset.py
+        run: |
+          python scripts/apply_player_move_season_reset.py
+          python scripts/fix_player_move_season_reset.py
       - name: Commit patched app
         run: |
           if git diff --quiet; then
@@ -29,5 +31,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/App.jsx
-          git commit -m "Add player move and season reset features"
+          git commit -m "Finalize player move and season reset features"
           git push origin HEAD:feature/player-move-season-reset
