@@ -1,0 +1,46 @@
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: '17 6,18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query rugby_data
+        env:
+          SUPABASE_URL: https://mgxpsexuetejfhbqmjdx.supabase.co
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "SUPABASE_ANON_KEY secret is not configured."
+            exit 1
+          fi
+
+          http_code=$(curl --silent --show-error \
+            --output /tmp/supabase-response.json \
+            --write-out '%{http_code}' \
+            --connect-timeout 15 \
+            --max-time 30 \
+            --header "apikey: ${SUPABASE_ANON_KEY}" \
+            --header "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            "${SUPABASE_URL}/rest/v1/rugby_data?select=id&limit=1")
+
+          echo "Supabase returned HTTP ${http_code}."
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "Keep-alive health check failed. Response:"
+            cat /tmp/supabase-response.json
+            exit 1
+          fi
+
+          echo "Supabase keep-alive query succeeded."
