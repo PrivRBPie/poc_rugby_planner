@@ -2138,7 +2138,7 @@ const [lineups, setLineups] = useState({});
       playday.matches.forEach(m => {
         [1, 2].forEach(h => {
           const lineupKey = `${playdayId}-${m.id}-${h}`;
-          const matchLineup = lineups[lineupKey] || { assignments: {}, bench: [] };
+          const matchLineup = normalizeLineupBench(playdayId, m.id, h, lineups[lineupKey] || { assignments: {}, bench: [] });
           (matchLineup.bench || []).forEach(playerId => {
             if (playerId) playdayBenchCounts[playerId] = (playdayBenchCounts[playerId] || 0) + 1;
           });
@@ -4186,7 +4186,7 @@ const [lineups, setLineups] = useState({});
           selectedPlayday.matches.forEach(m => {
             [1, 2].forEach(h => {
               const lineupKey = `${selectedPlayday.id}-${m.id}-${h}`;
-              const matchLineup = lineups[lineupKey] || { assignments: {}, bench: [] };
+              const matchLineup = normalizeLineupBench(selectedPlayday.id, m.id, h, lineups[lineupKey] || { assignments: {}, bench: [] });
               if (matchLineup.bench?.includes(player.id)) playdayBenchCount++;
             });
           });
@@ -4376,7 +4376,7 @@ const [lineups, setLineups] = useState({});
                       selectedPlayday.matches.forEach(m => {
                         [1, 2].forEach(h => {
                           const lineupKey = `${selectedPlayday.id}-${m.id}-${h}`;
-                          const matchLineup = lineups[lineupKey] || { assignments: {}, bench: [] };
+                          const matchLineup = normalizeLineupBench(selectedPlayday.id, m.id, h, lineups[lineupKey] || { assignments: {}, bench: [] });
                           if (Object.values(matchLineup.assignments).includes(currentPlayerId)) {
                             playdayField++;
                             if (!selectedPosition.isBench && matchLineup.assignments[selectedPosition.posId] === currentPlayerId) {
