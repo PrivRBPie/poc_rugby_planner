@@ -37,17 +37,19 @@ do update set role = excluded.role;
 
 -- Pick a deterministic primary team for existing accounts that do not yet have one.
 update public.coach_accounts ca
-set primary_team_id = chosen.team_id,
+set primary_team_id = (
+      select cta.team_id
+      from public.coach_team_access cta
+      join public.teams t on t.id = cta.team_id
+      where cta.coach_id = ca.id
+      order by t.name, t.id
+      limit 1
+    ),
     updated_at = now()
-from lateral (
-  select cta.team_id
-  from public.coach_team_access cta
-  join public.teams t on t.id = cta.team_id
-  where cta.coach_id = ca.id
-  order by t.name, t.id
-  limit 1
-) chosen
-where ca.primary_team_id is null;
+where ca.primary_team_id is null
+  and exists (
+    select 1 from public.coach_team_access cta where cta.coach_id = ca.id
+  );
 
 create or replace function public.coach_role(p_coach_id uuid)
 returns text
