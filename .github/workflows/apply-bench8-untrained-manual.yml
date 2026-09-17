@@ -1,0 +1,33 @@
+name: Apply bench8 and manual assignment patch
+
+on:
+  push:
+    branches: ["feature/bench8-untrained-manual"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/bench8-untrained-manual
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply source patch
+        run: python scripts/apply_bench8_untrained_manual.py
+      - name: Commit patched source
+        run: |
+          if git diff --quiet; then
+            echo "No source changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.jsx
+          git commit -m "Cap bench at eight and streamline manual untrained assignments"
+          git push origin HEAD:feature/bench8-untrained-manual
