@@ -8,7 +8,7 @@ import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBe
 import { loadOfflineSnapshot, saveOfflineSnapshot } from './offlineStore';
 
 // App version - increment this when deploying breaking changes
-const APP_VERSION = '2.1.0-r8';
+const APP_VERSION = '2.2.0-r8';
 
 // Mini rugby positions (no 6,7,8)
 const positions = [
@@ -454,14 +454,17 @@ const [lineups, setLineups] = useState({});
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamLogo, setNewTeamLogo] = useState('🐂');
+  const [inactivePlayerIds, setInactivePlayerIds] = useState([]);
+  const [seasonStartDate, setSeasonStartDate] = useState(null);
+  const activePlayers = useMemo(() => players.filter(player => !inactivePlayerIds.includes(player.id)), [players, inactivePlayerIds]);
 
   useEffect(() => {
     if (!hasLoaded) return;
     const timer = setTimeout(() => {
-      saveOfflineSnapshot(currentTeamId || 'legacy', { players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes }).catch(console.error);
+      saveOfflineSnapshot(currentTeamId || 'legacy', { players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes, inactivePlayerIds, seasonStartDate }).catch(console.error);
     }, 250);
     return () => clearTimeout(timer);
-  }, [hasLoaded, currentTeamId, players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes]);
+  }, [hasLoaded, currentTeamId, players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes, inactivePlayerIds, seasonStartDate]);
 
   const derivePreferences = (favorites = {}) => Object.fromEntries(
     Object.entries(favorites).map(([playerId, list]) => [playerId, { preference1: list?.[0] || null, preference2: list?.[1] || null }])
@@ -486,6 +489,8 @@ const [lineups, setLineups] = useState({});
     setLearningPlayerConfig(data.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
     setSatisfactionWeights(data.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 });
     setPlayerNotes(data.playerNotes || {});
+    setInactivePlayerIds(data.inactivePlayerIds || []);
+    setSeasonStartDate(data.seasonStartDate || null);
     setHasLoaded(true);
     return true;
   };
@@ -557,6 +562,8 @@ const [lineups, setLineups] = useState({});
             setLearningPlayerConfig(rugbyData.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
             setSatisfactionWeights(rugbyData.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 });
             setPlayerNotes(rugbyData.playerNotes || {});
+            setInactivePlayerIds(rugbyData.inactivePlayerIds || []);
+            setSeasonStartDate(rugbyData.seasonStartDate || null);
             setRugbyDataId(data.id);
             setRemoteUpdatedAt(data.updated_at);
             setLastSyncTime(new Date());
@@ -1042,6 +1049,8 @@ const [lineups, setLineups] = useState({});
         setLearningPlayerConfig(rugbyData.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
         setSatisfactionWeights(rugbyData.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 });
         setPlayerNotes(rugbyData.playerNotes || {});
+        setInactivePlayerIds(rugbyData.inactivePlayerIds || []);
+        setSeasonStartDate(rugbyData.seasonStartDate || null);
         setRemoteUpdatedAt(data.updated_at);
         setLastSyncTime(new Date());
         setHasUnsavedChanges(false);
@@ -1082,16 +1091,16 @@ const [lineups, setLineups] = useState({});
 
   const syncRelationalRoster = async () => {
     if (!currentTeamId) return;
-    const rows = players.map(player => ({ id: player.id, name: player.name, mini_year: player.miniYear, created_by: currentUsername || 'coach' }));
+    const rows = activePlayers.map(player => ({ id: player.id, name: player.name, mini_year: player.miniYear, created_by: currentUsername || 'coach' }));
     if (rows.length > 0) {
       const { error: playersError } = await supabase.from('players').upsert(rows, { onConflict: 'id' });
       if (playersError) throw playersError;
     }
     const { data: links, error: linksError } = await supabase.from('team_players').select('player_id').eq('team_id', currentTeamId);
     if (linksError) throw linksError;
-    const currentIds = new Set(players.map(player => player.id));
+    const currentIds = new Set(activePlayers.map(player => player.id));
     const linkedIds = new Set((links || []).map(link => link.player_id));
-    const missing = players.filter(player => !linkedIds.has(player.id)).map(player => ({ team_id: currentTeamId, player_id: player.id, added_by: currentUsername || 'coach' }));
+    const missing = activePlayers.filter(player => !linkedIds.has(player.id)).map(player => ({ team_id: currentTeamId, player_id: player.id, added_by: currentUsername || 'coach' }));
     if (missing.length > 0) {
       const { error } = await supabase.from('team_players').insert(missing);
       if (error) throw error;
@@ -1137,7 +1146,7 @@ const [lineups, setLineups] = useState({});
     try {
       setIsSyncing(true);
       await syncRelationalRoster();
-      const data = { players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes };
+      const data = { players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes, inactivePlayerIds, seasonStartDate };
 
       console.log('Saving to Supabase...', { rugbyDataId, dataKeys: Object.keys(data) });
 
@@ -1286,7 +1295,9 @@ const [lineups, setLineups] = useState({});
           availability: {},
           learningPlayerConfig: { ...learningPlayerConfig },
           satisfactionWeights: { ...satisfactionWeights },
-          playerNotes: {}
+          playerNotes: {},
+          inactivePlayerIds: [],
+          seasonStartDate: null
         };
 
         const { data: newData, error: insertError } = await supabase
@@ -1309,6 +1320,8 @@ const [lineups, setLineups] = useState({});
           setKeyPositionMultiplier(1.15);
           setAllocationRules(initialData.allocationRules);
           setAvailability({});
+          setInactivePlayerIds([]);
+          setSeasonStartDate(null);
           setRemoteUpdatedAt(newData.updated_at);
 
           // Set initial state for change detection
@@ -1405,6 +1418,8 @@ const [lineups, setLineups] = useState({});
         setLearningPlayerConfig(rugbyData.data.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
         setSatisfactionWeights(rugbyData.data.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 });
         setPlayerNotes(rugbyData.data.playerNotes || {});
+        setInactivePlayerIds(rugbyData.data.inactivePlayerIds || []);
+        setSeasonStartDate(rugbyData.data.seasonStartDate || null);
         setRemoteUpdatedAt(rugbyData.updated_at);
 
         // Set initial state for change detection
@@ -1624,6 +1639,143 @@ const [lineups, setLineups] = useState({});
 
   };
 
+
+  const movePlayerToTeam = async (playerId, targetTeamId) => {
+    const player = players.find(p => p.id === playerId);
+    const targetTeam = teams.find(team => team.id === targetTeamId);
+    if (!player || !targetTeam || targetTeamId === currentTeamId) return;
+
+    if (hasUnsavedChanges) {
+      alert('Please save your current changes before moving a player to another team.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Move ${player.name} from ${getCurrentTeam()?.name || 'this team'} to ${targetTeam.name}?\n\n` +
+      'The player profile, ratings, training, suitability, preferences and notes will move with them.\n' +
+      'Old matches for the current team remain available as history.'
+    );
+    if (!confirmed) return;
+
+    const playerScoped = (source) => Object.fromEntries(
+      Object.entries(source || {}).filter(([key]) => key.startsWith(`${playerId}-`))
+    );
+
+    try {
+      setIsSyncing(true);
+
+      const { data: targetRecord, error: targetLoadError } = await supabase
+        .from('rugby_data')
+        .select('*')
+        .eq('team_id', targetTeamId)
+        .maybeSingle();
+      if (targetLoadError) throw targetLoadError;
+
+      const targetBase = targetRecord?.data || {
+        players: [], playdays: [], lineups: {}, ratings: {}, training: {}, favoritePositions: {},
+        suitability: {}, positionPreferences: {}, publishedHalves: {}, keyPositionMultiplier: 1.15,
+        allocationRules: JSON.parse(JSON.stringify(allocationRules)), availability: {},
+        learningPlayerConfig: { ...learningPlayerConfig }, satisfactionWeights: { ...satisfactionWeights },
+        playerNotes: {}, inactivePlayerIds: [], seasonStartDate: null
+      };
+
+      const targetPlayers = [
+        ...(targetBase.players || []).filter(p => p.id !== playerId),
+        { id: player.id, name: player.name, miniYear: player.miniYear }
+      ];
+
+      const nextTargetData = {
+        ...targetBase,
+        players: targetPlayers,
+        ratings: { ...(targetBase.ratings || {}), ...playerScoped(ratings) },
+        training: { ...(targetBase.training || {}), ...playerScoped(training) },
+        suitability: { ...(targetBase.suitability || {}), ...playerScoped(suitability) },
+        favoritePositions: {
+          ...(targetBase.favoritePositions || {}),
+          [playerId]: [...(favoritePositions[playerId] || [])]
+        },
+        positionPreferences: {
+          ...(targetBase.positionPreferences || {}),
+          [playerId]: { ...(positionPreferences[playerId] || { preference1: null, preference2: null }) }
+        },
+        playerNotes: {
+          ...(targetBase.playerNotes || {}),
+          [playerId]: [...(playerNotes[playerId] || [])]
+        },
+        inactivePlayerIds: (targetBase.inactivePlayerIds || []).filter(id => id !== playerId)
+      };
+
+      if (targetRecord) {
+        const { error: targetUpdateError } = await supabase
+          .from('rugby_data')
+          .update({ data: nextTargetData })
+          .eq('id', targetRecord.id);
+        if (targetUpdateError) throw targetUpdateError;
+      } else {
+        const { error: targetInsertError } = await supabase
+          .from('rugby_data')
+          .insert({ team_id: targetTeamId, team_name: targetTeam.name, data: nextTargetData });
+        if (targetInsertError) throw targetInsertError;
+      }
+
+      const { error: targetLinkError } = await supabase
+        .from('team_players')
+        .upsert({ team_id: targetTeamId, player_id: playerId, added_by: currentUsername || 'coach' }, { onConflict: 'team_id,player_id' });
+      if (targetLinkError) throw targetLinkError;
+
+      const nextInactivePlayerIds = Array.from(new Set([...inactivePlayerIds, playerId]));
+      const nextAvailability = { ...availability, [playerId]: 'not-selected' };
+      const nextSourceData = {
+        players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences,
+        publishedHalves, keyPositionMultiplier, allocationRules, availability: nextAvailability,
+        learningPlayerConfig, satisfactionWeights, playerNotes,
+        inactivePlayerIds: nextInactivePlayerIds,
+        seasonStartDate
+      };
+
+      const { data: updatedSource, error: sourceUpdateError } = await supabase
+        .from('rugby_data')
+        .update({ data: nextSourceData })
+        .eq('id', rugbyDataId)
+        .eq('team_id', currentTeamId)
+        .eq('updated_at', remoteUpdatedAt)
+        .select()
+        .maybeSingle();
+      if (sourceUpdateError) throw sourceUpdateError;
+      if (!updatedSource) throw new Error('The current team was changed by another coach. Refresh and try the move again.');
+
+      const { error: sourceLinkError } = await supabase
+        .from('team_players')
+        .delete()
+        .eq('team_id', currentTeamId)
+        .eq('player_id', playerId);
+      if (sourceLinkError) throw sourceLinkError;
+
+      setInactivePlayerIds(nextInactivePlayerIds);
+      setAvailability(nextAvailability);
+      setRemoteUpdatedAt(updatedSource.updated_at);
+      setLastSyncTime(new Date());
+      setExpandedPlayer(null);
+      await loadAllPlayers();
+
+      logAction('move_player', {
+        player_id: playerId,
+        player_name: player.name,
+        from_team_id: currentTeamId,
+        from_team_name: getCurrentTeam()?.name,
+        to_team_id: targetTeamId,
+        to_team_name: targetTeam.name
+      });
+
+      alert(`${player.name} moved to ${targetTeam.name}. Old match history has been kept in ${getCurrentTeam()?.name || 'the previous team'}.`);
+    } catch (err) {
+      console.error('Error moving player:', err);
+      alert(`Error moving player: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // Load all players from global library
   const loadAllPlayers = async () => {
     try {
@@ -1727,10 +1879,22 @@ const [lineups, setLineups] = useState({});
     loadAllPlayers();
   }, []);
 
+  const currentSeasonLineups = useMemo(() => {
+    if (!seasonStartDate) return lineups;
+    const activePlaydayIds = new Set(
+      playdays
+        .filter(playday => playday.date && playday.date >= seasonStartDate)
+        .map(playday => String(playday.id))
+    );
+    return Object.fromEntries(
+      Object.entries(lineups).filter(([key]) => activePlaydayIds.has(String(key).split('-')[0]))
+    );
+  }, [lineups, playdays, seasonStartDate]);
+
   const benchHistory = useMemo(() => {
     const counts = {};
     players.forEach(p => counts[p.id] = 0);
-    Object.values(lineups).forEach(lineup => {
+    Object.values(currentSeasonLineups).forEach(lineup => {
       (lineup.bench || []).forEach(playerId => {
         if (playerId) counts[playerId] = (counts[playerId] || 0) + 1;
       });
@@ -1741,7 +1905,7 @@ const [lineups, setLineups] = useState({});
   const fieldHistory = useMemo(() => {
     const counts = {};
     players.forEach(p => counts[p.id] = 0);
-    Object.values(lineups).forEach(lineup => {
+    Object.values(currentSeasonLineups).forEach(lineup => {
       Object.values(lineup.assignments || {}).forEach(playerId => {
         if (playerId) counts[playerId] = (counts[playerId] || 0) + 1;
       });
@@ -1751,7 +1915,7 @@ const [lineups, setLineups] = useState({});
 
   const playerPositionCounts = useMemo(() => {
     const counts = {};
-    Object.values(lineups).forEach(lineup => {
+    Object.values(currentSeasonLineups).forEach(lineup => {
       Object.entries(lineup.assignments || {}).forEach(([posId, playerId]) => {
         if (!playerId) return;
         if (!counts[playerId]) counts[playerId] = {};
@@ -1762,17 +1926,17 @@ const [lineups, setLineups] = useState({});
   }, [lineups]);
 
   const availablePlayers = useMemo(() => {
-    return players.filter(p => {
+    return activePlayers.filter(p => {
       const status = availability[p.id] || 'available';
       return status === 'available' || status === 'train-only';
     });
-  }, [players, availability]);
+  }, [activePlayers, availability]);
 
   const getHalfStatus = (playerId, playdayId, matchId, half) =>
     getAvailabilityStatus(availability, playerId, playdayId, matchId, half);
 
   const getEligiblePlayersForHalf = (playdayId, matchId, half, mode = 'game') =>
-    players.filter(player => isEligibleForHalf(getHalfStatus(player.id, playdayId, matchId, half), mode));
+    activePlayers.filter(player => isEligibleForHalf(getHalfStatus(player.id, playdayId, matchId, half), mode));
 
   const setHalfAvailability = (playerId, playdayId, matchId, half, status) => {
     setAvailability(prev => ({ ...prev, [availabilityKey(playdayId, matchId, half, playerId)]: status }));
@@ -2074,7 +2238,7 @@ const [lineups, setLineups] = useState({});
             maxAllowed = Math.ceil(idealPerPlayer);
           } else {
             // Fallback to old logic if context not provided
-            const availablePlayers = players.filter(p => availability[p.id] === 'available');
+            const availablePlayers = activePlayers.filter(p => availability[p.id] === 'available');
             const availableFieldCounts = availablePlayers.map(p => effectiveFieldHistory[p.id] || 0);
             const minField = availableFieldCounts.length > 0 ? Math.min(...availableFieldCounts) : 0;
             maxAllowed = minField + 1;
@@ -2638,6 +2802,60 @@ const [lineups, setLineups] = useState({});
     }).join(', ');
   };
 
+
+  const startNewSeason = async () => {
+    if (hasUnsavedChanges) {
+      alert('Please save your current changes before starting a new season.');
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const chosenDate = window.prompt('Season start date (YYYY-MM-DD):', seasonStartDate || today);
+    if (!chosenDate) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(chosenDate)) {
+      alert('Please enter a date in YYYY-MM-DD format.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Start a new season on ${chosenDate}?\n\n` +
+      'These counters will restart from that date:\n' +
+      '• halves played\n• bench appearances\n• times played per position\n• fairness/history counters\n\n' +
+      'Ratings, training, suitability, preferences, notes and old match history will NOT be deleted.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsSyncing(true);
+      const nextData = {
+        players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences,
+        publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig,
+        satisfactionWeights, playerNotes, inactivePlayerIds, seasonStartDate: chosenDate
+      };
+      const { data: updatedData, error } = await supabase
+        .from('rugby_data')
+        .update({ data: nextData })
+        .eq('id', rugbyDataId)
+        .eq('team_id', currentTeamId)
+        .eq('updated_at', remoteUpdatedAt)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      if (!updatedData) throw new Error('Another coach changed the team data. Refresh first and try again.');
+
+      setSeasonStartDate(chosenDate);
+      setRemoteUpdatedAt(updatedData.updated_at);
+      setLastSyncTime(new Date());
+      setHasRemoteChanges(false);
+      logAction('start_new_season', { season_start_date: chosenDate });
+    } catch (err) {
+      console.error('Error starting new season:', err);
+      alert(`Error starting new season: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const ScoreBadge = ({ scores }) => (
     <div className="flex items-center gap-2 text-[10px]">
       <div className="flex items-center gap-0.5" title="Fun (Favorite positions assigned)"><span className="text-pink-500"><Icons.Heart /></span><span className="font-semibold text-gray-600">{scores.happiness}%</span></div>
@@ -2655,7 +2873,7 @@ const [lineups, setLineups] = useState({});
 
     // Calculate analytics data
     const positionAnalytics = positions.map(pos => {
-      const playersForPosition = players.map(player => {
+      const playersForPosition = activePlayers.map(player => {
         const key = `${player.id}-${pos.id}`;
         const trained = training[key];
         const rating = ratings[key] || 0;
@@ -2681,7 +2899,7 @@ const [lineups, setLineups] = useState({});
     });
 
     // Player versatility ranking
-    const playerVersatility = players.map(player => {
+    const playerVersatility = activePlayers.map(player => {
       const trainedPositions = positions.filter(pos => training[`${player.id}-${pos.id}`]);
       const totalRating = trainedPositions.reduce((sum, pos) => sum + (ratings[`${player.id}-${pos.id}`] || 0), 0);
       const avgRating = trainedPositions.length > 0 ? totalRating / trainedPositions.length : 0;
@@ -2701,8 +2919,8 @@ const [lineups, setLineups] = useState({});
     const star5Count = totalRatings.filter(r => r === 5).length;
     const star4Count = totalRatings.filter(r => r === 4).length;
     const star3Count = totalRatings.filter(r => r === 3).length;
-    const firstYearCount = players.filter(p => p.miniYear === '1st year').length;
-    const secondYearCount = players.filter(p => p.miniYear === '2nd year').length;
+    const firstYearCount = activePlayers.filter(p => p.miniYear === '1st year').length;
+    const secondYearCount = activePlayers.filter(p => p.miniYear === '2nd year').length;
 
     // Position coverage warnings
     const weakPositions = positionAnalytics.filter(pa => pa.bestFitCount <= 1);
@@ -2718,7 +2936,7 @@ const [lineups, setLineups] = useState({});
         {/* Team Composition Stats */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-            <div className="text-2xl font-bold" style={{ color: DIOK.blue }}>{players.length}</div>
+            <div className="text-2xl font-bold" style={{ color: DIOK.blue }}>{activePlayers.length}</div>
             <div className="text-xs text-blue-700 font-medium">Total Players</div>
             <div className="text-xs text-blue-600 mt-1">{firstYearCount} × 1st year, {secondYearCount} × 2nd year</div>
           </div>
@@ -3347,12 +3565,15 @@ const [lineups, setLineups] = useState({});
             <span className="text-sm text-gray-400">•</span>
             <span className="text-sm font-semibold text-gray-600">{getCurrentTeam()?.name || 'No Team'}</span>
           </div>
-          <p className="text-sm text-gray-500">{players.length} players · {availablePlayers.length} available</p>
+          <p className="text-sm text-gray-500">{activePlayers.length} players · {availablePlayers.length} available{seasonStartDate ? ` · stats since ${seasonStartDate}` : ''}</p>
         </div>
-        <button onClick={() => { setNewPlayer({ name: '', miniYear: '2nd year' }); setShowAddPlayer(true); }} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Add</button>
+        <div className="flex items-center gap-2">
+          <button onClick={startNewSeason} disabled={isSyncing} className="px-3 py-2 rounded-xl font-semibold text-xs border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50" title="Restart season statistics without deleting ratings or history">↻ New Season</button>
+          <button onClick={() => { setNewPlayer({ name: '', miniYear: '2nd year' }); setShowAddPlayer(true); }} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Add</button>
+        </div>
       </div>
       <div className="space-y-2">
-        {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(player => {
+        {[...activePlayers].sort((a, b) => a.name.localeCompare(b.name)).map(player => {
           const playerAvail = availability[player.id] || 'available';
           const isExpanded = expandedPlayer === player.id;
           const favPositions = favoritePositions[player.id] || [];
@@ -3528,12 +3749,28 @@ const [lineups, setLineups] = useState({});
                     </button>
                   </div>
 
-                  {/* Remove Player Button */}
-                  <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end">
+                  {/* Move / Remove Player */}
+                  <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between gap-2">
+                    <select
+                      defaultValue=""
+                      disabled={isSyncing || teams.filter(team => team.id !== currentTeamId).length === 0}
+                      onChange={(e) => {
+                        const targetTeamId = e.target.value;
+                        e.target.value = '';
+                        if (targetTeamId) movePlayerToTeam(player.id, targetTeamId);
+                      }}
+                      className="px-3 py-1.5 bg-white border border-blue-300 rounded-lg text-blue-700 text-xs font-medium disabled:opacity-50"
+                      title="Move player to another team and keep old match history"
+                    >
+                      <option value="">Move to team…</option>
+                      {teams.filter(team => team.id !== currentTeamId).map(team => (
+                        <option key={team.id} value={team.id}>{team.name}</option>
+                      ))}
+                    </select>
                     <button
                       onClick={() => removePlayer(player.id)}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-300 rounded-lg text-red-700 text-xs font-medium transition-colors"
-                      title="Remove player from this team"
+                      title="Permanently remove player data from this team"
                     >
                       <Icons.Trash />
                       <span>Remove</span>
@@ -4409,7 +4646,7 @@ const [lineups, setLineups] = useState({});
               <tbody>
                 {(() => {
                   // Calculate player stats - only for available players
-                  const availablePlayers = players.filter(p => {
+                  const availablePlayers = activePlayers.filter(p => {
                     const avail = availability[p.id];
                     return !avail || avail === 'available';
                   });
@@ -4436,7 +4673,7 @@ const [lineups, setLineups] = useState({});
 
                     // Calculate cumulative bench ratio across ALL playdays
                     let cumulativeBench = 0, cumulativeGames = 0;
-                    playdays.forEach(playday => {
+                    playdays.filter(playday => !seasonStartDate || (playday.date && playday.date >= seasonStartDate)).forEach(playday => {
                       const allHalves = playday.matches.flatMap(m => [
                         { matchId: m.id, half: 1 },
                         { matchId: m.id, half: 2 }
@@ -5108,6 +5345,8 @@ const [lineups, setLineups] = useState({});
                       setFavoritePositions(backupData.data.favoritePositions || {});
                       setAllocationRules(backupData.data.allocationRules || allocationRules);
                       setAvailability(backupData.data.availability || {});
+                      setInactivePlayerIds(backupData.data.inactivePlayerIds || []);
+                      setSeasonStartDate(backupData.data.seasonStartDate || null);
 
                       if (backupData.data.learningPlayerConfig) {
                         setLearningPlayerConfig(backupData.data.learningPlayerConfig);
