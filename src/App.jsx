@@ -987,7 +987,7 @@ const [lineups, setLineups] = useState({});
         favoritePositions: '❤️ Favorite positions',
         suitability: '🎯 Position suitability',
         positionPreferences: '🥇 Ranked preferences',
-        publishedHalves: '📣 Published lineups',
+        publishedHalves: '✅ Validated lineups',
         keyPositionMultiplier: '⚖️ Key-position weight',
         allocationRules: '⚙️ Allocation rules',
         availability: '✓ Player availability',
@@ -2028,13 +2028,43 @@ const [lineups, setLineups] = useState({});
   const getEligiblePlayersForHalf = (playdayId, matchId, half, mode = 'game') =>
     activePlayers.filter(player => isEligibleForHalf(getHalfStatus(player.id, playdayId, matchId, half), mode));
 
+  // Bench is derived from the available players who are not currently on the field.
+  // Keep an explicit all-empty lineup empty so the Clear action still truly clears a half.
+  const normalizeLineupBench = (playdayId, matchId, half, lineup) => {
+    const assignments = { ...(lineup?.assignments || {}) };
+    const existingBench = [...(lineup?.bench || [])].filter(Boolean);
+    const assignedIds = new Set(Object.values(assignments).filter(Boolean));
+
+    if (assignedIds.size === 0 && existingBench.length === 0) {
+      return { ...(lineup || {}), assignments, bench: [] };
+    }
+
+    const playday = playdays.find(pd => pd.id === playdayId);
+    const mode = playday?.type === 'training' ? 'training' : 'game';
+    const eligibleIds = getEligiblePlayersForHalf(playdayId, matchId, half, mode).map(player => player.id);
+    const eligibleSet = new Set(eligibleIds);
+
+    const bench = existingBench.filter(id => eligibleSet.has(id) && !assignedIds.has(id));
+    eligibleIds.forEach(id => {
+      if (!assignedIds.has(id) && !bench.includes(id) && bench.length < 8) bench.push(id);
+    });
+
+    return { ...(lineup || {}), assignments, bench: bench.slice(0, 8) };
+  };
+
+  const getVisibleBenchSize = (eligibleCount, assignments, bench = []) => {
+    const assignedCount = Object.values(assignments || {}).filter(Boolean).length;
+    if (assignedCount === 0 && (bench || []).filter(Boolean).length === 0) return 0;
+    return Math.min(8, Math.max((bench || []).filter(Boolean).length, eligibleCount - assignedCount, 0));
+  };
+
   const setHalfAvailability = (playerId, playdayId, matchId, half, status) => {
     setAvailability(prev => ({ ...prev, [availabilityKey(playdayId, matchId, half, playerId)]: status }));
   };
 
   const calculateScores = (playdayId, matchId, half) => {
     const key = `${playdayId}-${matchId}-${half}`;
-    const lineup = lineups[key] || { assignments: {}, bench: [] };
+    const lineup = normalizeLineupBench(playdayId, matchId, half, lineups[key] || { assignments: {}, bench: [] });
     let happinessScore = 0, strengthScore = 0, learningCount = 0, maxHappiness = 0, maxStrength = 0;
     let totalAllocationScore = 0;
     let positionCount = 0;
@@ -2089,7 +2119,7 @@ const [lineups, setLineups] = useState({});
 
   const getAssignedInHalf = (playdayId, matchId, half) => {
     const key = `${playdayId}-${matchId}-${half}`;
-    const lineup = lineups[key] || { assignments: {}, bench: [] };
+    const lineup = normalizeLineupBench(playdayId, matchId, half, lineups[key] || { assignments: {}, bench: [] });
     const assigned = new Set(Object.values(lineup.assignments).filter(Boolean));
     (lineup.bench || []).forEach(id => assigned.add(id));
     return assigned;
@@ -2098,7 +2128,7 @@ const [lineups, setLineups] = useState({});
   const getCandidates = (playdayId, matchId, half, positionId, forBench = false) => {
     const assignedInHalf = getAssignedInHalf(playdayId, matchId, half);
     const key = `${playdayId}-${matchId}-${half}`;
-    const lineup = lineups[key] || { assignments: {}, bench: [] };
+    const lineup = normalizeLineupBench(playdayId, matchId, half, lineups[key] || { assignments: {}, bench: [] });
 
     // Calculate bench count and position-specific playtime for this specific playday
     const playday = playdays.find(pd => pd.id === playdayId);
@@ -2198,13 +2228,17 @@ const [lineups, setLineups] = useState({});
 
   const updateLineup = (playdayId, matchId, half, fn) => {
     const key = `${playdayId}-${matchId}-${half}`;
-    setLineups(prev => ({ ...prev, [key]: fn(prev[key] || { assignments: {}, bench: [] }) }));
+    setLineups(prev => {
+      const current = normalizeLineupBench(playdayId, matchId, half, prev[key] || { assignments: {}, bench: [] });
+      const next = fn(current);
+      return { ...prev, [key]: normalizeLineupBench(playdayId, matchId, half, next) };
+    });
     markHalfDraft(key);
   };
 
   const getPublishErrors = (playdayId, matchId, half) => {
     const key = `${playdayId}-${matchId}-${half}`;
-    const lineup = lineups[key] || { assignments: {}, bench: [] };
+    const lineup = normalizeLineupBench(playdayId, matchId, half, lineups[key] || { assignments: {}, bench: [] });
     const mode = selectedPlayday?.type === 'training' ? 'training' : 'game';
     const eligible = getEligiblePlayersForHalf(playdayId, matchId, half, mode);
     return validateLineupForPublish({
@@ -2222,12 +2256,16 @@ const [lineups, setLineups] = useState({});
     const key = `${playdayId}-${matchId}-${half}`;
     const errors = getPublishErrors(playdayId, matchId, half);
     if (errors.length) {
-      alert(`Cannot publish this half yet:\n\n${errors.map(e => `• ${e}`).join("\n")}`);
+      alert(`Cannot validate this half yet:\n\n${errors.map(e => `• ${e}`).join("\n")}`);
       return;
     }
     const publication = { publishedAt: new Date().toISOString(), publishedBy: currentUsername || 'Coach' };
+    setLineups(prev => ({
+      ...prev,
+      [key]: normalizeLineupBench(playdayId, matchId, half, prev[key] || { assignments: {}, bench: [] })
+    }));
     setPublishedHalves(prev => ({ ...prev, [key]: publication }));
-    logAction('publish_lineup', { playday_id: playdayId, match_id: matchId, half });
+    logAction('validate_lineup', { playday_id: playdayId, match_id: matchId, half });
   };
 
   const copyPreviousLineup = (playdayId, matchId, half) => {
@@ -2632,7 +2670,7 @@ const [lineups, setLineups] = useState({});
     const { playdayId, matchId, half, posId, isBench, benchIndex } = selectedPosition;
     const assignedInHalf = getAssignedInHalf(playdayId, matchId, half);
     const key = `${playdayId}-${matchId}-${half}`;
-    const lineup = lineups[key] || { assignments: {}, bench: [] };
+    const lineup = normalizeLineupBench(playdayId, matchId, half, lineups[key] || { assignments: {}, bench: [] });
     const isCurrentlyHere = isBench ? lineup.bench?.includes(playerId) : lineup.assignments[posId] === playerId;
 
     // If clicking a field position, only block if player is on a DIFFERENT field position (bench is OK)
@@ -2663,7 +2701,7 @@ const [lineups, setLineups] = useState({});
       newBench = newBench.filter(id => id !== playerId);
       if (isBench) {
         const mode = selectedPlayday?.type === 'training' ? 'training' : 'game';
-        const maxBenchSize = getDynamicBenchSize(getEligiblePlayersForHalf(playdayId, matchId, half, mode).length, positions.length);
+        const maxBenchSize = getVisibleBenchSize(getEligiblePlayersForHalf(playdayId, matchId, half, mode).length, newAssignments, newBench);
         if (benchIndex !== undefined && benchIndex < maxBenchSize) newBench[benchIndex] = playerId;
         else if (!newBench.includes(playerId) && newBench.length < maxBenchSize) newBench.push(playerId);
         newBench = newBench.filter(Boolean).slice(0, maxBenchSize);
@@ -2682,8 +2720,12 @@ const [lineups, setLineups] = useState({});
         return { ...prev, bench: newBench };
       } else {
         const newAssignments = { ...prev.assignments };
+        const clearedPlayerId = newAssignments[posId];
         delete newAssignments[posId];
-        return { ...prev, assignments: newAssignments };
+        const newBench = clearedPlayerId
+          ? [clearedPlayerId, ...(prev.bench || []).filter(id => id !== clearedPlayerId)]
+          : [...(prev.bench || [])];
+        return { ...prev, assignments: newAssignments, bench: newBench };
       }
     });
   };
@@ -3934,19 +3976,19 @@ const [lineups, setLineups] = useState({});
 
     const renderCollapsedView = (matchId, half) => {
       const key = `${selectedPlayday.id}-${matchId}-${half}`;
-      const lineup = lineups[key] || { assignments: {}, bench: [] };
+      const lineup = normalizeLineupBench(selectedPlayday.id, matchId, half, lineups[key] || { assignments: {}, bench: [] });
       return (
         <div className="flex flex-wrap gap-0.5 items-end">
           {positions.map(pos => <PositionBox key={pos.id} pos={pos} player={players.find(p => p.id === lineup.assignments[pos.id])} />)}
           <div className="w-px h-6 bg-gray-300 mx-1 self-end mb-0.5" />
-          {Array.from({ length: getDynamicBenchSize(getEligiblePlayersForHalf(selectedPlayday.id, matchId, half, selectedPlayday.type === 'training' ? 'training' : 'game').length, positions.length) }).map((_, idx) => <PositionBox key={`bench-${idx}`} player={players.find(p => p.id === lineup.bench?.[idx])} benchIndex={idx} />)}
+          {Array.from({ length: getVisibleBenchSize(getEligiblePlayersForHalf(selectedPlayday.id, matchId, half, selectedPlayday.type === 'training' ? 'training' : 'game').length, lineup.assignments, lineup.bench) }).map((_, idx) => <PositionBox key={`bench-${idx}`} player={players.find(p => p.id === lineup.bench?.[idx])} benchIndex={idx} />)}
         </div>
       );
     };
 
     const renderExpandedView = (matchId, half) => {
       const key = `${selectedPlayday.id}-${matchId}-${half}`;
-      const lineup = lineups[key] || { assignments: {}, bench: [] };
+      const lineup = normalizeLineupBench(selectedPlayday.id, matchId, half, lineups[key] || { assignments: {}, bench: [] });
       const halfIndex = allHalves.findIndex(h => h.matchId === matchId && h.half === half);
       const candidates = selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half
         ? getCandidates(selectedPlayday.id, matchId, half, selectedPosition.posId, selectedPosition.isBench) : [];
@@ -4305,7 +4347,7 @@ const [lineups, setLineups] = useState({});
               <div className="flex justify-center gap-1 mb-3">{positions.filter(p => p.row === 4).map(pos => <PosButton key={pos.id} pos={pos} />)}</div>
               <div className="flex justify-center mb-3">{positions.filter(p => p.row === 5).map(pos => <PosButton key={pos.id} pos={pos} />)}</div>
               <div className="border-t border-white/40 my-3 mx-4" />
-              <div className="flex justify-center gap-1">{Array.from({ length: getDynamicBenchSize(getEligiblePlayersForHalf(selectedPlayday.id, matchId, half, selectedPlayday.type === 'training' ? 'training' : 'game').length, positions.length) }).map((_, idx) => <BenchButton key={idx} idx={idx} />)}</div>
+              <div className="flex justify-center gap-1">{Array.from({ length: getVisibleBenchSize(getEligiblePlayersForHalf(selectedPlayday.id, matchId, half, selectedPlayday.type === 'training' ? 'training' : 'game').length, lineup.assignments, lineup.bench) }).map((_, idx) => <BenchButton key={idx} idx={idx} />)}</div>
               <div className="text-center text-[10px] text-white mt-2">
                 {(() => {
                   const allocatedCount = Object.values(lineup.assignments).filter(id => id).length + (lineup.bench?.filter(id => id).length || 0);
@@ -4323,7 +4365,7 @@ const [lineups, setLineups] = useState({});
               {selectedPosition?.playdayId === selectedPlayday.id && selectedPosition?.matchId === matchId && selectedPosition?.half === half ? (
                 <>
                   <div className="text-xs font-bold mb-1 px-1" style={{ color: DIOK.blue }}>{selectedPosition.isBench ? `Bench ${selectedPosition.benchIndex + 1}` : `#${positions.find(p => p.id === selectedPosition.posId)?.code} ${positions.find(p => p.id === selectedPosition.posId)?.name}`}</div>
-                  {(selectedPosition.isBench ? lineup.bench?.[selectedPosition.benchIndex] : lineup.assignments[selectedPosition.posId]) && <button onClick={handleClearPosition} className="mb-2 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 border border-red-200">Clear</button>}
+                  {!selectedPosition.isBench && lineup.assignments[selectedPosition.posId] && <button onClick={handleClearPosition} className="mb-2 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 border border-red-200">Clear</button>}
 
                   {/* Current Player Stats */}
                   {(() => {
@@ -4424,7 +4466,7 @@ const [lineups, setLineups] = useState({});
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <div><div className="font-semibold text-gray-900 text-sm">{selectedPlayday.type === 'game' ? `vs. ${opponent}` : opponent}</div><div className="text-xs text-gray-500 flex items-center gap-1.5">{selectedPlayday.type === 'game' ? `Game ${number}` : `Training ${number}`} · Half {half}<span className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${publishedHalves[key] ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{publishedHalves[key] ? 'Published' : 'Draft'}</span></div></div>
+                        <div><div className="font-semibold text-gray-900 text-sm">{selectedPlayday.type === 'game' ? `vs. ${opponent}` : opponent}</div><div className="text-xs text-gray-500 flex items-center gap-1.5">{selectedPlayday.type === 'game' ? `Game ${number}` : `Training ${number}`} · Half {half}<span className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${publishedHalves[key] ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{publishedHalves[key] ? 'Validated' : 'Draft'}</span></div></div>
                         <div className="flex flex-col items-end gap-0.5"><ScoreBadge scores={scores} /><span className="text-[9px] text-gray-400">{scores.filled}/12 + {scores.bench}B</span></div>
                       </div>
                     </div>
@@ -4439,8 +4481,8 @@ const [lineups, setLineups] = useState({});
                         <button
                           onClick={() => publishHalf(selectedPlayday.id, matchId, half)}
                           className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold ${publishedHalves[key] ? "bg-emerald-100 text-emerald-700" : "bg-blue-50 text-blue-700 hover:bg-blue-100"}`}
-                          title={publishedHalves[key] ? 'Published lineup' : 'Validate and publish this half'}
-                        >{publishedHalves[key] ? '✓ Published' : 'Publish'}</button>
+                          title={publishedHalves[key] ? 'Validated lineup' : 'Validate this half'}
+                        >{publishedHalves[key] ? '✓ Validated' : 'Validate'}</button>
                         <button
                           onClick={() => proposeLineup(selectedPlayday.id, matchId, half, 'game')}
                           className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
