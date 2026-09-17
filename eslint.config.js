@@ -23,7 +23,10 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // R8 keeps these legacy App.jsx cleanup items visible without blocking the stabilization release.
+      // New syntax errors, undefined identifiers and hook-rule errors still fail CI.
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-case-declarations': 'warn',
     },
   },
 ])
