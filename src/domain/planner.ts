@@ -26,7 +26,7 @@ export function isEligibleForHalf(status: AvailabilityStatus, mode: 'game' | 'tr
 }
 
 export function getDynamicBenchSize(eligiblePlayers: number, fieldSlots: number) {
-  return Math.max(0, eligiblePlayers - fieldSlots);
+  return Math.min(8, Math.max(0, eligiblePlayers - fieldSlots));
 }
 
 export function cleanupLineupsForPlayday<T>(lineups: Record<string, T>, playdayId: number | string) {
@@ -51,7 +51,7 @@ export function validateAssignment(input: { status: AvailabilityStatus; mode: 'g
   const issues: string[] = [];
   if (input.duplicate) issues.push('Player is already assigned in this half.');
   if (!isEligibleForHalf(input.status, input.mode)) issues.push(`Player is not eligible for this half (${input.status}).`);
-  if (input.mode === 'game' && !input.trained) issues.push('Player is not trained for this position.');
+  // Training is guidance for a coach, not a manual-assignment blocker.
   return issues;
 }
 
@@ -94,7 +94,8 @@ export function validateLineupForPublish(input: {
     assignedIds.push(id);
     if (!eligible.has(id)) errors.push(`Player ${playerId} at #${positionId} is not eligible for this half.`);
     if (input.getSuitability(playerId, positionId) === 10) errors.push(`Player ${playerId} has suitability 10 at #${positionId}.`);
-    if (input.mode === 'game' && !input.isTrained(playerId, positionId)) errors.push(`Player ${playerId} is not trained for #${positionId}.`);
+    // An untrained player may be placed manually by a coach. The UI still marks
+    // that assignment clearly, while automatic allocation can remain stricter.
   }
 
   const duplicateAssigned = assignedIds.filter((id, index) => assignedIds.indexOf(id) !== index);
@@ -106,12 +107,16 @@ export function validateLineupForPublish(input: {
   if (benchIds.some(id => assignedIds.includes(id))) errors.push('A player appears both on the field and on the bench.');
   if (benchIds.some(id => !eligible.has(id))) errors.push('The bench contains an ineligible player.');
 
-  const expectedBench = Math.max(0, input.eligiblePlayerIds.length - input.positions.length);
+  const expectedBench = getDynamicBenchSize(input.eligiblePlayerIds.length, input.positions.length);
   if (input.bench.length !== expectedBench) errors.push(`Bench should contain ${expectedBench} player(s), currently ${input.bench.length}.`);
 
   const participating = new Set([...assignedIds, ...benchIds]);
   const missingEligible = [...eligible].filter(id => !participating.has(id));
-  if (missingEligible.length) errors.push(`${missingEligible.length} eligible player(s) are not assigned to field or bench.`);
+  if (missingEligible.length) {
+    const overflow = Math.max(0, input.eligiblePlayerIds.length - input.positions.length - 8);
+    if (overflow > 0) errors.push(`${overflow} eligible player(s) exceed the maximum 8-player bench capacity.`);
+    else errors.push(`${missingEligible.length} eligible player(s) are not assigned to field or bench.`);
+  }
 
   return [...new Set(errors)];
 }
