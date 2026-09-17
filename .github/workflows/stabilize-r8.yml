@@ -19,10 +19,12 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Apply source transformations
-        run: node scripts/stabilize-r8.mjs
+        run: |
+          node scripts/stabilize-r8.mjs
+          node scripts/fix-r8.mjs
       - name: Refresh lockfile
         run: npm install --package-lock-only
       - name: Install dependencies
@@ -30,7 +32,7 @@ jobs:
       - name: Validate stabilization
         run: npm run check
       - name: Remove bootstrap automation
-        run: rm -f scripts/stabilize-r8.mjs .github/workflows/stabilize-r8.yml
+        run: rm -f scripts/stabilize-r8.mjs scripts/fix-r8.mjs .github/workflows/stabilize-r8.yml
       - name: Commit stabilized source
         run: |
           git config user.name "github-actions[bot]"
