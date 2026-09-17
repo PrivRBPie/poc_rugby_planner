@@ -3612,7 +3612,6 @@ const [lineups, setLineups] = useState({});
           <p className="text-sm text-gray-500">{activePlayers.length} players · {availablePlayers.length} available{seasonStartDate ? ` · stats since ${seasonStartDate}` : ''}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={startNewSeason} disabled={isSyncing} className="px-3 py-2 rounded-xl font-semibold text-xs border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50" title="Restart season statistics without deleting ratings or history">↻ New Season</button>
           <button onClick={() => { setNewPlayer({ name: '', miniYear: '2nd year' }); setShowAddPlayer(true); }} className="flex items-center gap-1.5 text-white px-3 py-2 rounded-xl font-semibold text-sm" style={{ backgroundColor: DIOK.blue }}><Icons.Plus /> Add</button>
         </div>
       </div>
@@ -5044,9 +5043,19 @@ const [lineups, setLineups] = useState({});
 
     return (
       <div className="space-y-4">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Admin Dashboard</h2>
-          <p className="text-sm text-gray-500">Login activity and system overview</p>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Admin Dashboard</h2>
+            <p className="text-sm text-gray-500">Login activity and system overview</p>
+          </div>
+          <button
+            onClick={startNewSeason}
+            disabled={isSyncing}
+            className="px-3 py-2 rounded-xl font-semibold text-xs border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+            title="Restart season statistics without deleting ratings or history"
+          >
+            ↻ New Season
+          </button>
         </div>
 
 
