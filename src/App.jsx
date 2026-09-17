@@ -1436,9 +1436,9 @@ const [lineups, setLineups] = useState({});
           keyPositionMultiplier: JSON.stringify(rugbyData.data.keyPositionMultiplier || 1.15),
           allocationRules: JSON.stringify(rugbyData.data.allocationRules || allocationRules),
           availability: JSON.stringify(rugbyData.data.availability || {}),
-          learningPlayerConfig: JSON.stringify(learningPlayerConfig),
-          satisfactionWeights: JSON.stringify(satisfactionWeights),
-              playerNotes: JSON.stringify(playerNotes),
+          learningPlayerConfig: JSON.stringify(rugbyData.data.learningPlayerConfig || { maxStars: 2, maxGames: 5 }),
+          satisfactionWeights: JSON.stringify(rugbyData.data.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 }),
+          playerNotes: JSON.stringify(rugbyData.data.playerNotes || {}),
         });
       }
 
@@ -5043,19 +5043,9 @@ const [lineups, setLineups] = useState({});
 
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Admin Dashboard</h2>
-            <p className="text-sm text-gray-500">Login activity and system overview</p>
-          </div>
-          <button
-            onClick={startNewSeason}
-            disabled={isSyncing}
-            className="px-3 py-2 rounded-xl font-semibold text-xs border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-            title="Restart season statistics without deleting ratings or history"
-          >
-            ↻ New Season
-          </button>
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Admin Dashboard</h2>
+          <p className="text-sm text-gray-500">Login activity and system overview</p>
         </div>
 
 
@@ -5185,10 +5175,32 @@ const [lineups, setLineups] = useState({});
         {/* Backup & Restore (Hidden at bottom) */}
         <div className="mt-12 pt-8 border-t border-gray-200">
           <details className="bg-gray-50 rounded-lg border border-gray-300">
-            <summary className="px-4 py-2 cursor-pointer text-xs text-gray-500 hover:text-gray-700 select-none">
-              🔧 Advanced: Database Backup & Restore
+            <summary className="px-4 py-3 cursor-pointer text-sm font-semibold text-gray-700 hover:text-gray-900 select-none">
+              🔧 Advanced Actions
             </summary>
-            <div className="p-4 space-y-4 border-t border-gray-200">
+            <div className="p-4 space-y-5 border-t border-gray-200">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">Start a new season</h4>
+                    <p className="text-xs text-gray-600 mt-1">Restart playing, bench, position and fairness counters from a chosen date. Ratings, training and historical matches are kept.</p>
+                  </div>
+                  <button
+                    onClick={startNewSeason}
+                    disabled={isSyncing}
+                    className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-amber-300 bg-white text-amber-800 text-sm font-bold shadow-sm hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Start a new season without deleting ratings or match history"
+                  >
+                    <span aria-hidden="true">↻</span> Start New Season
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-bold text-gray-900">Database Backup & Restore</h4>
+                <p className="text-xs text-gray-500 mt-1 mb-3">Create a safety copy before restoring or making major administrative changes.</p>
+              </div>
+
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
                 ⚠️ <strong>Warning:</strong> These operations affect the database. Use with caution. Always create a backup before restoring.
               </div>
