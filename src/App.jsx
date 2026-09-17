@@ -4,9 +4,11 @@ import sharksLogo from './assets/sharks.svg';
 import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
 import * as XLSX from 'xlsx';
+import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBenchSize, cleanupLineupsForPlayday, cleanupLineupsForMatch, getHistoryRange, validateAssignment } from './domain/planner';
+import { loadOfflineSnapshot, saveOfflineSnapshot } from './offlineStore';
 
 // App version - increment this when deploying breaking changes
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '2.0.0-r8';
 
 // Mini rugby positions (no 6,7,8)
 const positions = [
@@ -50,6 +52,9 @@ const initialPlayers = [
 const availabilityOptions = [
   { value: 'available', label: 'Available', icon: '✓', color: '#059669', bg: '#d1fae5' },
   { value: 'train-only', label: 'Train Only', icon: '◐', color: '#ca8a04', bg: '#fef9c3' },
+  { value: 'injured', label: 'Injured', icon: '✚', color: '#b91c1c', bg: '#fee2e2' },
+  { value: 'absent', label: 'Absent', icon: '○', color: '#6b7280', bg: '#f3f4f6' },
+  { value: 'not-selected', label: 'Not selected', icon: '–', color: '#7c3aed', bg: '#ede9fe' },
   { value: 'unavailable', label: 'Unavailable', icon: '✕', color: '#dc2626', bg: '#fee2e2' },
 ];
 
@@ -445,6 +450,33 @@ const [lineups, setLineups] = useState({});
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamLogo, setNewTeamLogo] = useState('🐂');
 
+  useEffect(() => {
+    if (!hasLoaded) return;
+    const timer = setTimeout(() => {
+      saveOfflineSnapshot(currentTeamId || 'legacy', { players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes }).catch(console.error);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [hasLoaded, currentTeamId, players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes]);
+
+  const restoreOfflineData = async (teamId = currentTeamId || localStorage.getItem('rugbyPlannerLastTeamId') || 'legacy') => {
+    const cached = await loadOfflineSnapshot(teamId);
+    if (!cached?.data) return false;
+    const data = cached.data;
+    setPlayers(data.players || []);
+    setPlaydays(data.playdays || []);
+    setLineups(data.lineups || {});
+    setRatings(data.ratings || {});
+    setTraining(data.training || {});
+    setFavoritePositions(data.favoritePositions || {});
+    setAllocationRules(data.allocationRules || allocationRules);
+    setAvailability(data.availability || {});
+    setLearningPlayerConfig(data.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
+    setSatisfactionWeights(data.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 });
+    setPlayerNotes(data.playerNotes || {});
+    setHasLoaded(true);
+    return true;
+  };
+
   // Check app version and prompt for refresh if outdated
   useEffect(() => {
     const storedVersion = localStorage.getItem('rugbyPlannerVersion');
@@ -461,7 +493,7 @@ const [lineups, setLineups] = useState({});
 
       if (shouldRefresh) {
         localStorage.setItem('rugbyPlannerVersion', APP_VERSION);
-        window.location.reload(true); // Force reload from server
+        window.location.reload(); // Force reload from server
         return;
       }
     }
@@ -505,6 +537,9 @@ const [lineups, setLineups] = useState({});
             setFavoritePositions(rugbyData.favoritePositions || {});
             setAllocationRules(rugbyData.allocationRules || allocationRules);
             setAvailability(rugbyData.availability || {});
+            setLearningPlayerConfig(rugbyData.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
+            setSatisfactionWeights(rugbyData.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 });
+            setPlayerNotes(rugbyData.playerNotes || {});
             setRugbyDataId(data.id);
             setRemoteUpdatedAt(data.updated_at);
             setLastSyncTime(new Date());
@@ -523,6 +558,7 @@ const [lineups, setLineups] = useState({});
               availability: JSON.stringify(rugbyData.availability || {}),
               learningPlayerConfig: JSON.stringify(learningPlayerConfig),
               satisfactionWeights: JSON.stringify(satisfactionWeights),
+              playerNotes: JSON.stringify(playerNotes),
             });
           }
 
@@ -535,7 +571,8 @@ const [lineups, setLineups] = useState({});
           // Detect if Supabase project is paused (network-level failure)
           const msg = teamsError.message?.toLowerCase() || '';
           if (msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('network request failed') || msg.includes('fetch')) {
-            setIsDbUnavailable(true);
+            const restored = await restoreOfflineData();
+            if (!restored) setIsDbUnavailable(true);
           }
           setHasLoaded(true);
           return;
@@ -889,7 +926,7 @@ const [lineups, setLineups] = useState({});
     const interval = setInterval(checkForRemoteChanges, 10000);
 
     return () => clearInterval(interval);
-  }, [rugbyDataId, remoteUpdatedAt]);
+  }, [rugbyDataId, remoteUpdatedAt, currentTeamId]);
 
   // Manual refresh from Supabase
   const refreshFromSupabase = async () => {
@@ -907,6 +944,7 @@ const [lineups, setLineups] = useState({});
         availability: JSON.stringify(availability),
         learningPlayerConfig: JSON.stringify(learningPlayerConfig),
         satisfactionWeights: JSON.stringify(satisfactionWeights),
+              playerNotes: JSON.stringify(playerNotes),
       };
 
       const changedFields = Object.keys(currentState).filter(key => currentState[key] !== initialState[key]);
@@ -967,6 +1005,9 @@ const [lineups, setLineups] = useState({});
         setFavoritePositions(newFavoritePositions);
         setAllocationRules(newAllocationRules);
         setAvailability(newAvailability);
+        setLearningPlayerConfig(rugbyData.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
+        setSatisfactionWeights(rugbyData.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 });
+        setPlayerNotes(rugbyData.playerNotes || {});
         setRemoteUpdatedAt(data.updated_at);
         setLastSyncTime(new Date());
         setHasUnsavedChanges(false);
@@ -991,12 +1032,36 @@ const [lineups, setLineups] = useState({});
           availability: JSON.stringify(newAvailability),
           learningPlayerConfig: JSON.stringify(learningPlayerConfig),
           satisfactionWeights: JSON.stringify(satisfactionWeights),
+              playerNotes: JSON.stringify(playerNotes),
         });
       }
     } catch (error) {
       console.error('Error refreshing from Supabase:', error);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const syncRelationalRoster = async () => {
+    if (!currentTeamId) return;
+    const rows = players.map(player => ({ id: player.id, name: player.name, mini_year: player.miniYear, created_by: currentUsername || 'coach' }));
+    if (rows.length > 0) {
+      const { error: playersError } = await supabase.from('players').upsert(rows, { onConflict: 'id' });
+      if (playersError) throw playersError;
+    }
+    const { data: links, error: linksError } = await supabase.from('team_players').select('player_id').eq('team_id', currentTeamId);
+    if (linksError) throw linksError;
+    const currentIds = new Set(players.map(player => player.id));
+    const linkedIds = new Set((links || []).map(link => link.player_id));
+    const missing = players.filter(player => !linkedIds.has(player.id)).map(player => ({ team_id: currentTeamId, player_id: player.id, added_by: currentUsername || 'coach' }));
+    if (missing.length > 0) {
+      const { error } = await supabase.from('team_players').insert(missing);
+      if (error) throw error;
+    }
+    const removed = [...linkedIds].filter(id => !currentIds.has(id));
+    if (removed.length > 0) {
+      const { error } = await supabase.from('team_players').delete().eq('team_id', currentTeamId).in('player_id', removed);
+      if (error) throw error;
     }
   };
 
@@ -1033,7 +1098,8 @@ const [lineups, setLineups] = useState({});
 
     try {
       setIsSyncing(true);
-      const data = { players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability };
+      await syncRelationalRoster();
+      const data = { players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes };
 
       console.log('Saving to Supabase...', { rugbyDataId, dataKeys: Object.keys(data) });
 
@@ -1042,12 +1108,16 @@ const [lineups, setLineups] = useState({});
         .update({ data: data })
         .eq('id', rugbyDataId)
         .eq('team_id', currentTeamId)
+        .eq('updated_at', remoteUpdatedAt)
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error saving to Supabase:', error);
         alert('Error saving data: ' + error.message);
+      } else if (!updatedData) {
+        setHasRemoteChanges(true);
+        alert('Another coach saved changes before you. Your local edits are still intact. Click Updates to review the remote version before saving again.');
       } else {
         console.log('Save successful');
         setRemoteUpdatedAt(updatedData.updated_at);
@@ -1074,6 +1144,7 @@ const [lineups, setLineups] = useState({});
           availability: JSON.stringify(availability),
           learningPlayerConfig: JSON.stringify(learningPlayerConfig),
           satisfactionWeights: JSON.stringify(satisfactionWeights),
+              playerNotes: JSON.stringify(playerNotes),
         });
       }
     } catch (error) {
@@ -1109,6 +1180,7 @@ const [lineups, setLineups] = useState({});
       availability: JSON.stringify(availability),
       learningPlayerConfig: JSON.stringify(learningPlayerConfig),
       satisfactionWeights: JSON.stringify(satisfactionWeights),
+              playerNotes: JSON.stringify(playerNotes),
     };
 
     const hasChanges = Object.keys(currentState).some(key => currentState[key] !== initialState[key]);
@@ -1126,7 +1198,7 @@ const [lineups, setLineups] = useState({});
       changedKeys
     });
     setHasUnsavedChanges(hasChanges);
-  }, [players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, hasLoaded, initialState]);
+  }, [players, playdays, lineups, ratings, training, favoritePositions, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes, hasLoaded, initialState]);
 
   // Helper function to get current team
   const getCurrentTeam = () => {
@@ -1160,23 +1232,11 @@ const [lineups, setLineups] = useState({});
           ratings: {},
           training: {},
           favoritePositions: {},
-          allocationRules: {
-            game: {
-              enabled: true,
-              minFieldTime: 3,
-              maxFieldTime: 4,
-              strictBenchFairness: true,
-              enableLearning: true
-            },
-            training: {
-              enabled: false,
-              minFieldTime: 2,
-              maxFieldTime: 3,
-              strictBenchFairness: false,
-              enableLearning: false
-            }
-          },
-          availability: {}
+          allocationRules: JSON.parse(JSON.stringify(allocationRules)),
+          availability: {},
+          learningPlayerConfig: { ...learningPlayerConfig },
+          satisfactionWeights: { ...satisfactionWeights },
+          playerNotes: {}
         };
 
         const { data: newData, error: insertError } = await supabase
@@ -1209,6 +1269,7 @@ const [lineups, setLineups] = useState({});
             availability: JSON.stringify({}),
             learningPlayerConfig: JSON.stringify(learningPlayerConfig),
             satisfactionWeights: JSON.stringify(satisfactionWeights),
+              playerNotes: JSON.stringify(playerNotes),
           });
         }
       } else if (!error) {
@@ -1279,6 +1340,9 @@ const [lineups, setLineups] = useState({});
         setFavoritePositions(rugbyData.data.favoritePositions || {});
         setAllocationRules(rugbyData.data.allocationRules || allocationRules);
         setAvailability(rugbyData.data.availability || {});
+        setLearningPlayerConfig(rugbyData.data.learningPlayerConfig || { maxStars: 2, maxGames: 5 });
+        setSatisfactionWeights(rugbyData.data.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 });
+        setPlayerNotes(rugbyData.data.playerNotes || {});
         setRemoteUpdatedAt(rugbyData.updated_at);
 
         // Set initial state for change detection
@@ -1293,6 +1357,7 @@ const [lineups, setLineups] = useState({});
           availability: JSON.stringify(rugbyData.data.availability || {}),
           learningPlayerConfig: JSON.stringify(learningPlayerConfig),
           satisfactionWeights: JSON.stringify(satisfactionWeights),
+              playerNotes: JSON.stringify(playerNotes),
         });
       }
 
@@ -1329,22 +1394,21 @@ const [lineups, setLineups] = useState({});
 
   const createTeam = async (teamName, teamLogo) => {
     try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) throw authError || new Error('You must be signed in to create a team.');
+
       const { data: newTeam, error } = await supabase
         .from('teams')
-        .insert({
-          name: teamName,
-          logo: teamLogo,
-          created_by: username || 'anonymous'
-        })
+        .insert({ name: teamName, logo: teamLogo, created_by: currentUsername || authData.user.email || 'coach', owner_id: authData.user.id })
         .select()
         .single();
-
       if (error) throw error;
 
-      setTeams([...teams, newTeam]);
-      logAction('create_team', { team_name: teamName, team_logo: teamLogo });
+      const { error: memberError } = await supabase.from('team_members').insert({ team_id: newTeam.id, user_id: authData.user.id, role: 'admin' });
+      if (memberError) throw memberError;
 
-      // Switch to new team
+      setTeams(prev => [...prev, newTeam]);
+      logAction('create_team', { team_name: teamName, team_logo: teamLogo });
       await switchTeam(newTeam.id);
     } catch (err) {
       console.error('Error creating team:', err);
@@ -1362,7 +1426,6 @@ const [lineups, setLineups] = useState({});
     { id: 'admin', label: 'Admin', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> },
   ];
 
-  const BENCH_SIZE = 8;
 
   const allHalves = useMemo(() => {
     if (!selectedPlayday) return [];
@@ -1469,7 +1532,6 @@ const [lineups, setLineups] = useState({});
       setExpandedPlayer(null);
     }
 
-    logAction('remove_player', { player_name: player.name, player_id: playerId });
   };
 
   // Load all players from global library
@@ -1616,6 +1678,16 @@ const [lineups, setLineups] = useState({});
     });
   }, [players, availability]);
 
+  const getHalfStatus = (playerId, playdayId, matchId, half) =>
+    getAvailabilityStatus(availability, playerId, playdayId, matchId, half);
+
+  const getEligiblePlayersForHalf = (playdayId, matchId, half, mode = 'game') =>
+    players.filter(player => isEligibleForHalf(getHalfStatus(player.id, playdayId, matchId, half), mode));
+
+  const setHalfAvailability = (playerId, playdayId, matchId, half, status) => {
+    setAvailability(prev => ({ ...prev, [availabilityKey(playdayId, matchId, half, playerId)]: status }));
+  };
+
   const calculateScores = (playdayId, matchId, half) => {
     const key = `${playdayId}-${matchId}-${half}`;
     const lineup = lineups[key] || { assignments: {}, bench: [] };
@@ -1706,7 +1778,7 @@ const [lineups, setLineups] = useState({});
       });
     }
 
-    return availablePlayers.map(p => {
+    return getEligiblePlayersForHalf(playdayId, matchId, half, allocationMode).map(p => {
       const trainingKey = `${p.id}-${positionId}`;
       const trained = training[trainingKey] || false;
       const rating = trained ? (ratings[trainingKey] || 0) : 0;
@@ -1888,8 +1960,7 @@ const [lineups, setLineups] = useState({});
     for (const rule of rules.filter(r => r.enabled && r.type === 'SOFT')) {
       switch(rule.id) {
         case 2: // Fair PlayTime (0-100 scale: fewer halves played = higher score)
-          const maxField = Math.max(...Object.values(effectiveFieldHistory), 1);
-          const minField = Math.min(...Object.values(effectiveFieldHistory), 0);
+          const { min: minField, max: maxField } = getHistoryRange(effectiveFieldHistory);
           const playerField = effectiveFieldHistory[player.id] || 0;
           // Inverse: players with fewer halves get higher scores
           const fairnessNormalized = maxField > minField ? ((maxField - playerField) / (maxField - minField)) * 100 : 100;
@@ -1942,6 +2013,7 @@ const [lineups, setLineups] = useState({});
   };
 
   const proposeLineup = (playdayId, matchId, half, mode = allocationMode) => {
+    const eligiblePlayers = getEligiblePlayersForHalf(playdayId, matchId, half, mode);
     const assigned = new Set();
     const newAssignments = {};
     const newBench = [];
@@ -1952,10 +2024,11 @@ const [lineups, setLineups] = useState({});
     // Calculate playday-specific field history for Fair PlayTime HARD constraint
     const playdayFieldHistory = {};
     players.forEach(p => playdayFieldHistory[p.id] = 0);
+    const targetLineupKey = `${playdayId}-${matchId}-${half}`;
     Object.entries(lineups).forEach(([key, lineup]) => {
-      const [lpId, lmId, lhalf] = key.split('-').map(Number);
-      // Only count lineups from the current playday
-      if (lpId === playdayId) {
+      const [lpId] = key.split('-').map(Number);
+      // Only count other lineups from the current playday; never count the target being regenerated.
+      if (lpId === playdayId && key !== targetLineupKey) {
         Object.values(lineup.assignments || {}).forEach(playerId => {
           if (playerId) playdayFieldHistory[playerId] = (playdayFieldHistory[playerId] || 0) + 1;
         });
@@ -1965,7 +2038,7 @@ const [lineups, setLineups] = useState({});
     // Phase 1: Assign field positions
     const unfilledPositions = [];
     positions.forEach(pos => {
-      const candidateScores = availablePlayers
+      const candidateScores = eligiblePlayers
         .filter(p => !assigned.has(p.id))
         .map(p => {
           const { score, explanations } = calculatePlayerPositionScore(p, pos, assigned, activeRules, mode, playdayFieldHistory);
@@ -1993,13 +2066,13 @@ const [lineups, setLineups] = useState({});
 
     // Phase 2: Assign bench (balance both field time AND bench fairness)
     // Calculate actual bench size based on available players
-    const actualBenchSize = Math.max(0, availablePlayers.length - positions.length);
+    const actualBenchSize = Math.max(0, eligiblePlayers.length - positions.length);
 
     // Get Fair PlayTime weight to determine prioritization
     const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
     const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
 
-    const benchCandidates = availablePlayers
+    const benchCandidates = eligiblePlayers
       .filter(p => !assigned.has(p.id))
       .sort((a, b) => {
         const aFieldTime = fieldHistory[a.id] || 0;
@@ -2072,7 +2145,7 @@ const [lineups, setLineups] = useState({});
 
     // Phase 4: Add any remaining unassigned players to bench
     const assignedPlayerIds = new Set([...Object.values(newAssignments), ...newBench]);
-    const remainingPlayers = availablePlayers.filter(p => !assignedPlayerIds.has(p.id));
+    const remainingPlayers = eligiblePlayers.filter(p => !assignedPlayerIds.has(p.id));
     remainingPlayers.forEach(p => {
       newBench.push(p.id);
     });
@@ -2096,140 +2169,65 @@ const [lineups, setLineups] = useState({});
 
   // Auto-propose all halves for the entire game day - FAIRNESS-FIRST APPROACH V2
   const proposeFullDay = (playdayId, mode = allocationMode) => {
-    if (!selectedPlayday) {
-      return;
-    }
+    if (!selectedPlayday) return;
 
-    const allHalvesForDay = selectedPlayday.matches.flatMap(m => [
+    const halves = selectedPlayday.matches.flatMap(m => [
       { matchId: m.id, half: 1 },
       { matchId: m.id, half: 2 },
     ]);
-
-    const availablePlayers = players.filter(p => {
-      const avail = availability[p.id];
-      return !avail || avail === 'available';
-    });
-
-    if (availablePlayers.length === 0) {
-      return;
-    }
-
-    const activeRules = allocationRules[mode];
-    const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
-    const fairPlayWeight = fairPlayRule ? fairPlayRule.weight : 0.8;
-
-    // Calculate ideal field time per player
-    const totalHalves = allHalvesForDay.length;
-    const totalFieldSlots = totalHalves * positions.length;
-    const idealFieldTimePerPlayer = totalFieldSlots / availablePlayers.length;
-
-    // Track field counts for each player during allocation
-    const fieldCounts = {};
-    availablePlayers.forEach(p => fieldCounts[p.id] = 0);
-
-    // Allocate halves iteratively, maintaining fairness at each step
+    const activeRules = allocationRules[mode] || [];
+    const fieldCounts = Object.fromEntries(players.map(p => [p.id, 0]));
+    const benchCounts = Object.fromEntries(players.map(p => [p.id, 0]));
     const newLineupsForDay = {};
     const newExplanationsForDay = {};
 
-    allHalvesForDay.forEach(({ matchId, half }, halfIdx) => {
-      const key = `${playdayId}-${matchId}-${half}`;
-
-      // Calculate fairness scores for this half (how much each player needs field time)
-      const fairnessScores = {};
-      availablePlayers.forEach(p => {
-        const currentRatio = fieldCounts[p.id] / (halfIdx + 1);
-        const targetRatio = idealFieldTimePerPlayer / totalHalves;
-        fairnessScores[p.id] = targetRatio - currentRatio; // Positive = needs more field time
-      });
-
-      // Build candidate assignments for all position-player combinations
-      const candidateAssignments = [];
+    halves.forEach(({ matchId, half }) => {
+      const eligible = getEligiblePlayersForHalf(playdayId, matchId, half, mode);
+      const totalSlotsForDay = halves.reduce((sum, h) => sum + Math.min(positions.length, getEligiblePlayersForHalf(playdayId, h.matchId, h.half, mode).length), 0);
+      const target = eligible.length > 0 ? totalSlotsForDay / Math.max(1, players.filter(p => halves.some(h => getEligiblePlayersForHalf(playdayId, h.matchId, h.half, mode).some(ep => ep.id === p.id))).length) : 0;
+      const candidates = [];
 
       positions.forEach(pos => {
-        availablePlayers.forEach(player => {
-          // Calculate score for this player-position pair
-          const fairPlayTimeContext = {
-            totalPositions: positions.length,
-            totalHalves: totalHalves,
-            availablePlayersCount: availablePlayers.length
-          };
-          const { score: baseScore, explanations } = calculatePlayerPositionScore(
-            player, pos, new Set(), activeRules, mode, fieldCounts, {}, fairPlayTimeContext
-          );
-
-          // Skip if not trained (score will be -Infinity)
-          if (baseScore === -Infinity) {
-            return;
-          }
-
-          // Add fairness component (scaled significantly to prioritize fairness)
-          const fairnessComponent = fairnessScores[player.id] * fairPlayWeight * 50;
-          const totalScore = baseScore + fairnessComponent;
-
-          candidateAssignments.push({
-            player: player,
-            playerId: player.id,
-            pos: pos,
-            posId: pos.id,
-            score: totalScore,
-            baseScore: baseScore,
-            fairnessComponent: fairnessComponent,
-            explanations: explanations
-          });
+        eligible.forEach(player => {
+          const fairPlayTimeContext = { totalPositions: positions.length, totalHalves: halves.length, availablePlayersCount: Math.max(1, eligible.length) };
+          const { score: baseScore, explanations } = calculatePlayerPositionScore(player, pos, new Set(), activeRules, mode, fieldCounts, benchCounts, fairPlayTimeContext);
+          if (baseScore === -Infinity) return;
+          const fairnessComponent = (target - (fieldCounts[player.id] || 0)) * 40;
+          candidates.push({ player, pos, score: baseScore + fairnessComponent, baseScore, explanations });
         });
       });
 
-      // Sort by total score (descending)
-      candidateAssignments.sort((a, b) => b.score - a.score);
-
-      // Greedy assignment: pick best pairs without conflicts
-      const newAssignments = {};
-      const explanationsMap = {};
+      candidates.sort((a, b) => b.score - a.score);
+      const assignments = {};
       const assignedPlayers = new Set();
       const assignedPositions = new Set();
+      const explanationsMap = {};
 
-      candidateAssignments.forEach(candidate => {
-        if (!assignedPlayers.has(candidate.playerId) && !assignedPositions.has(candidate.posId)) {
-          newAssignments[candidate.posId] = candidate.playerId;
-          assignedPlayers.add(candidate.playerId);
-          assignedPositions.add(candidate.posId);
-          explanationsMap[`${candidate.posId}-${candidate.playerId}`] = {
-            position: candidate.pos,
-            player: candidate.player,
-            score: candidate.baseScore,
-            explanations: candidate.explanations
-          };
+      for (const candidate of candidates) {
+        if (assignedPlayers.has(candidate.player.id) || assignedPositions.has(candidate.pos.id)) continue;
+        assignments[candidate.pos.id] = candidate.player.id;
+        assignedPlayers.add(candidate.player.id);
+        assignedPositions.add(candidate.pos.id);
+        fieldCounts[candidate.player.id] = (fieldCounts[candidate.player.id] || 0) + 1;
+        explanationsMap[`${candidate.pos.id}-${candidate.player.id}`] = { position: candidate.pos, player: candidate.player, score: candidate.baseScore, explanations: candidate.explanations };
+        if (assignedPositions.size >= Math.min(positions.length, eligible.length)) break;
+      }
 
-          // Update field count for this player
-          fieldCounts[candidate.playerId]++;
-        }
-      });
+      const bench = eligible
+        .filter(p => !assignedPlayers.has(p.id))
+        .sort((a, b) => (benchCounts[a.id] || 0) - (benchCounts[b.id] || 0) || (fieldCounts[b.id] || 0) - (fieldCounts[a.id] || 0))
+        .map(p => p.id);
+      bench.forEach(id => { benchCounts[id] = (benchCounts[id] || 0) + 1; });
 
-      // Add unassigned players to bench
-      const finalBench = [];
-      availablePlayers.forEach(p => {
-        if (!assignedPlayers.has(p.id)) {
-          finalBench.push(p.id);
-        }
-      });
-
-      // Store lineup
-      newLineupsForDay[key] = { assignments: newAssignments, bench: finalBench };
+      const key = `${playdayId}-${matchId}-${half}`;
+      newLineupsForDay[key] = { assignments, bench };
       newExplanationsForDay[key] = explanationsMap;
     });
 
-    // Apply all lineups at once
     setLineups(prev => ({ ...prev, ...newLineupsForDay }));
     setAllocationExplanations(prev => ({ ...prev, ...newExplanationsForDay }));
-
-    // Log the action
     const playday = playdays.find(pd => pd.id === playdayId);
-    logAction('auto_propose_full_day', {
-      playday: playday?.name,
-      mode: mode,
-      halvesCount: allHalvesForDay.length,
-      matchesCount: selectedPlayday.matches.length
-    });
+    logAction('auto_propose_full_day', { playday: playday?.name, mode, halvesCount: halves.length, matchesCount: selectedPlayday.matches.length });
   };
 
   const handleAssignPlayer = (playerId) => {
@@ -2257,12 +2255,28 @@ const [lineups, setLineups] = useState({});
       }
     }
     
+    if (!isBench) {
+      const status = getHalfStatus(playerId, playdayId, matchId, half);
+      const trainedForPosition = training[`${playerId}-${posId}`] || false;
+      const violations = validateAssignment({
+        status,
+        mode: selectedPlayday?.type === 'training' ? 'training' : 'game',
+        trained: trainedForPosition,
+        duplicate: false,
+      });
+      if (violations.length > 0) {
+        const reason = window.prompt(`Coach override required:\n\n${violations.join("\n")}\n\nEnter an override reason to continue, or Cancel to stop.`);
+        if (!reason?.trim()) return;
+        logAction('coach_override', { player_id: playerId, position_id: posId, playday_id: playdayId, match_id: matchId, half, reason: reason.trim(), violations });
+      }
+    }
+
     updateLineup(playdayId, matchId, half, (prev) => {
       const newAssignments = { ...prev.assignments };
       let newBench = [...(prev.bench || [])];
       Object.keys(newAssignments).forEach(k => { if (newAssignments[k] === playerId) delete newAssignments[k]; });
       newBench = newBench.filter(id => id !== playerId);
-      if (isBench) { if (newBench.length < BENCH_SIZE) newBench.push(playerId); }
+      if (isBench) { if (!newBench.includes(playerId)) newBench.push(playerId); }
       else newAssignments[posId] = playerId;
       return { ...prev, assignments: newAssignments, bench: newBench };
     });
@@ -2373,6 +2387,7 @@ const [lineups, setLineups] = useState({});
   const deletePlayday = (id) => {
     if (playdays.length <= 1) return;
     setPlaydays(playdays.filter(p => p.id !== id));
+    setLineups(prev => cleanupLineupsForPlayday(prev, id));
     if (selectedPlaydayId === id) setSelectedPlaydayId(playdays.find(p => p.id !== id)?.id || 1);
   };
 
@@ -2390,6 +2405,7 @@ const [lineups, setLineups] = useState({});
 
   const deleteMatch = (matchId) => {
     setPlaydays(playdays.map(p => p.id !== selectedPlaydayId ? p : { ...p, matches: p.matches.filter(m => m.id !== matchId) }));
+    setLineups(prev => cleanupLineupsForMatch(prev, selectedPlaydayId, matchId));
   };
 
   const updatePlaydayName = (playdayId, newName) => {
@@ -3403,7 +3419,8 @@ const [lineups, setLineups] = useState({});
     data.push(Array(headerRow.length).fill(''));
 
     // Bench rows
-    for (let i = 0; i < BENCH_SIZE; i++) {
+    const maxBenchSize = Math.max(0, ...matchLineups.flatMap(({ half1, half2 }) => [half1.bench?.length || 0, half2.bench?.length || 0]));
+    for (let i = 0; i < maxBenchSize; i++) {
       const row = [`Bench ${i + 1}`];
       matchLineups.forEach(({ half1, half2 }) => {
         const b1 = players.find(p => p.id === half1.bench?.[i]);
@@ -3457,7 +3474,7 @@ const [lineups, setLineups] = useState({});
         <div className="flex flex-wrap gap-0.5 items-end">
           {positions.map(pos => <PositionBox key={pos.id} pos={pos} player={players.find(p => p.id === lineup.assignments[pos.id])} />)}
           <div className="w-px h-6 bg-gray-300 mx-1 self-end mb-0.5" />
-          {Array.from({ length: BENCH_SIZE }).map((_, idx) => <PositionBox key={`bench-${idx}`} player={players.find(p => p.id === lineup.bench?.[idx])} benchIndex={idx} />)}
+          {Array.from({ length: getDynamicBenchSize(getEligiblePlayersForHalf(selectedPlayday.id, matchId, half, selectedPlayday.type === 'training' ? 'training' : 'game').length, positions.length) }).map((_, idx) => <PositionBox key={`bench-${idx}`} player={players.find(p => p.id === lineup.bench?.[idx])} benchIndex={idx} />)}
         </div>
       );
     };
@@ -3795,6 +3812,24 @@ const [lineups, setLineups] = useState({});
             </div>
           </div>
 
+          <details className="mb-3 bg-white rounded-xl border border-gray-200 p-2">
+            <summary className="cursor-pointer text-xs font-semibold text-gray-700">Attendance for this half</summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 mt-2 max-h-52 overflow-auto">
+              {[...players].sort((a, b) => a.name.localeCompare(b.name)).map(player => (
+                <label key={player.id} className="flex items-center justify-between gap-2 text-[10px] border border-gray-100 rounded px-2 py-1">
+                  <span className="truncate">{player.name}</span>
+                  <select
+                    value={getHalfStatus(player.id, selectedPlayday.id, matchId, half)}
+                    onChange={(e) => setHalfAvailability(player.id, selectedPlayday.id, matchId, half, e.target.value)}
+                    className="border border-gray-200 rounded px-1 py-0.5 bg-white"
+                  >
+                    {availabilityOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </details>
+
           <div className="flex gap-3">
             <div className="flex-1 bg-gradient-to-b from-emerald-600 to-emerald-700 rounded-2xl p-4 shadow-lg">
               <div className="text-center text-[8px] text-white/50 mb-3 tracking-wider">▲ ATTACK</div>
@@ -3805,7 +3840,7 @@ const [lineups, setLineups] = useState({});
               <div className="flex justify-center gap-1 mb-3">{positions.filter(p => p.row === 4).map(pos => <PosButton key={pos.id} pos={pos} />)}</div>
               <div className="flex justify-center mb-3">{positions.filter(p => p.row === 5).map(pos => <PosButton key={pos.id} pos={pos} />)}</div>
               <div className="border-t border-white/40 my-3 mx-4" />
-              <div className="flex justify-center gap-1">{Array.from({ length: BENCH_SIZE }).map((_, idx) => <BenchButton key={idx} idx={idx} />)}</div>
+              <div className="flex justify-center gap-1">{Array.from({ length: getDynamicBenchSize(getEligiblePlayersForHalf(selectedPlayday.id, matchId, half, selectedPlayday.type === 'training' ? 'training' : 'game').length, positions.length) }).map((_, idx) => <BenchButton key={idx} idx={idx} />)}</div>
               <div className="text-center text-[10px] text-white mt-2">
                 {(() => {
                   const allocatedCount = Object.values(lineup.assignments).filter(id => id).length + (lineup.bench?.filter(id => id).length || 0);
@@ -3849,6 +3884,15 @@ const [lineups, setLineups] = useState({});
                           <div className="text-[10px] font-semibold text-gray-700 mb-1">{currentPlayer.name}</div>
                           <div className="text-[9px] text-gray-600 space-y-0.5">
                             <div>Field: {playdayField} | Bench: {playdayBench}</div>
+                            <div className="pt-1">
+                              <select
+                                value={getHalfStatus(currentPlayerId, selectedPlayday.id, matchId, half)}
+                                onChange={(e) => setHalfAvailability(currentPlayerId, selectedPlayday.id, matchId, half, e.target.value)}
+                                className="w-full border border-gray-300 rounded px-1 py-0.5 text-[9px] bg-white"
+                              >
+                                {availabilityOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                              </select>
+                            </div>
                             {!selectedPosition.isBench && <div>At #{positions.find(p => p.id === selectedPosition.posId)?.code}: {playdayAtPosition}×</div>}
                           </div>
                         </div>
@@ -4213,8 +4257,7 @@ const [lineups, setLineups] = useState({});
                         const ratingKey = `${player.id}-${assignment.pos?.id}`;
                         const rating = ratings[ratingKey] || 1;
                         if (rating <= 2) learningCount++;
-                      } else {
-                        // If not on field, count as bench (includes explicit bench and not assigned)
+                      } else if (assignment?.type === 'bench') {
                         totalBench++;
                       }
                     });
@@ -4260,8 +4303,7 @@ const [lineups, setLineups] = useState({});
                       const assignment = getPlayerAssignment(player.id, h.matchId, h.half);
 
                       if (!assignment) {
-                        // Not assigned = counts as bench
-                        return `Match ${h.matchId} H${h.half}: Bench`;
+                        return `Match ${h.matchId} H${h.half}: Not assigned`;
                       }
 
                       if (assignment.type === 'bench') {
@@ -4423,15 +4465,15 @@ const [lineups, setLineups] = useState({});
                     {/* Field Time */}
                     <div className="border border-gray-200 rounded-xl p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-emerald-700">⚽ Field Time</span>
-                        <span className="text-sm font-bold text-emerald-600">40%</span>
+                        <span className="font-semibold text-emerald-700">⚽ Playing Time</span>
+                        <span className="text-sm font-bold text-emerald-600">{satisfactionWeights.playingTime}%</span>
                       </div>
                       <p className="text-xs text-gray-600 mb-2">How much actual playing time the player gets.</p>
                       <div className="bg-gray-50 rounded p-2 font-mono text-xs">
-                        Score = (Field Appearances ÷ Total Halves) × 40
+                        Score = max(0, Field Time Ratio - Bench Penalty) × configured weight
                       </div>
                       <p className="text-xs text-gray-500 mt-1">
-                        Example: 4 field appearances in 6 halves = (4/6) × 40 = 26.7 points
+                        Bench appearances beyond 2 reduce the playing-time component by 10% each.
                       </p>
                     </div>
 
@@ -4439,7 +4481,7 @@ const [lineups, setLineups] = useState({});
                     <div className="border border-gray-200 rounded-xl p-3">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-semibold text-amber-700">😊 Fun Factor</span>
-                        <span className="text-sm font-bold text-amber-600">30%</span>
+                        <span className="text-sm font-bold text-amber-600">{satisfactionWeights.fun}%</span>
                       </div>
                       <p className="text-xs text-gray-600 mb-2">How often the player plays in their favorite positions.</p>
                       <div className="bg-gray-50 rounded p-2 font-mono text-xs">
@@ -4454,7 +4496,7 @@ const [lineups, setLineups] = useState({});
                     <div className="border border-gray-200 rounded-xl p-3">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-semibold text-emerald-700">📚 Learning Opportunities</span>
-                        <span className="text-sm font-bold text-emerald-600">20%</span>
+                        <span className="text-sm font-bold text-emerald-600">{satisfactionWeights.learning}%</span>
                       </div>
                       <p className="text-xs text-gray-600 mb-2">Balanced development through new/challenging positions (≤2 stars).</p>
                       <div className="bg-gray-50 rounded p-2 font-mono text-xs">
@@ -4465,22 +4507,6 @@ const [lineups, setLineups] = useState({});
                         Note: Capped at 20 to balance learning with competence
                       </p>
                     </div>
-
-                    {/* Bench Fairness */}
-                    <div className="border border-gray-200 rounded-xl p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-orange-700">🪑 Bench Fairness</span>
-                        <span className="text-sm font-bold text-orange-600">10%</span>
-                      </div>
-                      <p className="text-xs text-gray-600 mb-2">Fair distribution of bench time across all players.</p>
-                      <div className="bg-gray-50 rounded p-2 font-mono text-xs">
-                        If bench ≤ 2: Score = 10<br/>
-                        If bench > 2: Score = max(0, 10 - (bench - 2) × 3)
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Example: 1 bench = 10 points | 3 bench = 7 points | 5 bench = 1 point
-                      </p>
-                    </div>
                   </div>
                 </div>
 
@@ -4488,10 +4514,10 @@ const [lineups, setLineups] = useState({});
                 <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-4">
                   <h4 className="font-semibold text-gray-900 mb-2">Total Satisfaction Score</h4>
                   <div className="bg-white rounded-lg p-3 font-mono text-sm">
-                    Satisfaction = Field Time + Fun + Learning + Bench Fairness
+                    Satisfaction = Playing Time + Fun + Learning
                   </div>
                   <p className="text-xs text-gray-600 mt-2">
-                    Maximum possible score: 100% (40 + 30 + 20 + 10)
+                    Configured weights should total 100%.
                   </p>
                 </div>
 
@@ -5632,13 +5658,13 @@ const [lineups, setLineups] = useState({});
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
-        {activeTab === 'schedule' && <ScheduleView />}
-        {activeTab === 'squad' && <SquadView />}
-        {activeTab === 'analytics' && <AnalyticsView />}
-        {activeTab === 'lineup' && <LineupView />}
-        {activeTab === 'overview' && <OverviewView />}
-        {activeTab === 'rules' && <RulesView />}
-        {activeTab === 'admin' && <AdminView />}
+        {activeTab === 'schedule' && ScheduleView()}
+        {activeTab === 'squad' && SquadView()}
+        {activeTab === 'analytics' && AnalyticsView()}
+        {activeTab === 'lineup' && LineupView()}
+        {activeTab === 'overview' && OverviewView()}
+        {activeTab === 'rules' && RulesView()}
+        {activeTab === 'admin' && AdminView()}
       </main>
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 shadow-lg">
         <div className="max-w-3xl mx-auto flex gap-1">
