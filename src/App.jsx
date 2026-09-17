@@ -345,7 +345,7 @@ const [lineups, setLineups] = useState({});
   });
 
   // Favorite positions per player (up to 4 positions)
-  const [suitability, setSuitability] = useState({}); // player-position -> 0/1/2/3/10
+  const [suitability, setSuitability] = useState({}); // legacy profile values; 10 is retained as the hard do-not-play block
   const [positionPreferences, setPositionPreferences] = useState({}); // player -> { preference1, preference2 }
   const [publishedHalves, setPublishedHalves] = useState({}); // lineup key -> publication metadata
   const [keyPositionMultiplier, setKeyPositionMultiplier] = useState(1.15);
@@ -2282,7 +2282,7 @@ const [lineups, setLineups] = useState({});
     const trainingKey = `${player.id}-${position.id}`;
     const playerSuitability = getSuitability(player.id, position.id);
     if (playerSuitability === 10) {
-      return { score: -Infinity, explanations: ['❌ Suitability 10: do not play this position (HARD)'] };
+      return { score: -Infinity, explanations: ['❌ Do not play this position (HARD block)'] };
     }
 
     // Apply HARD constraints dynamically based on rule configuration
@@ -2354,12 +2354,11 @@ const [lineups, setLineups] = useState({});
         case 4: // Player Skill (0-100 scale based on rating)
           const rating = ratings[trainingKey] || 0;
           const ratingNormalized = (rating / 5) * 100;
-          const suitabilityNormalized = ({ 0: 10, 1: 100, 2: 65, 3: 30 }[playerSuitability] ?? 0);
-          const strengthNormalized = (ratingNormalized * 0.6) + (suitabilityNormalized * 0.4);
+          const strengthNormalized = ratingNormalized;
           const keyMultiplier = [1, 2, 3, 9, 10, 12].includes(position.id) ? keyPositionMultiplier : 1;
           const strengthScore = (strengthNormalized / 100) * rule.weight * 10 * keyMultiplier;
           score += strengthScore;
-          explanations.push(`Skill (${rating}★, suitability ${playerSuitability})${keyMultiplier > 1 ? ` ×${keyMultiplier.toFixed(2)} key position` : ""}: ${strengthScore.toFixed(2)} pts`);
+          explanations.push(`Skill (${rating}★)${keyMultiplier > 1 ? ` ×${keyMultiplier.toFixed(2)} key position` : ""}: ${strengthScore.toFixed(2)} pts`);
           break;
 
         case 5: // Position Variety (0-100 scale: never played = 100, played 5+ times = near 0)
@@ -2895,7 +2894,7 @@ const [lineups, setLineups] = useState({});
       `Start a new season on ${chosenDate}?\n\n` +
       'These counters will restart from that date:\n' +
       '• halves played\n• bench appearances\n• times played per position\n• fairness/history counters\n\n' +
-      'Ratings, training, suitability, preferences, notes and old match history will NOT be deleted.'
+      'Ratings, training, position blocks, preferences, notes and old match history will NOT be deleted.'
     );
     if (!confirmed) return;
 
@@ -2964,7 +2963,7 @@ const [lineups, setLineups] = useState({});
           if (b.rating !== a.rating) return b.rating - a.rating;
           return a.player.name.localeCompare(b.player.name);
         }),
-        bestFitCount: playersForPosition.filter(p => p.suitability === 1).length,
+        bestFitCount: playersForPosition.filter(p => p.rating === 5).length,
         avgRating: playersForPosition.length > 0
           ? playersForPosition.reduce((sum, p) => sum + p.rating, 0) / playersForPosition.length
           : 0,
@@ -3033,7 +3032,7 @@ const [lineups, setLineups] = useState({});
               <div className="flex-1">
                 <div className="text-xs font-semibold text-red-900">Position Coverage Alert</div>
                 <div className="text-xs text-red-700 mt-1">
-                  Suitability-1 coverage risk at: {weakPositions.map(wp => `#${wp.position.code} ${wp.position.name} (${wp.bestFitCount} best-fit)`).join(', ')}
+                  5-star coverage risk at: {weakPositions.map(wp => `#${wp.position.code} ${wp.position.name} (${wp.bestFitCount} × 5★)`).join(', ')}
                 </div>
               </div>
             </div>
