@@ -52,9 +52,13 @@ export function normalizeSuitability(value: number): Suitability {
   return ([0, 1, 2, 3, 10] as const).includes(value as Suitability) ? value as Suitability : 0;
 }
 
-export function preferenceScore(rank: 1 | 2 | null | undefined) {
+export function preferenceScore(rank: 1 | 2 | 3 | 4 | null | undefined) {
+  // Keep the original first/second preference weighting so existing player
+  // allocations do not suddenly change when upgrading to four favorites.
   if (rank === 1) return 100;
   if (rank === 2) return 60;
+  if (rank === 3) return 35;
+  if (rank === 4) return 15;
   return 0;
 }
 

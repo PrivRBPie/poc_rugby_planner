@@ -26,11 +26,13 @@ describe('planner domain', () => {
   it('returns hard-rule violations for game assignments', () => {
     expect(validateAssignment({ status: 'injured', mode: 'game', trained: false, duplicate: false })).toHaveLength(2);
   });
-  it('supports the formal suitability values and ranked preferences', () => {
+  it('supports the formal suitability values and four ranked favorite positions', () => {
     expect(normalizeSuitability(10)).toBe(10);
     expect(normalizeSuitability(7)).toBe(0);
     expect(preferenceScore(1)).toBe(100);
     expect(preferenceScore(2)).toBe(60);
+    expect(preferenceScore(3)).toBe(35);
+    expect(preferenceScore(4)).toBe(15);
     expect(preferenceScore(null)).toBe(0);
   });
 
