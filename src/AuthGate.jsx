@@ -1,79 +1,143 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 
+async function ensureAnonymousSession() {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+
+  let session = sessionData.session;
+
+  // R8 username/password auth deliberately uses an anonymous Supabase identity.
+  // If a legacy email/phone session exists, discard it so no PII-backed identity is required.
+  if (session && !session.user?.is_anonymous) {
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) throw signOutError;
+    session = null;
+  }
+
+  if (!session) {
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error) throw error;
+    session = data.session;
+  }
+
+  return session;
+}
+
 export default function AuthGate({ children }) {
   const [session, setSession] = useState(undefined);
-  const [email, setEmail] = useState('');
+  const [coach, setCoach] = useState(undefined);
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session || null));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
-    return () => listener.subscription.unsubscribe();
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      try {
+        const nextSession = await ensureAnonymousSession();
+        if (cancelled) return;
+        setSession(nextSession);
+
+        const { data, error } = await supabase.rpc('current_coach');
+        if (cancelled) return;
+
+        if (error) {
+          setCoach(null);
+          setMessage('Username/password login is not configured in the database yet.');
+          return;
+        }
+
+        if (data?.ok) {
+          setCoach(data);
+          localStorage.setItem('rugbyPlannerUsername', data.displayName || data.username || 'Coach');
+        } else {
+          setCoach(null);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setSession(null);
+        setCoach(null);
+        const msg = error?.message || String(error);
+        if (msg.toLowerCase().includes('anonymous')) {
+          setMessage('Anonymous sign-ins must be enabled in Supabase Authentication settings before username login can be used.');
+        } else {
+          setMessage(msg);
+        }
+      }
+    };
+
+    bootstrap();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!cancelled) setSession(nextSession || null);
+    });
+
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
-  if (session === undefined) {
-    return <div className="min-h-screen grid place-items-center bg-slate-50 text-slate-600">Loading…</div>;
-  }
-
-  if (session) {
-    if (!localStorage.getItem('rugbyPlannerUsername')) {
-      localStorage.setItem('rugbyPlannerUsername', session.user.email?.split('@')[0] || 'Coach');
-    }
-    return children;
-  }
-
-  const signInWithPassword = async (event) => {
+  const signIn = async (event) => {
     event.preventDefault();
     setMessage('');
     setIsSubmitting(true);
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+      const nextSession = session?.user?.is_anonymous ? session : await ensureAnonymousSession();
+      setSession(nextSession);
+
+      const { data, error } = await supabase.rpc('coach_login', {
+        p_username: username.trim(),
+        p_password: password,
       });
-      if (error) setMessage(error.message);
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+
+      if (!data?.ok) {
+        setMessage(data?.error || 'Invalid username or password.');
+        return;
+      }
+
+      setCoach(data);
+      localStorage.setItem('rugbyPlannerUsername', data.displayName || data.username || 'Coach');
+      setPassword('');
+    } catch (error) {
+      setMessage(error?.message || String(error));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const sendMagicLink = async () => {
-    setMessage('');
-    if (!email.trim()) {
-      setMessage('Enter your email address first.');
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const redirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: { emailRedirectTo: redirectTo },
-      });
-      setMessage(error ? error.message : 'Check your email for the secure sign-in link.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  if (session === undefined || coach === undefined) {
+    return <div className="min-h-screen grid place-items-center bg-slate-50 text-slate-600">Loading…</div>;
+  }
+
+  if (session && coach?.ok) return children;
 
   return (
     <div className="min-h-screen grid place-items-center bg-slate-50 p-4">
-      <form onSubmit={signInWithPassword} className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-4">
+      <form onSubmit={signIn} className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-4">
         <div className="text-4xl text-center">🏉</div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Rugby Planner</h1>
-          <p className="text-sm text-slate-500">Coach sign-in is required to protect team data.</p>
+          <p className="text-sm text-slate-500">Sign in with your coach username and password.</p>
         </div>
         <input
-          type="email"
+          type="text"
           required
-          autoComplete="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="coach@example.com"
+          autoCapitalize="none"
+          autoCorrect="off"
+          autoComplete="username"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          placeholder="Username"
           className="w-full border border-slate-300 rounded-xl px-3 py-2"
         />
         <input
@@ -92,15 +156,8 @@ export default function AuthGate({ children }) {
         >
           {isSubmitting ? 'Signing in…' : 'Sign in'}
         </button>
-        <button
-          type="button"
-          disabled={isSubmitting}
-          onClick={sendMagicLink}
-          className="w-full rounded-xl border border-slate-300 text-slate-700 font-semibold py-2.5 disabled:opacity-60"
-        >
-          Send magic link instead
-        </button>
         {message && <p className="text-sm text-slate-600">{message}</p>}
+        <p className="text-xs text-slate-400">No email address or phone number is required for coach accounts.</p>
       </form>
     </div>
   );
