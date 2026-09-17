@@ -2454,7 +2454,7 @@ const [lineups, setLineups] = useState({});
 
     // Phase 2: Assign bench (balance both field time AND bench fairness)
     // Calculate actual bench size based on available players
-    const actualBenchSize = Math.max(0, eligiblePlayers.length - positions.length);
+    const actualBenchSize = getDynamicBenchSize(eligiblePlayers.length, positions.length);
 
     // Get Fair PlayTime weight to determine prioritization
     const fairPlayRule = activeRules.find(r => r.id === 2 && r.enabled);
@@ -2535,7 +2535,7 @@ const [lineups, setLineups] = useState({});
     const assignedPlayerIds = new Set([...Object.values(newAssignments), ...newBench]);
     const remainingPlayers = eligiblePlayers.filter(p => !assignedPlayerIds.has(p.id));
     remainingPlayers.forEach(p => {
-      newBench.push(p.id);
+      if (newBench.length < actualBenchSize) newBench.push(p.id);
     });
 
     const key = `${playdayId}-${matchId}-${half}`;
@@ -2605,7 +2605,8 @@ const [lineups, setLineups] = useState({});
       const bench = eligible
         .filter(p => !assignedPlayers.has(p.id))
         .sort((a, b) => (benchCounts[a.id] || 0) - (benchCounts[b.id] || 0) || (fieldCounts[b.id] || 0) - (fieldCounts[a.id] || 0))
-        .map(p => p.id);
+        .map(p => p.id)
+        .slice(0, getDynamicBenchSize(eligible.length, positions.length));
       bench.forEach(id => { benchCounts[id] = (benchCounts[id] || 0) + 1; });
 
       const key = `${playdayId}-${matchId}-${half}`;
@@ -2626,7 +2627,7 @@ const [lineups, setLineups] = useState({});
 
   const handleAssignPlayer = (playerId) => {
     if (!selectedPosition) return;
-    const { playdayId, matchId, half, posId, isBench } = selectedPosition;
+    const { playdayId, matchId, half, posId, isBench, benchIndex } = selectedPosition;
     const assignedInHalf = getAssignedInHalf(playdayId, matchId, half);
     const key = `${playdayId}-${matchId}-${half}`;
     const lineup = lineups[key] || { assignments: {}, bench: [] };
@@ -2671,8 +2672,13 @@ const [lineups, setLineups] = useState({});
       let newBench = [...(prev.bench || [])];
       Object.keys(newAssignments).forEach(k => { if (newAssignments[k] === playerId) delete newAssignments[k]; });
       newBench = newBench.filter(id => id !== playerId);
-      if (isBench) { if (!newBench.includes(playerId)) newBench.push(playerId); }
-      else newAssignments[posId] = playerId;
+      if (isBench) {
+        const mode = selectedPlayday?.type === 'training' ? 'training' : 'game';
+        const maxBenchSize = getDynamicBenchSize(getEligiblePlayersForHalf(playdayId, matchId, half, mode).length, positions.length);
+        if (benchIndex !== undefined && benchIndex < maxBenchSize) newBench[benchIndex] = playerId;
+        else if (!newBench.includes(playerId) && newBench.length < maxBenchSize) newBench.push(playerId);
+        newBench = newBench.filter(Boolean).slice(0, maxBenchSize);
+      } else newAssignments[posId] = playerId;
       return { ...prev, assignments: newAssignments, bench: newBench };
     });
   };
