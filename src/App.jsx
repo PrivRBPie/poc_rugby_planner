@@ -1516,39 +1516,72 @@ const [lineups, setLineups] = useState({});
     ]);
   }, [selectedPlayday]);
 
+  const getFavoritePositionsForPlayer = (playerId) => {
+    const favorites = favoritePositions[playerId] || favoritePositions[String(playerId)] || [];
+    if (favorites.length > 0) return favorites.slice(0, 4);
+
+    // Backwards compatibility for data saved by the temporary two-dropdown UI.
+    const prefs = positionPreferences[playerId] || positionPreferences[String(playerId)] || {};
+    return [prefs.preference1, prefs.preference2].filter(Boolean).slice(0, 4);
+  };
+
   const getPreferenceRank = (playerId, positionId) => {
-    const prefs = positionPreferences[playerId] || positionPreferences[String(playerId)];
-    if (prefs?.preference1 === positionId) return 1;
-    if (prefs?.preference2 === positionId) return 2;
-    const legacy = favoritePositions[playerId] || [];
-    const index = legacy.indexOf(positionId);
-    return index >= 0 && index < 2 ? index + 1 : null;
+    const favorites = getFavoritePositionsForPlayer(playerId);
+    const index = favorites.indexOf(positionId);
+    return index >= 0 ? index + 1 : null;
   };
 
   const isFavoritePosition = (playerId, positionId) => getPreferenceRank(playerId, positionId) !== null;
 
-  const setPreference = (playerId, rank, positionId) => {
-    const parsed = positionId ? Number(positionId) : null;
-    setPositionPreferences(prev => {
-      const current = prev[playerId] || { preference1: null, preference2: null };
-      const next = { ...current, [rank === 1 ? 'preference1' : 'preference2']: parsed };
-      if (next.preference1 && next.preference1 === next.preference2) {
-        next[rank === 1 ? 'preference2' : 'preference1'] = null;
+  const toggleFavoritePosition = (playerId, positionId) => {
+    const current = getFavoritePositionsForPlayer(playerId);
+    let next;
+
+    if (current.includes(positionId)) {
+      next = current.filter(id => id !== positionId);
+    } else {
+      if (current.length >= 4) {
+        alert('You can select up to 4 favorite positions. Deselect one first.');
+        return;
       }
-      setFavoritePositions(fav => ({ ...fav, [playerId]: [next.preference1, next.preference2].filter(Boolean) }));
-      return { ...prev, [playerId]: next };
-    });
+      next = [...current, positionId];
+    }
+
+    setFavoritePositions(prev => ({ ...prev, [playerId]: next }));
+    // Keep the first two mirrored for compatibility with older scoring/data exports.
+    setPositionPreferences(prev => ({
+      ...prev,
+      [playerId]: {
+        preference1: next[0] || null,
+        preference2: next[1] || null,
+      },
+    }));
   };
 
   const getSuitability = (playerId, positionId) => {
     const key = `${playerId}-${positionId}`;
-    if (suitability[key] !== undefined) return normalizeSuitability(suitability[key]);
-    return training[key] ? 2 : 0;
+    const explicit = suitability[key] !== undefined ? normalizeSuitability(suitability[key]) : 0;
+
+    // Suitability is now driven by the intuitive 1-5 star rating.
+    // The only separate suitability state we retain is the explicit hard block.
+    if (explicit === 10) return 10;
+    if (!training[key]) return 0;
+
+    const rating = Number(ratings[key] || 0);
+    if (rating >= 5) return 1; // best fit
+    if (rating >= 3) return 2; // suitable / OK
+    return 3;                  // weak fit / use with attention
   };
 
-  const setPositionSuitability = (playerId, positionId, value) => {
+  const toggleDoNotPlayPosition = (playerId, positionId) => {
     const key = `${playerId}-${positionId}`;
-    setSuitability(prev => ({ ...prev, [key]: normalizeSuitability(Number(value)) }));
+    setSuitability(prev => {
+      const next = { ...prev };
+      const current = next[key] !== undefined ? normalizeSuitability(next[key]) : 0;
+      if (current === 10) delete next[key];
+      else next[key] = 10;
+      return next;
+    });
   };
 
   const removePlayer = async (playerId) => {
@@ -3693,27 +3726,32 @@ const [lineups, setLineups] = useState({});
                     </div>
                   </div>
 
-                  <div className="text-xs font-medium text-gray-500 mt-3 mb-1">Ranked Position Preferences</div>
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    {[1, 2].map(rank => {
-                      const prefs = positionPreferences[player.id] || derivePreferences({ [player.id]: favoritePositions[player.id] || [] })[player.id] || {};
-                      const value = rank === 1 ? prefs.preference1 : prefs.preference2;
+                  <div className="text-xs font-medium text-gray-500 mt-3 mb-1">Favorite Positions</div>
+                  <p className="text-[10px] text-gray-400 mb-2">Tap up to 4 positions. The small number shows preference order.</p>
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {positions.map(pos => {
+                      const rank = getPreferenceRank(player.id, pos.id);
+                      const selected = rank !== null;
                       return (
-                        <label key={rank} className="text-[10px] text-gray-500">
-                          Preference {rank}
-                          <select
-                            value={value || ''}
-                            onChange={(e) => setPreference(player.id, rank, e.target.value)}
-                            className="mt-1 w-full bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-800"
-                          >
-                            <option value="">None</option>
-                            {positions.map(pos => <option key={pos.id} value={pos.id}>#{pos.code} {pos.name}</option>)}
-                          </select>
-                        </label>
+                        <button
+                          key={pos.id}
+                          type="button"
+                          onClick={() => toggleFavoritePosition(player.id, pos.id)}
+                          className={`relative min-w-10 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all ${selected ? 'bg-yellow-50 border-yellow-400 text-yellow-800 shadow-sm' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                          title={`${pos.name}${selected ? ` · preference ${rank}` : ''}`}
+                        >
+                          #{pos.code}
+                          {selected && (
+                            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-yellow-500 text-white text-[9px] flex items-center justify-center">
+                              {rank}
+                            </span>
+                          )}
+                        </button>
                       );
                     })}
                   </div>
-                  <div className="text-xs font-medium text-gray-500 mb-2">Position Training, Suitability & Ratings</div>
+                  <div className="text-xs font-medium text-gray-500 mb-1">Position Training & Rating</div>
+                  <p className="text-[10px] text-gray-400 mb-2">1★ = avoid if possible · 3★ = suitable · 5★ = excellent. Use “Do not play” only for a hard block.</p>
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {positions.map(pos => {
                       const key = `${player.id}-${pos.id}`;
@@ -3730,18 +3768,14 @@ const [lineups, setLineups] = useState({});
                           </div>
                           <div className="text-[10px] text-gray-500 mb-1">{pos.name}</div>
                           {timesPlayed > 0 && <div className="text-[10px] text-emerald-600 mb-1">{timesPlayed}× played</div>}
-                          <select
-                            value={positionSuitability}
-                            onChange={(e) => setPositionSuitability(player.id, pos.id, e.target.value)}
-                            className={`w-full mb-1 text-[9px] border rounded px-1 py-1 ${positionSuitability === 10 ? "bg-red-100 border-red-300 text-red-800" : "bg-white border-gray-200 text-gray-700"}`}
-                            title="Suitability: 0 test, 1 best fit, 2 OK, 3 needs attention, 10 do not play"
+                          <button
+                            type="button"
+                            onClick={() => toggleDoNotPlayPosition(player.id, pos.id)}
+                            className={`w-full mb-1 text-[9px] border rounded px-1.5 py-1 font-semibold transition-colors ${positionSuitability === 10 ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                            title={positionSuitability === 10 ? 'Hard block: this player must not play this position' : 'Set a hard block for this position'}
                           >
-                            <option value="0">S0 · test</option>
-                            <option value="1">S1 · best fit</option>
-                            <option value="2">S2 · OK</option>
-                            <option value="3">S3 · attention</option>
-                            <option value="10">S10 · do not play</option>
-                          </select>
+                            {positionSuitability === 10 ? '⛔ Do not play' : 'Position allowed'}
+                          </button>
                           <button onClick={() => handleTrainingToggle(player.id, pos.id)} className={`text-[10px] px-2 py-1 rounded-full transition-all w-full mb-1.5 font-medium ${trained ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'}`}>{trained ? '✓ Trained' : 'Not trained'}</button>
                           {trained && <div className="flex justify-center"><StarRating value={rating} onChange={(v) => handleRatingChange(player.id, pos.id, v)} /></div>}
                         </div>
