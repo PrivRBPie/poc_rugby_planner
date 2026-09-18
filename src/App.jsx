@@ -1560,6 +1560,72 @@ const [lineups, setLineups] = useState({});
     }
   };
 
+  const deleteTeam = async (team) => {
+    if (!isAdmin || !team) return;
+
+    if (teams.length <= 1) {
+      alert('The final remaining team cannot be deleted.');
+      return;
+    }
+
+    const confirmation = window.prompt(
+      `Delete "${team.name}" permanently?\n\nThis deletes the team's planner data, schedules, lineups and team memberships. Global player records are kept.\n\nType the team name exactly to confirm:`
+    );
+
+    if (confirmation === null) return;
+    if (confirmation.trim() !== team.name) {
+      alert('Team name did not match. Nothing was deleted.');
+      return;
+    }
+
+    try {
+      setIsSyncing(true);
+
+      const { data: result, error } = await supabase.rpc('admin_delete_team', {
+        p_team_id: team.id
+      });
+
+      if (error) throw error;
+      if (!result?.ok) throw new Error(result?.error || 'Team could not be deleted.');
+
+      const remainingTeams = teams.filter(existingTeam => existingTeam.id !== team.id);
+      setTeams(remainingTeams);
+
+      const fallbackTeam = remainingTeams.find(existingTeam => existingTeam.id === result.fallbackTeamId)
+        || remainingTeams[0];
+
+      if (localStorage.getItem('rugbyPlannerLastTeamId') === team.id) {
+        if (fallbackTeam) localStorage.setItem('rugbyPlannerLastTeamId', fallbackTeam.id);
+        else localStorage.removeItem('rugbyPlannerLastTeamId');
+      }
+
+      if (localStorage.getItem('rugbyPlannerPrimaryTeamId') === team.id) {
+        if (fallbackTeam) localStorage.setItem('rugbyPlannerPrimaryTeamId', fallbackTeam.id);
+        else localStorage.removeItem('rugbyPlannerPrimaryTeamId');
+      }
+
+      logAction('delete_team', {
+        team_id: team.id,
+        team_name: team.name
+      });
+
+      if (currentTeamId === team.id && fallbackTeam) {
+        setHasUnsavedChanges(false);
+        setHasLoaded(false);
+        localStorage.setItem('rugbyPlannerLastTeamId', fallbackTeam.id);
+        setCurrentTeamId(fallbackTeam.id);
+        await loadTeamData(fallbackTeam.id, fallbackTeam.name);
+      }
+
+      alert(`Team "${team.name}" deleted.`);
+    } catch (err) {
+      console.error('Error deleting team:', err);
+      alert(`Error deleting team: ${err.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const tabs = [
     { id: 'squad', label: 'Squad', icon: <Icons.Users /> },
     { id: 'analytics', label: 'Analytics', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> },
@@ -5319,6 +5385,60 @@ const [lineups, setLineups] = useState({});
           <p className="text-sm text-gray-500">Login activity and system overview</p>
         </div>
 
+        {/* Team Management */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="p-4 border-b border-gray-200 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Team Management</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Create teams or permanently remove teams that are no longer needed.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCreateTeam(true)}
+              className="shrink-0 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+            >
+              + Create Team
+            </button>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {[...teams].sort((a, b) => a.name.localeCompare(b.name)).map(team => (
+              <div key={team.id} className="p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden bg-gray-50 border border-gray-200">
+                  {getTeamLogo(team.name) ? (
+                    <img src={getTeamLogo(team.name)} alt={team.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-xl">{team.logo || '🏉'}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm text-gray-900">{team.name}</span>
+                    {team.id === currentTeamId && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">
+                    {team.id}
+                  </div>
+                </div>
+                <button
+                  onClick={() => deleteTeam(team)}
+                  disabled={isSyncing || teams.length <= 1}
+                  className="shrink-0 px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={teams.length <= 1 ? 'The final remaining team cannot be deleted' : `Delete ${team.name}`}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="px-4 py-3 bg-red-50 border-t border-red-100 text-xs text-red-700">
+            Deleting a team is permanent. The team&apos;s schedules, lineups and planner data are deleted; global player records are retained.
+          </div>
+        </div>
 
         {/* Currently Online */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm p-4">
