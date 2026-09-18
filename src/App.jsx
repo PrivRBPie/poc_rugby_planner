@@ -645,9 +645,11 @@ const [lineups, setLineups] = useState({});
               keyPositionMultiplier: JSON.stringify(rugbyData.keyPositionMultiplier || 1.15),
               allocationRules: JSON.stringify(rugbyData.allocationRules || allocationRules),
               availability: JSON.stringify(rugbyData.availability || {}),
-              learningPlayerConfig: JSON.stringify(learningPlayerConfig),
-              satisfactionWeights: JSON.stringify(satisfactionWeights),
-              playerNotes: JSON.stringify(playerNotes),
+              learningPlayerConfig: JSON.stringify(rugbyData.learningPlayerConfig || { maxStars: 2, maxGames: 5 }),
+              satisfactionWeights: JSON.stringify(rugbyData.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 }),
+              playerNotes: JSON.stringify(rugbyData.playerNotes || {}),
+              inactivePlayerIds: JSON.stringify(rugbyData.inactivePlayerIds || []),
+              seasonStartDate: JSON.stringify(rugbyData.seasonStartDate || null),
             });
           }
 
@@ -1146,9 +1148,11 @@ const [lineups, setLineups] = useState({});
           keyPositionMultiplier: JSON.stringify(rugbyData.keyPositionMultiplier || 1.15),
           allocationRules: JSON.stringify(newAllocationRules),
           availability: JSON.stringify(newAvailability),
-          learningPlayerConfig: JSON.stringify(learningPlayerConfig),
-          satisfactionWeights: JSON.stringify(satisfactionWeights),
-              playerNotes: JSON.stringify(playerNotes),
+          learningPlayerConfig: JSON.stringify(rugbyData.learningPlayerConfig || { maxStars: 2, maxGames: 5 }),
+          satisfactionWeights: JSON.stringify(rugbyData.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 }),
+          playerNotes: JSON.stringify(rugbyData.playerNotes || {}),
+          inactivePlayerIds: JSON.stringify(rugbyData.inactivePlayerIds || []),
+          seasonStartDate: JSON.stringify(rugbyData.seasonStartDate || null),
         });
       }
     } catch (error) {
@@ -1263,7 +1267,9 @@ const [lineups, setLineups] = useState({});
           availability: JSON.stringify(availability),
           learningPlayerConfig: JSON.stringify(learningPlayerConfig),
           satisfactionWeights: JSON.stringify(satisfactionWeights),
-              playerNotes: JSON.stringify(playerNotes),
+          playerNotes: JSON.stringify(playerNotes),
+          inactivePlayerIds: JSON.stringify(inactivePlayerIds),
+          seasonStartDate: JSON.stringify(seasonStartDate),
         });
       }
     } catch (error) {
@@ -1303,7 +1309,9 @@ const [lineups, setLineups] = useState({});
       availability: JSON.stringify(availability),
       learningPlayerConfig: JSON.stringify(learningPlayerConfig),
       satisfactionWeights: JSON.stringify(satisfactionWeights),
-              playerNotes: JSON.stringify(playerNotes),
+      playerNotes: JSON.stringify(playerNotes),
+      inactivePlayerIds: JSON.stringify(inactivePlayerIds),
+      seasonStartDate: JSON.stringify(seasonStartDate),
     };
 
     const hasChanges = Object.keys(currentState).some(key => currentState[key] !== initialState[key]);
@@ -1321,7 +1329,7 @@ const [lineups, setLineups] = useState({});
       changedKeys
     });
     setHasUnsavedChanges(hasChanges);
-  }, [players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes, hasLoaded, initialState]);
+  }, [players, playdays, lineups, ratings, training, favoritePositions, suitability, positionPreferences, publishedHalves, keyPositionMultiplier, allocationRules, availability, learningPlayerConfig, satisfactionWeights, playerNotes, inactivePlayerIds, seasonStartDate, hasLoaded, initialState]);
 
   // Helper function to get current team
   const getCurrentTeam = () => {
@@ -1530,6 +1538,7 @@ const [lineups, setLineups] = useState({});
       setPlayerNotes(restored.playerNotes ?? playerNotes);
       setInactivePlayerIds(restored.inactivePlayerIds || []);
       setSeasonStartDate(restored.seasonStartDate || null);
+      setHasUnsavedChanges(true);
       setFullBackupCreatedAt(null);
 
       alert('✅ Current-team backup loaded into the app. Click Save to persist it.');
@@ -1607,6 +1616,9 @@ const [lineups, setLineups] = useState({});
           setKeyPositionMultiplier(1.15);
           setAllocationRules(initialData.allocationRules);
           setAvailability({});
+          setLearningPlayerConfig(initialData.learningPlayerConfig);
+          setSatisfactionWeights(initialData.satisfactionWeights);
+          setPlayerNotes({});
           setInactivePlayerIds([]);
           setSeasonStartDate(null);
           setRemoteUpdatedAt(newData.updated_at);
@@ -1625,9 +1637,11 @@ const [lineups, setLineups] = useState({});
             keyPositionMultiplier: JSON.stringify(1.15),
             allocationRules: JSON.stringify(initialData.allocationRules),
             availability: JSON.stringify({}),
-            learningPlayerConfig: JSON.stringify(learningPlayerConfig),
-            satisfactionWeights: JSON.stringify(satisfactionWeights),
-              playerNotes: JSON.stringify(playerNotes),
+            learningPlayerConfig: JSON.stringify(initialData.learningPlayerConfig),
+            satisfactionWeights: JSON.stringify(initialData.satisfactionWeights),
+            playerNotes: JSON.stringify({}),
+            inactivePlayerIds: JSON.stringify([]),
+            seasonStartDate: JSON.stringify(null),
           });
         }
       } else if (!error) {
@@ -1726,6 +1740,8 @@ const [lineups, setLineups] = useState({});
           learningPlayerConfig: JSON.stringify(rugbyData.data.learningPlayerConfig || { maxStars: 2, maxGames: 5 }),
           satisfactionWeights: JSON.stringify(rugbyData.data.satisfactionWeights || { playingTime: 50, fun: 30, learning: 20 }),
           playerNotes: JSON.stringify(rugbyData.data.playerNotes || {}),
+          inactivePlayerIds: JSON.stringify(rugbyData.data.inactivePlayerIds || []),
+          seasonStartDate: JSON.stringify(rugbyData.data.seasonStartDate || null),
         });
       }
 
