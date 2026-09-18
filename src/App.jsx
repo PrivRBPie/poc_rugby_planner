@@ -1279,7 +1279,7 @@ const [lineups, setLineups] = useState({});
   };
 
   // Team management functions
-  const loadTeamData = async (teamId) => {
+  const loadTeamData = async (teamId, teamNameOverride = null) => {
     try {
       setIsSyncing(true);
 
@@ -1313,7 +1313,7 @@ const [lineups, setLineups] = useState({});
 
         const { data: newData, error: insertError } = await supabase
           .from('rugby_data')
-          .insert({ team_id: teamId, team_name: getCurrentTeam()?.name || 'New Team', data: initialData })
+          .insert({ team_id: teamId, team_name: teamNameOverride || getCurrentTeam()?.name || 'New Team', data: initialData })
           .select()
           .single();
 
@@ -1463,7 +1463,7 @@ const [lineups, setLineups] = useState({});
     }
   };
 
-  const switchTeam = async (teamId) => {
+  const switchTeam = async (teamId, teamNameOverride = null) => {
     // Check for unsaved changes
     if (hasUnsavedChanges) {
       const confirm = window.confirm(
@@ -1481,27 +1481,24 @@ const [lineups, setLineups] = useState({});
     setHasUnsavedChanges(false);
 
     // Load team's rugby_data
-    await loadTeamData(teamId);
+    await loadTeamData(teamId, teamNameOverride);
   };
 
   const createTeam = async (teamName, teamLogo) => {
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError || !authData.user) throw authError || new Error('You must be signed in to create a team.');
+      if (!isAdmin) throw new Error('Admin access required.');
 
-      const { data: newTeam, error } = await supabase
-        .from('teams')
-        .insert({ name: teamName, logo: teamLogo, created_by: currentUsername || authData.user.email || 'coach', owner_id: authData.user.id })
-        .select()
-        .single();
+      const { data: result, error } = await supabase.rpc('admin_create_team', {
+        p_name: teamName,
+        p_logo: teamLogo
+      });
       if (error) throw error;
+      if (!result?.ok) throw new Error(result?.error || 'Team could not be created.');
 
-      const { error: memberError } = await supabase.from('team_members').insert({ team_id: newTeam.id, user_id: authData.user.id, role: 'admin' });
-      if (memberError) throw memberError;
-
-      setTeams(prev => [...prev, newTeam]);
+      const newTeam = result.team;
+      setTeams(prev => prev.some(team => team.id === newTeam.id) ? prev : [...prev, newTeam]);
       logAction('create_team', { team_name: teamName, team_logo: teamLogo });
-      await switchTeam(newTeam.id);
+      await switchTeam(newTeam.id, newTeam.name);
     } catch (err) {
       console.error('Error creating team:', err);
       alert(`Error creating team: ${err.message}`);
@@ -6215,17 +6212,19 @@ const [lineups, setLineups] = useState({});
                     </button>
                   ))}
 
-                  {/* Create New Team */}
-                  <button
-                    onClick={() => {
-                      setShowTeamManager(false);
-                      setShowCreateTeam(true);
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 border-t-2 border-gray-200 bg-gray-50 hover:bg-blue-50 text-blue-600 font-semibold text-sm"
-                  >
-                    <span className="text-2xl">➕</span>
-                    <span>Create New Team</span>
-                  </button>
+                  {/* Create New Team - admins only */}
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        setShowTeamManager(false);
+                        setShowCreateTeam(true);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 border-t-2 border-gray-200 bg-gray-50 hover:bg-blue-50 text-blue-600 font-semibold text-sm"
+                    >
+                      <span className="text-2xl">➕</span>
+                      <span>Create New Team</span>
+                    </button>
+                  )}
                 </div>
               </>
             )}
