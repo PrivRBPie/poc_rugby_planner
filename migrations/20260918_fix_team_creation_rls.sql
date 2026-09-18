@@ -2,6 +2,8 @@
 -- Creates teams through an admin-only SECURITY DEFINER RPC and keeps
 -- coach_team_access / team_members aligned for new and existing teams.
 
+begin;
+
 -- Repair access for any teams that were created before this migration but did not
 -- receive materialized membership because the browser-side team_members insert
 -- was blocked by RLS.
@@ -131,3 +133,5 @@ $$;
 
 revoke all on function public.admin_create_team(text, text) from public, anon;
 grant execute on function public.admin_create_team(text, text) to authenticated;
+
+commit;
