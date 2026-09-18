@@ -3939,13 +3939,35 @@ const [lineups, setLineups] = useState({});
 
     const teamName = (getCurrentTeam()?.name || 'TEAM').toUpperCase();
     const matches = selectedPlayday.matches;
+    const playdayMode = selectedPlayday.type === 'training' ? 'training' : 'game';
 
-    // Pre-compute lineup lookups per match
-    const matchLineups = matches.map(match => ({
-      half1: lineups[`${selectedPlayday.id}-${match.id}-1`] || { assignments: {}, bench: [] },
-      half2: lineups[`${selectedPlayday.id}-${match.id}-2`] || { assignments: {}, bench: [] },
-      label: match.opponent || `Game ${match.number}`,
-    }));
+    // Use the same normalized lineups and visible bench calculation as the app
+    // so the Excel export mirrors what the coach sees on screen.
+    const matchLineups = matches.map(match => {
+      const half1 = normalizeLineupBench(
+        selectedPlayday.id,
+        match.id,
+        1,
+        lineups[`${selectedPlayday.id}-${match.id}-1`] || { assignments: {}, bench: [] }
+      );
+      const half2 = normalizeLineupBench(
+        selectedPlayday.id,
+        match.id,
+        2,
+        lineups[`${selectedPlayday.id}-${match.id}-2`] || { assignments: {}, bench: [] }
+      );
+
+      const half1EligibleCount = getEligiblePlayersForHalf(selectedPlayday.id, match.id, 1, playdayMode).length;
+      const half2EligibleCount = getEligiblePlayersForHalf(selectedPlayday.id, match.id, 2, playdayMode).length;
+
+      return {
+        half1,
+        half2,
+        half1BenchSize: getVisibleBenchSize(half1EligibleCount, half1.assignments, half1.bench),
+        half2BenchSize: getVisibleBenchSize(half2EligibleCount, half2.assignments, half2.bench),
+        label: match.opponent || `Game ${match.number}`,
+      };
+    });
 
     // Header row: Team name | Opp1 | Opp1.2 | Opp2 | Opp2.2 | ...
     const headerRow = [teamName];
@@ -3955,9 +3977,9 @@ const [lineups, setLineups] = useState({});
     });
     const data = [headerRow];
 
-    // Position rows
+    // Position rows - include both number and rugby position name.
     positions.forEach((pos) => {
-      const row = [pos.code];
+      const row = [`${pos.code} - ${pos.name}`];
       matchLineups.forEach(({ half1, half2 }) => {
         const p1 = players.find(p => p.id === half1.assignments[pos.id]);
         const p2 = players.find(p => p.id === half2.assignments[pos.id]);
@@ -3970,23 +3992,31 @@ const [lineups, setLineups] = useState({});
     // Empty separator row before bench
     data.push(Array(headerRow.length).fill(''));
 
-    // Bench rows
-    const maxBenchSize = Math.max(0, ...matchLineups.flatMap(({ half1, half2 }) => [half1.bench?.length || 0, half2.bench?.length || 0]));
+    // Bench rows: use the number of visible bench slots from the app rather than
+    // only the number of currently populated bench entries.
+    const maxBenchSize = Math.max(
+      0,
+      ...matchLineups.flatMap(({ half1BenchSize, half2BenchSize }) => [half1BenchSize, half2BenchSize])
+    );
+
     for (let i = 0; i < maxBenchSize; i++) {
       const row = [`Bench ${i + 1}`];
-      matchLineups.forEach(({ half1, half2 }) => {
-        const b1 = players.find(p => p.id === half1.bench?.[i]);
-        const b2 = players.find(p => p.id === half2.bench?.[i]);
-        row.push(b1 ? b1.name.split(' ')[0] : '-');
-        row.push(b2 ? b2.name.split(' ')[0] : '-');
+      matchLineups.forEach(({ half1, half2, half1BenchSize, half2BenchSize }) => {
+        const half1HasSlot = i < half1BenchSize;
+        const half2HasSlot = i < half2BenchSize;
+        const b1 = half1HasSlot ? players.find(p => p.id === half1.bench?.[i]) : null;
+        const b2 = half2HasSlot ? players.find(p => p.id === half2.bench?.[i]) : null;
+
+        row.push(half1HasSlot ? (b1 ? b1.name.split(' ')[0] : '-') : '');
+        row.push(half2HasSlot ? (b2 ? b2.name.split(' ')[0] : '-') : '');
       });
       data.push(row);
     }
 
     const ws = XLSX.utils.aoa_to_sheet(data);
 
-    // Set column widths: first col narrow, rest equal
-    ws['!cols'] = [{ wch: 10 }, ...Array(headerRow.length - 1).fill({ wch: 14 })];
+    // Wider first column for labels such as "12 - Inside Centre".
+    ws['!cols'] = [{ wch: 22 }, ...Array(headerRow.length - 1).fill({ wch: 14 })];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Lineup');
