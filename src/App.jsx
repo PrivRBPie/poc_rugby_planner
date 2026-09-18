@@ -2013,37 +2013,41 @@ const [lineups, setLineups] = useState({});
         if (!shouldCreateSeparate) return;
       }
 
-      const { data: newPlayerRecord, error: createError } = await supabase
-        .from('players')
-        .insert({
-          name: normalizedName,
-          mini_year: miniYear,
-          created_by: currentUsername || 'anonymous'
-        })
-        .select()
-        .single();
+      const { data: createResult, error: createError } = await supabase.rpc('coach_create_or_get_player', {
+        p_name: normalizedName,
+        p_mini_year: miniYear,
+        p_created_by: currentUsername || 'coach'
+      });
 
       if (createError) throw createError;
+      if (!createResult?.ok) throw new Error(createResult?.error || 'Player could not be created.');
 
+      const newPlayerRecord = createResult.player;
+
+      // If another coach created the same exact name between our UI check and
+      // this click, the RPC returns that canonical player instead of creating a duplicate.
       const { error: linkError } = await supabase
         .from('team_players')
-        .insert({
+        .upsert({
           team_id: currentTeamId,
           player_id: newPlayerRecord.id,
           added_by: currentUsername || 'anonymous'
-        });
+        }, { onConflict: 'team_id,player_id' });
 
       if (linkError) throw linkError;
 
-      setPlayers(prev => [...prev, {
-        id: newPlayerRecord.id,
-        name: newPlayerRecord.name,
-        miniYear: newPlayerRecord.mini_year
-      }]);
+      setPlayers(prev => prev.some(player => player.id === newPlayerRecord.id)
+        ? prev
+        : [...prev, {
+            id: newPlayerRecord.id,
+            name: newPlayerRecord.name,
+            miniYear: newPlayerRecord.mini_year
+          }]
+      );
 
       await loadAllPlayers();
 
-      logAction('create_and_add_player', {
+      logAction(createResult.existing ? 'add_existing_player' : 'create_and_add_player', {
         player_name: newPlayerRecord.name,
         player_id: newPlayerRecord.id
       });
