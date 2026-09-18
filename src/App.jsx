@@ -3,7 +3,7 @@ import bullsLogo from './assets/bulls.svg';
 import sharksLogo from './assets/sharks.svg';
 import diokLogo from './assets/diok.svg';
 import { supabase, supabaseConfig } from './supabaseClient';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { availabilityKey, getAvailabilityStatus, isEligibleForHalf, getDynamicBenchSize, cleanupLineupsForPlayday, cleanupLineupsForMatch, getHistoryRange, validateLineupForPublish, normalizeAvailabilityStatus, normalizeSuitability, preferenceScore } from './domain/planner';
 import { loadOfflineSnapshot, saveOfflineSnapshot } from './offlineStore';
 import CoachAccessPanel from './CoachAccessPanel';
@@ -4018,6 +4018,12 @@ const [lineups, setLineups] = useState({});
     const ws = XLSX.utils.aoa_to_sheet(data);
     ws['!cols'] = [{ wch: 22 }, ...Array(headerRow.length - 1).fill({ wch: 20 })];
 
+    // Bold the main Lineup header row.
+    for (let col = 0; col < headerRow.length; col++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (ws[cellRef]) ws[cellRef].s = { font: { bold: true } };
+    }
+
     // ==================== MOBILE VIEW SHEET ====================
     // A narrow, vertical two-column layout that is much easier to read on a phone.
     const mobileData = [
@@ -4025,16 +4031,19 @@ const [lineups, setLineups] = useState({});
       [selectedPlayday.name || 'Playday', selectedPlayday.date || ''],
       ['', ''],
     ];
+    const mobileBoldRows = new Set([0]);
 
     const addMobileHalf = (matchLineup, halfNumber) => {
       const lineup = halfNumber === 1 ? matchLineup.half1 : matchLineup.half2;
       const benchSize = halfNumber === 1 ? matchLineup.half1BenchSize : matchLineup.half2BenchSize;
       const typeLabel = selectedPlayday.type === 'training' ? 'Training' : 'Game';
 
+      mobileBoldRows.add(mobileData.length);
       mobileData.push([
         `${typeLabel} ${matchLineup.number} · ${matchLineup.label}`,
         `Half ${halfNumber}`,
       ]);
+      mobileBoldRows.add(mobileData.length);
       mobileData.push(['Position', 'Player']);
 
       positions.forEach((pos) => {
@@ -4042,6 +4051,7 @@ const [lineups, setLineups] = useState({});
         mobileData.push([`${pos.code} - ${pos.name}`, player ? player.name : '-']);
       });
 
+      mobileBoldRows.add(mobileData.length);
       mobileData.push(['BENCH', '']);
       for (let i = 0; i < benchSize; i++) {
         const benchPlayer = players.find(p => p.id === lineup.bench?.[i]);
@@ -4059,6 +4069,14 @@ const [lineups, setLineups] = useState({});
 
     const mobileWs = XLSX.utils.aoa_to_sheet(mobileData);
     mobileWs['!cols'] = [{ wch: 24 }, { wch: 28 }];
+
+    // Bold section headers in Mobile View: team, game/half, Position/Player and Bench.
+    mobileBoldRows.forEach((rowIndex) => {
+      for (let col = 0; col < 2; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col });
+        if (mobileWs[cellRef]) mobileWs[cellRef].s = { font: { bold: true } };
+      }
+    });
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Lineup');
