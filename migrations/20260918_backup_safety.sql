@@ -222,7 +222,7 @@ begin
 
     v_role := coalesce(
       nullif(v_backup_setting->>'role', ''),
-      nullif(v_current_coaches->v_coach.id::text->>'role', ''),
+      nullif((v_current_coaches -> (v_coach.id::text) ->> 'role'), ''),
       'coach'
     );
     if v_role not in ('admin', 'coach') then
@@ -247,10 +247,10 @@ begin
     if v_primary_team_id is null
        or not exists (select 1 from public.teams t where t.id = v_primary_team_id) then
       v_current_primary_team_id := null;
-      if nullif(v_current_coaches->v_coach.id::text->>'primaryTeamId', '') is not null then
+      if nullif((v_current_coaches -> (v_coach.id::text) ->> 'primaryTeamId'), '') is not null then
         begin
           v_current_primary_team_id :=
-            (v_current_coaches->v_coach.id::text->>'primaryTeamId')::uuid;
+            ((v_current_coaches -> (v_coach.id::text) ->> 'primaryTeamId'))::uuid;
         exception when others then
           v_current_primary_team_id := null;
         end;
