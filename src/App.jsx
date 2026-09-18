@@ -2292,7 +2292,7 @@ const [lineups, setLineups] = useState({});
   const getPublishErrors = (playdayId, matchId, half) => {
     const key = `${playdayId}-${matchId}-${half}`;
     const lineup = normalizeLineupBench(playdayId, matchId, half, lineups[key] || { assignments: {}, bench: [] });
-    const mode = selectedPlayday?.type === 'training' ? 'training' : 'game';
+    const mode = getPlaydayMode(playdayId);
     const eligible = getEligiblePlayersForHalf(playdayId, matchId, half, mode);
     return validateLineupForPublish({
       positions: positions.map(p => p.id),
@@ -2303,22 +2303,6 @@ const [lineups, setLineups] = useState({});
       isTrained: (playerId, positionId) => !!training[`${playerId}-${positionId}`],
       getSuitability: (playerId, positionId) => getSuitability(playerId, positionId),
     });
-  };
-
-  const publishHalf = (playdayId, matchId, half) => {
-    const key = `${playdayId}-${matchId}-${half}`;
-    const errors = getPublishErrors(playdayId, matchId, half);
-    if (errors.length) {
-      alert(`Cannot validate this half yet:\n\n${errors.map(e => `• ${e}`).join("\n")}`);
-      return;
-    }
-    const publication = { publishedAt: new Date().toISOString(), publishedBy: currentUsername || 'Coach' };
-    setLineups(prev => ({
-      ...prev,
-      [key]: normalizeLineupBench(playdayId, matchId, half, prev[key] || { assignments: {}, bench: [] })
-    }));
-    setPublishedHalves(prev => ({ ...prev, [key]: publication }));
-    logAction('validate_lineup', { playday_id: playdayId, match_id: matchId, half });
   };
 
   const copyPreviousLineup = (playdayId, matchId, half) => {
@@ -3622,9 +3606,9 @@ const [lineups, setLineups] = useState({});
           const isSelected = playday.id === selectedPlaydayId;
           const totalHalves = playday.matches.length * 2;
           const filledHalves = playday.matches.reduce((acc, m) => {
-            const h1 = lineups[`${playday.id}-${m.id}-1`];
-            const h2 = lineups[`${playday.id}-${m.id}-2`];
-            return acc + (h1?.assignments && Object.keys(h1.assignments).length === 12 ? 1 : 0) + (h2?.assignments && Object.keys(h2.assignments).length === 12 ? 1 : 0);
+            const h1Valid = getPublishErrors(playday.id, m.id, 1).length === 0;
+            const h2Valid = getPublishErrors(playday.id, m.id, 2).length === 0;
+            return acc + (h1Valid ? 1 : 0) + (h2Valid ? 1 : 0);
           }, 0);
           
           return (
@@ -3686,7 +3670,7 @@ const [lineups, setLineups] = useState({});
                       )}
                       <span>· {playday.matches.length} match{playday.matches.length !== 1 ? 'es' : ''}</span>
                     </div>
-                    <div className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1 ${filledHalves === totalHalves && totalHalves > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{filledHalves}/{totalHalves} halves ready</div>
+                    <div className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1 ${totalHalves === 0 ? 'bg-gray-100 text-gray-600' : filledHalves === totalHalves ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{filledHalves}/{totalHalves} halves ready</div>
                   </div>
                   <div className="flex items-center gap-2">
                     {isSelected && <span className="text-xs text-blue-600 font-medium">Selected</span>}
@@ -4341,7 +4325,7 @@ const [lineups, setLineups] = useState({});
             <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: DIOK.blue }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
-                <span className="font-medium text-gray-900 truncate">{p.name.split(' ')[0]}</span>
+                <span className="font-medium text-gray-900 whitespace-normal break-words leading-tight">{p.name}</span>
                 {p.isOnBench && <span className="text-purple-600">🪑</span>}
                 {p.isPreferred && !isUntrained && <span className="text-yellow-500 text-[10px]">★</span>}
               </div>
@@ -4519,16 +4503,25 @@ const [lineups, setLineups] = useState({});
           {allHalves.map(({ matchId, half, opponent, number, key }) => {
             const isExpanded = expandedHalf === key;
             const scores = calculateScores(selectedPlayday.id, matchId, half);
+            const validationErrors = getPublishErrors(selectedPlayday.id, matchId, half);
+            const isValid = validationErrors.length === 0;
             return (
               <div key={key} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${isExpanded ? 'border-blue-300' : 'border-gray-200'}`}>
                 <div className={`p-3 cursor-pointer ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`} onClick={() => setExpandedHalf(isExpanded ? null : key)}>
                   <div className="flex items-center gap-3 mb-2">
-                    <div className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center text-white font-bold shrink-0 ${scores.filled === 12 ? 'bg-emerald-500' : ''}`} style={{ backgroundColor: scores.filled === 12 ? undefined : DIOK.blue }}>
+                    <div className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center text-white font-bold shrink-0 ${isValid ? 'bg-emerald-500' : 'bg-red-500'}`}>
                       <span className="text-sm">M{matchId}</span><span className="text-[9px] opacity-80">H{half}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <div><div className="font-semibold text-gray-900 text-sm">{selectedPlayday.type === 'game' ? `vs. ${opponent}` : opponent}</div><div className="text-xs text-gray-500 flex items-center gap-1.5">{selectedPlayday.type === 'game' ? `Game ${number}` : `Training ${number}`} · Half {half}<span className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${publishedHalves[key] ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{publishedHalves[key] ? 'Validated' : 'Draft'}</span></div></div>
+                        <div><div className="font-semibold text-gray-900 text-sm">{selectedPlayday.type === 'game' ? `vs. ${opponent}` : opponent}</div><div className="text-xs text-gray-500 flex items-center gap-1.5">{selectedPlayday.type === 'game' ? `Game ${number}` : `Training ${number}`} · Half {half}<button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isValid) alert(`Draft — validation issues:\n\n${validationErrors.map(error => `• ${error}`).join('\n')}`);
+                          }}
+                          className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${isValid ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700 hover:bg-red-200"}`}
+                          title={isValid ? 'Lineup is valid' : 'Click to see validation issues'}
+                        >{isValid ? '✓ Valid' : 'Draft'}</button></div></div>
                         <div className="flex flex-col items-end gap-0.5"><ScoreBadge scores={scores} /><span className="text-[9px] text-gray-400">{scores.filled}/12 + {scores.bench}B</span></div>
                       </div>
                     </div>
@@ -4540,11 +4533,6 @@ const [lineups, setLineups] = useState({});
                         {renderCollapsedView(matchId, half)}
                       </div>
                       <div className="flex items-center gap-1 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => publishHalf(selectedPlayday.id, matchId, half)}
-                          className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold ${publishedHalves[key] ? "bg-emerald-100 text-emerald-700" : "bg-blue-50 text-blue-700 hover:bg-blue-100"}`}
-                          title={publishedHalves[key] ? 'Validated lineup' : 'Validate this half'}
-                        >{publishedHalves[key] ? '✓ Validated' : 'Validate'}</button>
                         <button
                           onClick={() => proposeLineup(selectedPlayday.id, matchId, half, 'game')}
                           className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
