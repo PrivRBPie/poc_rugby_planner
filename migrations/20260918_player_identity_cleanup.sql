@@ -10,6 +10,8 @@
 -- Historical team appearances remain in rugby_data; current team membership
 -- remains defined by team_players.
 
+begin;
+
 create or replace function public._rugby_map_player_object_keys(
   p_obj jsonb,
   p_old_id integer,
@@ -467,3 +469,5 @@ select id, name, mini_year
 from public.players
 where id in (13, 6, 11, 9, 36, 35, 31, 18, 3, 24, 46)
 order by id;
+
+commit;
