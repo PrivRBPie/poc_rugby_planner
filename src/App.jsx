@@ -4341,7 +4341,7 @@ const [lineups, setLineups] = useState({});
             <div className="w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: DIOK.blue }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
-                <span className="font-medium text-gray-900 truncate">{p.name.split(' ')[0]}</span>
+                <span className="font-medium text-gray-900 whitespace-normal break-words leading-tight">{p.name}</span>
                 {p.isOnBench && <span className="text-purple-600">🪑</span>}
                 {p.isPreferred && !isUntrained && <span className="text-yellow-500 text-[10px]">★</span>}
               </div>
