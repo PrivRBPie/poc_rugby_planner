@@ -56,6 +56,58 @@ const availabilityOptions = [
   { value: 'unavailable', label: 'Not available', icon: '✕', color: '#dc2626', bg: '#fee2e2' },
 ];
 
+const normalizePlayerName = (value) =>
+  String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+
+const levenshteinDistance = (a, b) => {
+  const left = normalizePlayerName(a);
+  const right = normalizePlayerName(b);
+  if (!left) return right.length;
+  if (!right) return left.length;
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  const current = new Array(right.length + 1);
+
+  for (let i = 1; i <= left.length; i++) {
+    current[0] = i;
+    for (let j = 1; j <= right.length; j++) {
+      const substitutionCost = left[i - 1] === right[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + substitutionCost
+      );
+    }
+    for (let j = 0; j <= right.length; j++) previous[j] = current[j];
+  }
+
+  return previous[right.length];
+};
+
+const playerNameSimilarity = (a, b) => {
+  const left = normalizePlayerName(a);
+  const right = normalizePlayerName(b);
+  const maxLength = Math.max(left.length, right.length);
+  if (maxLength === 0) return 1;
+  return 1 - (levenshteinDistance(left, right) / maxLength);
+};
+
+const getPlayerNameMatches = (playerList, name) => {
+  const normalized = normalizePlayerName(name);
+  if (normalized.length < 3) return [];
+
+  return playerList
+    .map(player => {
+      const playerNormalized = normalizePlayerName(player.name);
+      const exact = playerNormalized === normalized;
+      const similarity = exact ? 1 : playerNameSimilarity(playerNormalized, normalized);
+      return { player, exact, similarity };
+    })
+    .filter(match => match.exact || match.similarity >= 0.82)
+    .sort((a, b) => b.similarity - a.similarity || a.player.name.localeCompare(b.player.name))
+    .slice(0, 5);
+};
+
 
 
 const Icons = {
@@ -381,6 +433,10 @@ const [lineups, setLineups] = useState({});
   const [showAddPlayday, setShowAddPlayday] = useState(false);
   const [showAddMatch, setShowAddMatch] = useState(false);
   const [newPlayer, setNewPlayer] = useState({ name: '', miniYear: '1st year' });
+  const playerNameMatches = useMemo(
+    () => getPlayerNameMatches(allPlayers, newPlayer.name),
+    [allPlayers, newPlayer.name]
+  );
   const [newPlayday, setNewPlayday] = useState({ date: '', name: '', type: 'game' });
   const [newMatch, setNewMatch] = useState({ opponent: '', number: 1 });
   const [settings] = useState({ coachName: 'Coach Rassie Erasmus', teamName: 'Bulls Mini\'s', ageGroup: 'U10' });
@@ -1102,11 +1158,10 @@ const [lineups, setLineups] = useState({});
 
   const syncRelationalRoster = async () => {
     if (!currentTeamId) return;
-    const rows = activePlayers.map(player => ({ id: player.id, name: player.name, mini_year: player.miniYear, created_by: currentUsername || 'coach' }));
-    if (rows.length > 0) {
-      const { error: playersError } = await supabase.from('players').upsert(rows, { onConflict: 'id' });
-      if (playersError) throw playersError;
-    }
+
+    // Player identity is owned by the global players table. Never recreate/update
+    // global players from team-local rugby_data IDs: older migrations used
+    // different numeric IDs and that previously created duplicate people.
     const { data: links, error: linksError } = await supabase.from('team_players').select('player_id').eq('team_id', currentTeamId);
     if (linksError) throw linksError;
     const currentIds = new Set(activePlayers.map(player => player.id));
@@ -1279,7 +1334,7 @@ const [lineups, setLineups] = useState({});
   };
 
   // Team management functions
-  const loadTeamData = async (teamId) => {
+  const loadTeamData = async (teamId, teamNameOverride = null) => {
     try {
       setIsSyncing(true);
 
@@ -1313,7 +1368,7 @@ const [lineups, setLineups] = useState({});
 
         const { data: newData, error: insertError } = await supabase
           .from('rugby_data')
-          .insert({ team_id: teamId, team_name: getCurrentTeam()?.name || 'New Team', data: initialData })
+          .insert({ team_id: teamId, team_name: teamNameOverride || getCurrentTeam()?.name || 'New Team', data: initialData })
           .select()
           .single();
 
@@ -1463,7 +1518,7 @@ const [lineups, setLineups] = useState({});
     }
   };
 
-  const switchTeam = async (teamId) => {
+  const switchTeam = async (teamId, teamNameOverride = null) => {
     // Check for unsaved changes
     if (hasUnsavedChanges) {
       const confirm = window.confirm(
@@ -1481,27 +1536,24 @@ const [lineups, setLineups] = useState({});
     setHasUnsavedChanges(false);
 
     // Load team's rugby_data
-    await loadTeamData(teamId);
+    await loadTeamData(teamId, teamNameOverride);
   };
 
   const createTeam = async (teamName, teamLogo) => {
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError || !authData.user) throw authError || new Error('You must be signed in to create a team.');
+      if (!isAdmin) throw new Error('Admin access required.');
 
-      const { data: newTeam, error } = await supabase
-        .from('teams')
-        .insert({ name: teamName, logo: teamLogo, created_by: currentUsername || authData.user.email || 'coach', owner_id: authData.user.id })
-        .select()
-        .single();
+      const { data: result, error } = await supabase.rpc('admin_create_team', {
+        p_name: teamName,
+        p_logo: teamLogo
+      });
       if (error) throw error;
+      if (!result?.ok) throw new Error(result?.error || 'Team could not be created.');
 
-      const { error: memberError } = await supabase.from('team_members').insert({ team_id: newTeam.id, user_id: authData.user.id, role: 'admin' });
-      if (memberError) throw memberError;
-
-      setTeams(prev => [...prev, newTeam]);
+      const newTeam = result.team;
+      setTeams(prev => prev.some(team => team.id === newTeam.id) ? prev : [...prev, newTeam]);
       logAction('create_team', { team_name: teamName, team_logo: teamLogo });
-      await switchTeam(newTeam.id);
+      await switchTeam(newTeam.id, newTeam.name);
     } catch (err) {
       console.error('Error creating team:', err);
       alert(`Error creating team: ${err.message}`);
@@ -1937,40 +1989,68 @@ const [lineups, setLineups] = useState({});
     }
   };
 
-  // Create new player and add to current team
+  // Reuse exact-name matches regardless of mini year. mini_year is a mutable
+  // player attribute, not part of a player's identity. Similar spellings are
+  // surfaced for coach confirmation before a separate player can be created.
   const createAndAddPlayer = async (name, miniYear) => {
     try {
-      // Create new player in global library
-      const { data: newPlayer, error: createError } = await supabase
-        .from('players')
-        .insert({
-          name: name,
-          mini_year: miniYear,
-          created_by: currentUsername || 'anonymous'
-        })
-        .select()
-        .single();
+      const normalizedName = String(name || '').trim().replace(/\s+/g, ' ');
+      if (!normalizedName) return;
+
+      const matches = getPlayerNameMatches(allPlayers, normalizedName);
+      const exactMatch = matches.find(match => match.exact);
+
+      if (exactMatch) {
+        await addExistingPlayerToTeam(exactMatch.player.id);
+        return;
+      }
+
+      const closeMatch = matches[0];
+      if (closeMatch) {
+        const shouldCreateSeparate = window.confirm(
+          `Possible existing player found:\n\n${closeMatch.player.name} (${closeMatch.player.mini_year})\n\nCreate "${normalizedName}" as a separate player anyway?`
+        );
+        if (!shouldCreateSeparate) return;
+      }
+
+      const { data: createResult, error: createError } = await supabase.rpc('coach_create_or_get_player', {
+        p_name: normalizedName,
+        p_mini_year: miniYear,
+        p_created_by: currentUsername || 'coach'
+      });
 
       if (createError) throw createError;
+      if (!createResult?.ok) throw new Error(createResult?.error || 'Player could not be created.');
 
-      // Add to team_players junction table
+      const newPlayerRecord = createResult.player;
+
+      // If another coach created the same exact name between our UI check and
+      // this click, the RPC returns that canonical player instead of creating a duplicate.
       const { error: linkError } = await supabase
         .from('team_players')
-        .insert({
+        .upsert({
           team_id: currentTeamId,
-          player_id: newPlayer.id,
+          player_id: newPlayerRecord.id,
           added_by: currentUsername || 'anonymous'
-        });
+        }, { onConflict: 'team_id,player_id' });
 
       if (linkError) throw linkError;
 
-      // Add to current team's players
-      setPlayers(prev => [...prev, { id: newPlayer.id, name: newPlayer.name, miniYear: newPlayer.mini_year }]);
+      setPlayers(prev => prev.some(player => player.id === newPlayerRecord.id)
+        ? prev
+        : [...prev, {
+            id: newPlayerRecord.id,
+            name: newPlayerRecord.name,
+            miniYear: newPlayerRecord.mini_year
+          }]
+      );
 
-      // Refresh all players library
       await loadAllPlayers();
 
-      logAction('create_and_add_player', { player_name: newPlayer.name, player_id: newPlayer.id });
+      logAction(createResult.existing ? 'add_existing_player' : 'create_and_add_player', {
+        player_name: newPlayerRecord.name,
+        player_id: newPlayerRecord.id
+      });
       setShowAddPlayer(false);
     } catch (err) {
       console.error('Error creating player:', err);
@@ -6215,17 +6295,19 @@ const [lineups, setLineups] = useState({});
                     </button>
                   ))}
 
-                  {/* Create New Team */}
-                  <button
-                    onClick={() => {
-                      setShowTeamManager(false);
-                      setShowCreateTeam(true);
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-3 border-t-2 border-gray-200 bg-gray-50 hover:bg-blue-50 text-blue-600 font-semibold text-sm"
-                  >
-                    <span className="text-2xl">➕</span>
-                    <span>Create New Team</span>
-                  </button>
+                  {/* Create New Team - admins only */}
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        setShowTeamManager(false);
+                        setShowCreateTeam(true);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 border-t-2 border-gray-200 bg-gray-50 hover:bg-blue-50 text-blue-600 font-semibold text-sm"
+                    >
+                      <span className="text-2xl">➕</span>
+                      <span>Create New Team</span>
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -6402,6 +6484,27 @@ const [lineups, setLineups] = useState({});
                   placeholder="Enter name"
                   autoFocus
                 />
+                {playerNameMatches.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 space-y-1.5">
+                    <div className="text-[11px] font-semibold text-amber-800">Possible existing player</div>
+                    {playerNameMatches.map(({ player, exact, similarity }) => (
+                      <button
+                        key={player.id}
+                        type="button"
+                        onClick={() => addExistingPlayerToTeam(player.id)}
+                        className="w-full flex items-center justify-between gap-2 text-left px-2 py-1.5 bg-white border border-amber-200 rounded-md hover:bg-amber-100"
+                      >
+                        <span>
+                          <span className="block text-xs font-semibold text-gray-900">{player.name}</span>
+                          <span className="block text-[10px] text-gray-500">{player.mini_year}</span>
+                        </span>
+                        <span className="text-[10px] font-semibold text-amber-700">
+                          {exact ? 'Same name' : `${Math.round(similarity * 100)}% similar`} · Use existing
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Year</label>
