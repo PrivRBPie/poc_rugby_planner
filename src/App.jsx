@@ -3942,8 +3942,8 @@ const [lineups, setLineups] = useState({});
     const playdayMode = selectedPlayday.type === 'training' ? 'training' : 'game';
 
     // Use the same normalized lineups and visible bench calculation as the app
-    // so the Excel export mirrors what the coach sees on screen.
-    const matchLineups = matches.map(match => {
+    // so both Excel sheets mirror what the coach sees on screen.
+    const matchLineups = matches.map((match, index) => {
       const half1 = normalizeLineupBench(
         selectedPlayday.id,
         match.id,
@@ -3965,10 +3965,12 @@ const [lineups, setLineups] = useState({});
         half2,
         half1BenchSize: getVisibleBenchSize(half1EligibleCount, half1.assignments, half1.bench),
         half2BenchSize: getVisibleBenchSize(half2EligibleCount, half2.assignments, half2.bench),
-        label: match.opponent || `Game ${match.number}`,
+        label: match.opponent || `Game ${match.number || index + 1}`,
+        number: match.number || index + 1,
       };
     });
 
+    // ==================== STANDARD / DESKTOP SHEET ====================
     // Header row: Team name | Opp1 | Opp1.2 | Opp2 | Opp2.2 | ...
     const headerRow = [teamName];
     matchLineups.forEach(({ label }) => {
@@ -3983,8 +3985,8 @@ const [lineups, setLineups] = useState({});
       matchLineups.forEach(({ half1, half2 }) => {
         const p1 = players.find(p => p.id === half1.assignments[pos.id]);
         const p2 = players.find(p => p.id === half2.assignments[pos.id]);
-        row.push(p1 ? p1.name.split(' ')[0] : '-');
-        row.push(p2 ? p2.name.split(' ')[0] : '-');
+        row.push(p1 ? p1.name : '-');
+        row.push(p2 ? p2.name : '-');
       });
       data.push(row);
     });
@@ -4007,22 +4009,62 @@ const [lineups, setLineups] = useState({});
         const b1 = half1HasSlot ? players.find(p => p.id === half1.bench?.[i]) : null;
         const b2 = half2HasSlot ? players.find(p => p.id === half2.bench?.[i]) : null;
 
-        row.push(half1HasSlot ? (b1 ? b1.name.split(' ')[0] : '-') : '');
-        row.push(half2HasSlot ? (b2 ? b2.name.split(' ')[0] : '-') : '');
+        row.push(half1HasSlot ? (b1 ? b1.name : '-') : '');
+        row.push(half2HasSlot ? (b2 ? b2.name : '-') : '');
       });
       data.push(row);
     }
 
     const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 22 }, ...Array(headerRow.length - 1).fill({ wch: 20 })];
 
-    // Wider first column for labels such as "12 - Inside Centre".
-    ws['!cols'] = [{ wch: 22 }, ...Array(headerRow.length - 1).fill({ wch: 14 })];
+    // ==================== MOBILE VIEW SHEET ====================
+    // A narrow, vertical two-column layout that is much easier to read on a phone.
+    const mobileData = [
+      [teamName, ''],
+      [selectedPlayday.name || 'Playday', selectedPlayday.date || ''],
+      ['', ''],
+    ];
+
+    const addMobileHalf = (matchLineup, halfNumber) => {
+      const lineup = halfNumber === 1 ? matchLineup.half1 : matchLineup.half2;
+      const benchSize = halfNumber === 1 ? matchLineup.half1BenchSize : matchLineup.half2BenchSize;
+      const typeLabel = selectedPlayday.type === 'training' ? 'Training' : 'Game';
+
+      mobileData.push([
+        `${typeLabel} ${matchLineup.number} · ${matchLineup.label}`,
+        `Half ${halfNumber}`,
+      ]);
+      mobileData.push(['Position', 'Player']);
+
+      positions.forEach((pos) => {
+        const player = players.find(p => p.id === lineup.assignments[pos.id]);
+        mobileData.push([`${pos.code} - ${pos.name}`, player ? player.name : '-']);
+      });
+
+      mobileData.push(['BENCH', '']);
+      for (let i = 0; i < benchSize; i++) {
+        const benchPlayer = players.find(p => p.id === lineup.bench?.[i]);
+        mobileData.push([`B${i + 1}`, benchPlayer ? benchPlayer.name : '-']);
+      }
+
+      mobileData.push(['', '']);
+      mobileData.push(['', '']);
+    };
+
+    matchLineups.forEach(matchLineup => {
+      addMobileHalf(matchLineup, 1);
+      addMobileHalf(matchLineup, 2);
+    });
+
+    const mobileWs = XLSX.utils.aoa_to_sheet(mobileData);
+    mobileWs['!cols'] = [{ wch: 24 }, { wch: 28 }];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Lineup');
+    XLSX.utils.book_append_sheet(wb, mobileWs, 'Mobile View');
     XLSX.writeFile(wb, `${selectedPlayday.name}_Lineup_${selectedPlayday.date}.xlsx`);
   };
-
   const LineupView = () => {
     if (!selectedPlayday || selectedPlayday.matches.length === 0) {
       return (
