@@ -314,24 +314,9 @@ begin
 end;
 $$;
 
-create temporary table rugby_player_merge_map (
-  old_id integer primary key,
-  keep_id integer not null
-) on commit drop;
-
-insert into rugby_player_merge_map(old_id, keep_id) values
-  (13, 10), -- Alexander Jans
-  (6, 1),   -- Eick Soe
-  (11, 7),  -- Francois Ross
-  (9, 4),   -- Huib Schr
-  (36, 49), -- Daniel Ras
-  (35, 74), -- Julian Pom
-  (31, 16), -- Chris Klin / Klink
-  (18, 20), -- Hedwig Bong / Bon
-  (3, 5),   -- Dries Wage / Wag
-  (24, 69), -- Stef Rood / Roo
-  (46, 17); -- Ivan Wal / Wa
-
+-- Merge map is intentionally expressed inline instead of using a TEMP table.
+-- Supabase SQL Editor may execute statements with transaction boundaries that
+-- cause ON COMMIT DROP temp tables to disappear before later statements run.
 do $$
 declare
   v_merge record;
@@ -339,7 +324,20 @@ begin
   -- Refuse to run if a selected canonical player is missing.
   if exists (
     select 1
-    from rugby_player_merge_map m
+    from (
+      values
+        (13, 10), -- Alexander Jans
+        (6, 1),   -- Eick Soe
+        (11, 7),  -- Francois Ross
+        (9, 4),   -- Huib Schr
+        (36, 49), -- Daniel Ras
+        (35, 74), -- Julian Pom
+        (31, 16), -- Chris Klin / Klink
+        (18, 20), -- Hedwig Bong / Bon
+        (3, 5),   -- Dries Wage / Wag
+        (24, 69), -- Stef Rood / Roo
+        (46, 17)  -- Ivan Wal / Wa
+    ) as m(old_id, keep_id)
     left join public.players p on p.id = m.keep_id
     where p.id is null
   ) then
@@ -347,8 +345,21 @@ begin
   end if;
 
   for v_merge in
-    select old_id, keep_id
-    from rugby_player_merge_map
+    select *
+    from (
+      values
+        (13, 10),
+        (6, 1),
+        (11, 7),
+        (9, 4),
+        (36, 49),
+        (35, 74),
+        (31, 16),
+        (18, 20),
+        (3, 5),
+        (24, 69),
+        (46, 17)
+    ) as m(old_id, keep_id)
     order by old_id
   loop
     update public.rugby_data
@@ -358,6 +369,20 @@ begin
 end $$;
 
 -- Carry any current team links from a duplicate ID to its canonical ID.
+with merge_map(old_id, keep_id) as (
+  values
+    (13, 10),
+    (6, 1),
+    (11, 7),
+    (9, 4),
+    (36, 49),
+    (35, 74),
+    (31, 16),
+    (18, 20),
+    (3, 5),
+    (24, 69),
+    (46, 17)
+)
 insert into public.team_players (team_id, player_id, added_at, added_by)
 select
   tp.team_id,
@@ -365,16 +390,44 @@ select
   tp.added_at,
   tp.added_by
 from public.team_players tp
-join rugby_player_merge_map m on m.old_id = tp.player_id
+join merge_map m on m.old_id = tp.player_id
 on conflict (team_id, player_id) do nothing;
 
+with merge_map(old_id, keep_id) as (
+  values
+    (13, 10),
+    (6, 1),
+    (11, 7),
+    (9, 4),
+    (36, 49),
+    (35, 74),
+    (31, 16),
+    (18, 20),
+    (3, 5),
+    (24, 69),
+    (46, 17)
+)
 delete from public.team_players tp
-using rugby_player_merge_map m
+using merge_map m
 where tp.player_id = m.old_id;
 
 -- Remove the duplicate global records only after all references have moved.
+with merge_map(old_id, keep_id) as (
+  values
+    (13, 10),
+    (6, 1),
+    (11, 7),
+    (9, 4),
+    (36, 49),
+    (35, 74),
+    (31, 16),
+    (18, 20),
+    (3, 5),
+    (24, 69),
+    (46, 17)
+)
 delete from public.players p
-using rugby_player_merge_map m
+using merge_map m
 where p.id = m.old_id;
 
 -- Keep the serial sequence safely above the highest surviving ID.
