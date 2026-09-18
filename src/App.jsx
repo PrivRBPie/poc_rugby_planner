@@ -1934,14 +1934,30 @@ const [lineups, setLineups] = useState({});
     }
   };
 
-  // Create new player and add to current team
+  // Create a player only when the same name + year does not already exist.
+  // This prevents duplicate global player records and reuses the existing ID instead.
   const createAndAddPlayer = async (name, miniYear) => {
     try {
+      const normalizedName = String(name || '').trim().replace(/\\s+/g, ' ');
+      const normalizedKey = normalizedName.toLocaleLowerCase();
+
+      if (!normalizedName) return;
+
+      const existingPlayer = allPlayers.find(player =>
+        String(player.name || '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase() === normalizedKey
+        && player.mini_year === miniYear
+      );
+
+      if (existingPlayer) {
+        await addExistingPlayerToTeam(existingPlayer.id);
+        return;
+      }
+
       // Create new player in global library
       const { data: newPlayer, error: createError } = await supabase
         .from('players')
         .insert({
-          name: name,
+          name: normalizedName,
           mini_year: miniYear,
           created_by: currentUsername || 'anonymous'
         })
