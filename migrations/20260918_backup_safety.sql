@@ -214,10 +214,10 @@ begin
     where ca.disabled = false
     order by ca.id
   loop
-    select item
+    select setting
       into v_backup_setting
-    from jsonb_array_elements(p_database->'coach_settings') as item
-    where item->>'coachId' = v_coach.id::text
+    from jsonb_array_elements(p_database->'coach_settings') as settings(setting)
+    where setting->>'coachId' = v_coach.id::text
     limit 1;
 
     v_role := coalesce(
